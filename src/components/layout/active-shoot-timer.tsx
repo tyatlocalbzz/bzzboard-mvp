@@ -1,0 +1,45 @@
+'use client'
+
+import { useRouter, usePathname } from 'next/navigation'
+import { useActiveShoot } from '@/contexts/active-shoot-context'
+
+export const ActiveShootTimer = () => {
+  const { activeShoot, elapsedTime, isShootActive, isHydrated } = useActiveShoot()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // Don't render anything until hydrated to prevent flash
+  if (!isHydrated) {
+    return null
+  }
+
+  if (!isShootActive || !activeShoot) {
+    return null
+  }
+
+  // Don't show the banner if we're already on the active shoot page
+  const isOnActiveShootPage = pathname.includes(`/shoots/${activeShoot.id}/active`)
+  if (isOnActiveShootPage) {
+    return null
+  }
+
+  const handleGoToShoot = () => {
+    router.push(`/shoots/${activeShoot.id}/active`)
+  }
+
+  return (
+    <div className="fixed top-0 left-0 right-0 bg-red-500 text-white safe-area-pt active-shoot-timer animate-slide-down">
+      <div 
+        className="flex items-center justify-between cursor-pointer hover:bg-red-600 transition-colors rounded-sm mx-2 px-3 h-full"
+        onClick={handleGoToShoot}
+      >
+        <div className="text-sm font-medium truncate leading-none">
+          {activeShoot.client}
+        </div>
+        <div className="text-sm font-mono tabular-nums leading-none">
+          {elapsedTime}
+        </div>
+      </div>
+    </div>
+  )
+} 

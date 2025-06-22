@@ -1,0 +1,268 @@
+# Buzzboard Mobile MVP - Content Production System
+
+## Overview
+A mobile-first application focused exclusively on the content creation workflow: planning post ideas, scheduling shoots, capturing content, and organizing files for editing.
+
+## Core Features
+
+### 1. Simple Authentication
+- Email/password login
+- Single user access
+
+### 2. Client Context
+- Client selector dropdown
+- All content organized by client
+- Quick client switcher
+
+### 3. Post Ideas
+
+**Fields:**
+- Title
+- Platforms (Instagram, Facebook, LinkedIn, etc.)
+- Content Type (Photo, Video, Reel, Story)
+- Caption
+- Shot List
+- Status (Planned, Shot, Uploaded)
+
+**Actions:**
+- Create new post idea
+- Edit existing ideas
+- Filter by status
+
+### 4. Shoot Scheduling
+
+**Fields:**
+- Date & Time
+- Duration
+- Location
+- Notes
+- Selected Post Ideas
+
+**Google Calendar Integration:**
+- Check availability before booking
+- Create calendar event automatically
+- Two-way sync (updates reflect in both systems)
+
+### 5. Active Shoot Mode
+
+**Interface:**
+- View selected post ideas
+- Master shot list from all ideas
+- Check off completed shots
+- Quick add new post idea
+- Shoot timer
+
+### 6. Post-Shoot Upload
+
+**Process:**
+1. Mark shoot as complete
+2. Select which post ideas were shot
+3. Upload multiple files per post idea
+4. Add notes for editing
+
+**Google Drive Integration:**
+- Auto-create folder structure
+- Upload files to correct folders
+- Generate editing notes document
+
+### 7. Dashboard
+
+**Shows:**
+- Today's shoots
+- This week's schedule
+- Post ideas awaiting upload
+- Recently uploaded content
+
+## Google Drive Structure
+
+```
+Client Name/
+└── [YYYY-MM-DD] Shoot/
+    └── [Post Idea Title]/
+        ├── raw-files/
+        └── notes.txt
+```
+
+## Technical Stack
+- Next.js 14 (mobile-optimized)
+- PostgreSQL
+- Google Calendar API
+- Google Drive API
+- Vercel hosting
+
+## MVP Exclusions
+- No email notifications
+- No team collaboration features
+- No bulk operations
+- No client reminders
+- No final content upload
+- No editor assignment workflow
+
+## User Flow
+
+1. **Plan**: Create post ideas for client
+2. **Schedule**: Book shoot with selected ideas
+3. **Shoot**: Use active mode to track progress
+4. **Upload**: Send raw files to Drive
+
+
+## Simple UI Approach for MVP
+
+### Recommended Stack: Tailwind CSS + Shadcn/ui
+
+This combination gives you:
+- **Professional look** out of the box
+- **Mobile-first** responsive design
+- **Easy modifications** without breaking changes
+- **Component consistency** across the app
+
+### Implementation Strategy
+
+**1. Base Setup**
+```bash
+# Install Tailwind CSS
+npm install -D tailwindcss postcss autoprefixer
+
+# Add Shadcn/ui (choose components as needed)
+npx shadcn-ui@latest init
+```
+
+**2. Core Layout Structure**
+```tsx
+// Simple, extensible mobile layout
+export default function MobileLayout({ children }) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Fixed header */}
+      <header className="sticky top-0 z-50 bg-white border-b">
+        <div className="px-4 h-14 flex items-center justify-between">
+          {/* Client selector or back button */}
+        </div>
+      </header>
+      
+      {/* Scrollable content */}
+      <main className="pb-20">
+        {children}
+      </main>
+      
+      {/* Fixed bottom nav (if needed) */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t">
+        <div className="grid grid-cols-4 h-16">
+          {/* Nav items */}
+        </div>
+      </nav>
+    </div>
+  )
+}
+```
+
+**3. Consistent Component Patterns**
+```tsx
+// Reusable card component
+export function Card({ title, children, action }) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm border p-4 m-4">
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="font-semibold text-gray-900">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// Consistent button styles
+export function Button({ variant = "primary", ...props }) {
+  const styles = {
+    primary: "bg-blue-500 text-white hover:bg-blue-600",
+    secondary: "bg-gray-100 text-gray-700 hover:bg-gray-200",
+    ghost: "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+  }
+  
+  return (
+    <button 
+      className={`px-4 py-2 rounded-lg font-medium transition-colors ${styles[variant]}`}
+      {...props}
+    />
+  )
+}
+```
+
+**4. Design Tokens via CSS Variables**
+```css
+/* globals.css - Easy to modify later */
+:root {
+  --color-primary: #3B82F6;
+  --color-secondary: #6B7280;
+  --radius: 0.5rem;
+  --spacing-unit: 1rem;
+}
+
+/* Use in Tailwind config */
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        primary: 'var(--color-primary)',
+      }
+    }
+  }
+}
+```
+
+### Mobile-Specific Patterns
+
+**1. Touch-Friendly Targets**
+```tsx
+// Minimum 44px touch targets
+<button className="min-h-[44px] min-w-[44px] p-3">
+  Tap Me
+</button>
+```
+
+**2. Sheet/Drawer Pattern for Forms**
+```tsx
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+
+<Sheet>
+  <SheetTrigger asChild>
+    <Button>Add Post Idea</Button>
+  </SheetTrigger>
+  <SheetContent side="bottom" className="h-[90vh]">
+    {/* Form content */}
+  </SheetContent>
+</Sheet>
+```
+
+**3. Skeleton Loading States**
+```tsx
+// Built into Shadcn/ui
+import { Skeleton } from "@/components/ui/skeleton"
+
+<div className="space-y-3">
+  <Skeleton className="h-20 w-full" />
+  <Skeleton className="h-20 w-full" />
+</div>
+```
+
+### Why This Approach Works
+
+1. **Immediate Professional Look**
+   - Shadcn/ui components are well-designed
+   - Consistent spacing and typography
+   - Handles dark mode automatically
+
+2. **Easy Future Modifications**
+   - Change colors in one place
+   - Swap components without breaking layouts
+   - Add animations with Tailwind classes
+
+3. **No Lock-in**
+   - Components are copied to your project
+   - Can modify source directly
+   - Not dependent on external library updates
+
+4. **Performance**
+   - Tailwind purges unused CSS
+   - Components are tree-shakeable
+   - No runtime styling overhead

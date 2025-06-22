@@ -1,103 +1,250 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useMemo } from 'react'
+import { MobileLayout } from "@/components/layout/mobile-layout"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { EmptyState } from "@/components/ui/empty-state"
+import { ListItem } from "@/components/ui/list-item"
+import { ContextIndicator } from "@/components/ui/context-indicator"
+import { Calendar, Upload, Clock, MapPin, Target } from "lucide-react"
+import { ScheduleShootForm } from "@/components/shoots/schedule-shoot-form"
+import { useClient } from "@/contexts/client-context"
+import { formatStatusText } from "@/lib/utils/status"
+
+// Mock data types
+interface DashboardShoot {
+  id: number
+  title: string
+  client: string
+  date: string
+  time: string
+  location: string
+  status: 'scheduled' | 'active' | 'completed'
+}
+
+interface PostIdea {
+  id: number
+  title: string
+  client: string
+  status: 'planned' | 'shot' | 'uploaded'
+  platforms: string[]
+}
+
+export default function Dashboard() {
+  const { selectedClient } = useClient()
+
+  // Mock shoots data - memoized to prevent recreation on every render
+  const allShoots = useMemo<DashboardShoot[]>(() => [
+    {
+      id: 1,
+      title: "Acme Corp Q1 Content",
+      client: "Acme Corporation",
+      date: "2024-01-15",
+      time: "14:00",
+      location: "Downtown Studio",
+      status: "scheduled"
+    },
+    {
+      id: 2,
+      title: "TechStart Social Media",
+      client: "TechStart Inc",
+      date: "2024-01-15", // Today's shoot
+      time: "16:00",
+      location: "Client Office",
+      status: "scheduled"
+    },
+    {
+      id: 3,
+      title: "StyleCo Fashion Shoot",
+      client: "StyleCo",
+      date: "2024-01-16",
+      time: "10:00",
+      location: "Photo Studio",
+      status: "scheduled"
+    }
+  ], [])
+
+  // Mock post ideas data - memoized to prevent recreation on every render
+  const allPostIdeas = useMemo<PostIdea[]>(() => [
+    {
+      id: 1,
+      title: "Product Launch Announcement",
+      client: "Acme Corporation",
+      status: "planned",
+      platforms: ["Instagram", "LinkedIn"]
+    },
+    {
+      id: 2,
+      title: "Behind the Scenes Content",
+      client: "TechStart Inc",
+      status: "shot",
+      platforms: ["Instagram", "Facebook"]
+    },
+    {
+      id: 3,
+      title: "Customer Testimonial Video",
+      client: "StyleCo",
+      status: "uploaded",
+      platforms: ["LinkedIn", "YouTube"]
+    },
+    {
+      id: 4,
+      title: "Office Culture Showcase",
+      client: "TechStart Inc",
+      status: "planned",
+      platforms: ["LinkedIn", "Instagram"]
+    },
+    {
+      id: 5,
+      title: "Spring Collection Preview",
+      client: "StyleCo",
+      status: "shot",
+      platforms: ["Instagram", "TikTok"]
+    }
+  ], [])
+
+  // Filter data based on selected client - same pattern as shoots page
+  const filteredShoots = useMemo(() => {
+    if (selectedClient.type === 'all') {
+      return allShoots
+    }
+    return allShoots.filter(shoot => shoot.client === selectedClient.name)
+  }, [selectedClient, allShoots])
+
+  const filteredPostIdeas = useMemo(() => {
+    if (selectedClient.type === 'all') {
+      return allPostIdeas
+    }
+    return allPostIdeas.filter(idea => idea.client === selectedClient.name)
+  }, [selectedClient, allPostIdeas])
+
+  // Get today's shoots (for display)
+  const today = new Date().toISOString().split('T')[0]
+  const todaysShoots = useMemo(() => {
+    return filteredShoots.filter(shoot => shoot.date === today)
+  }, [filteredShoots, today])
+
+  // Get recent post ideas (limit to 3 for display)
+  const recentPostIdeas = useMemo(() => {
+    return filteredPostIdeas.slice(0, 3)
+  }, [filteredPostIdeas])
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <MobileLayout title="Buzzboard">
+      <div className="px-3 py-3 space-y-6">
+        {/* Client Context Indicator */}
+        {selectedClient.type !== 'all' && (
+          <ContextIndicator
+            title={`Dashboard for: ${selectedClient.name}`}
+            subtitle={`${filteredShoots.length} shoots • ${filteredPostIdeas.length} post ideas`}
+          />
+        )}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+        {/* Today's Shoots */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Shoots</h2>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+              <Calendar className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          {todaysShoots.length > 0 ? (
+            <div className="space-y-3">
+              {todaysShoots.map((shoot, index) => (
+                <div key={shoot.id}>
+                  <ListItem
+                    title={shoot.title}
+                    badges={[
+                      { text: formatStatusText(shoot.status), variant: 'default' }
+                    ]}
+                    metadata={[
+                      { icon: Clock, text: shoot.time },
+                      { icon: MapPin, text: shoot.location }
+                    ]}
+                    className="bg-gray-50"
+                  />
+                  {index < todaysShoots.length - 1 && <Separator />}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={Calendar}
+              title="No shoots today"
+              description={
+                selectedClient.type === 'all' 
+                  ? 'Schedule a shoot to get started'
+                  : `No shoots scheduled today for ${selectedClient.name}`
+              }
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+
+        <Separator />
+
+        {/* Recent Post Ideas */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Post Ideas</h2>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+              View All
+            </Button>
+          </div>
+          
+          {recentPostIdeas.length > 0 ? (
+            <div className="space-y-3">
+              {recentPostIdeas.map((idea, index) => (
+                <div key={idea.id}>
+                  <ListItem
+                    title={idea.title}
+                    description={idea.platforms.join(", ")}
+                    badges={[
+                      { 
+                        text: idea.status, 
+                        variant: idea.status === "planned" ? "secondary" :
+                                idea.status === "shot" ? "default" : "outline"
+                      }
+                    ]}
+                    className="bg-gray-50"
+                  />
+                  {index < recentPostIdeas.length - 1 && <Separator />}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={Target}
+              title="No post ideas"
+              description={
+                selectedClient.type === 'all' 
+                  ? 'Create your first post idea'
+                  : `No post ideas for ${selectedClient.name}`
+              }
+            />
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Quick Actions */}
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <ScheduleShootForm>
+              <Button className="h-12 flex-col gap-1 text-xs tap-target" variant="outline">
+                <Calendar className="h-4 w-4" />
+                Schedule Shoot
+              </Button>
+            </ScheduleShootForm>
+            <Button className="h-12 flex-col gap-1 text-xs tap-target" variant="outline">
+              <Upload className="h-4 w-4" />
+              Upload Files
+            </Button>
+          </div>
+        </div>
+      </div>
+    </MobileLayout>
+  )
 }

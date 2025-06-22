@@ -121,8 +121,6 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
       loading={isLoading}
       submitText="Change Password"
       loadingText="Changing..."
-      height="80vh"
-      maxHeight="600px"
     />
   )
 } 

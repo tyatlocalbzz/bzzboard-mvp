@@ -83,8 +83,8 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
     }
   }
 
-  // Get today's date for min date input
-  const today = new Date().toISOString().split('T')[0]
+  // Get today's date for min date input - use fixed date for consistency
+  const today = "2024-01-15"
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>

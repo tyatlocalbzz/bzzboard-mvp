@@ -121,7 +121,7 @@ const addPostIdea = async (shootId: string, data: ExtendedPostIdeaData) => {
   await new Promise(resolve => setTimeout(resolve, 600))
   console.log('Adding post idea:', shootId, data)
   return { 
-    id: Date.now(),
+    id: Math.floor(Math.random() * 1000000),
     ...data,
     shots: [], // Empty for this page
     status: 'planned' as const,

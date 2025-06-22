@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 export interface AsyncState<T> {
   loading: boolean
@@ -47,12 +47,10 @@ export const useAsync = <T, Args extends unknown[]>(
 export const useHydrationSafeDate = () => {
   const [isHydrated, setIsHydrated] = useState(false)
   
-  useState(() => {
+  useEffect(() => {
     // This will only run on client-side
-    if (typeof window !== 'undefined') {
-      setIsHydrated(true)
-    }
-  })
+    setIsHydrated(true)
+  }, [])
 
   const getTodayString = useCallback(() => {
     if (!isHydrated) {

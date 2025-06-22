@@ -101,8 +101,6 @@ export const EditProfileForm = ({ children, user }: EditProfileFormProps) => {
       loading={loading}
       submitText="Save Changes"
       loadingText="Saving..."
-      height="70vh"
-      maxHeight="500px"
     />
   )
 } 

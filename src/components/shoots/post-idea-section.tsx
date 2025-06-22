@@ -5,23 +5,9 @@ import { Button } from '@/components/ui/button'
 import { MobileInput } from '@/components/ui/mobile-input'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { ShotChecklistItem } from './shot-checklist-item'
-import { ChevronDown, ChevronRight, Instagram, Facebook, Linkedin, Youtube, Plus } from 'lucide-react'
-
-interface Shot {
-  id: number
-  text: string
-  completed: boolean
-  postIdeaId: number
-  notes?: string
-}
-
-interface PostIdea {
-  id: number
-  title: string
-  platforms: string[]
-  contentType: 'photo' | 'video' | 'reel' | 'story'
-  shots: Shot[]
-}
+import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { PLATFORM_ICONS } from '@/lib/constants/platforms'
+import type { PostIdea } from '@/lib/types/shoots'
 
 interface PostIdeaSectionProps {
   postIdea: PostIdea
@@ -31,16 +17,6 @@ interface PostIdeaSectionProps {
   onAddShot?: (postIdeaId: number, shotText: string, notes?: string) => void
   defaultExpanded?: boolean
 }
-
-// Platform icons mapping
-const platformIcons = {
-  Instagram: Instagram,
-  Facebook: Facebook,
-  LinkedIn: Linkedin,
-  YouTube: Youtube
-}
-
-
 
 export const PostIdeaSection = ({
   postIdea,
@@ -93,7 +69,7 @@ export const PostIdeaSection = ({
                 {/* Platform icons */}
                 <div className="flex items-center gap-1">
                   {postIdea.platforms.slice(0, 3).map((platform) => {
-                    const Icon = platformIcons[platform as keyof typeof platformIcons]
+                    const Icon = PLATFORM_ICONS[platform as keyof typeof PLATFORM_ICONS]
                     return Icon ? <Icon key={platform} className="h-3 w-3" /> : null
                   })}
                   {postIdea.platforms.length > 3 && (

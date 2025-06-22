@@ -7,14 +7,7 @@ import { MobileInput } from '@/components/ui/mobile-input'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Edit } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-interface Shot {
-  id: number
-  text: string
-  completed: boolean
-  postIdeaId: number
-  notes?: string
-}
+import type { Shot } from '@/lib/types/shoots'
 
 interface ShotChecklistItemProps {
   shot: Shot

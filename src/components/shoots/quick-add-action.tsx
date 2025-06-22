@@ -7,35 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FormSheet } from '@/components/ui/form-sheet'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Instagram, Facebook, Linkedin, Youtube, Twitter } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { PLATFORM_OPTIONS, CONTENT_TYPE_OPTIONS } from '@/lib/constants/platforms'
+import type { PostIdeaData } from '@/lib/types/shoots'
 
 interface QuickAddPostIdeaProps {
-  onAddPostIdea: (postIdea: {
-    title: string
-    platforms: string[]
-    contentType: 'photo' | 'video' | 'reel' | 'story'
-    caption?: string
-    shotList?: string
-  }) => Promise<void>
+  onAddPostIdea: (postIdea: PostIdeaData) => Promise<void>
 }
-
-const PLATFORM_OPTIONS = [
-  { name: 'Instagram', icon: Instagram },
-  { name: 'Facebook', icon: Facebook },
-  { name: 'LinkedIn', icon: Linkedin },
-  { name: 'TikTok', icon: null }, // No icon available
-  { name: 'YouTube', icon: Youtube },
-  { name: 'Twitter', icon: Twitter },
-  { name: 'Pinterest', icon: null } // No icon available
-]
-
-const CONTENT_TYPE_OPTIONS = [
-  { value: 'photo', label: 'Photo' },
-  { value: 'video', label: 'Video' },
-  { value: 'reel', label: 'Reel' },
-  { value: 'story', label: 'Story' }
-]
 
 export const QuickAddAction = ({ onAddPostIdea }: QuickAddPostIdeaProps) => {
   const [loading, setLoading] = useState(false)
@@ -202,14 +181,15 @@ export const QuickAddAction = ({ onAddPostIdea }: QuickAddPostIdeaProps) => {
             </div>
           </div>
         }
-        title=""
-        description=""
+        title="Add Post Idea"
+        description="Create a new post idea for this shoot"
+        icon={Plus}
         isOpen={isOpen}
         onOpenChange={handleOpenChange}
         onSubmit={handleSubmit}
         loading={loading}
         submitText="Add Post Idea"
-        loadingText="Creating..."
+        loadingText="Adding..."
       />
     </div>
   )

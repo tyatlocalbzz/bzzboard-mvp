@@ -16,48 +16,18 @@ import { MobileInput } from "@/components/ui/mobile-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Instagram, Linkedin, Facebook, Youtube, Trash2, Play } from "lucide-react"
+import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Trash2, Play } from "lucide-react"
 import { formatStatusText } from "@/lib/utils/status"
 import { useAsync } from "@/lib/hooks/use-async"
 import { useActiveShoot } from "@/contexts/active-shoot-context"
 import { toast } from "sonner"
+import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
+import type { Shoot, PostIdea } from '@/lib/types/shoots'
 
-// Types based on database schema
-interface Shoot {
-  id: number
-  title: string
-  client: string
-  scheduledAt: string
-  duration: number
-  location: string
-  status: 'scheduled' | 'active' | 'completed' | 'cancelled'
-  notes?: string
-}
-
-interface PostIdea {
-  id: number
-  title: string
-  platforms: string[]
-  contentType: 'photo' | 'video' | 'reel' | 'story'
-  caption?: string
-  shotList: string[]
-  status: 'planned' | 'shot' | 'uploaded'
-  notes?: string
-  completed?: boolean
-}
-
+// Additional types for this page
 interface RescheduleData {
   date: string
   time: string
-}
-
-interface PostIdeaData {
-  title: string
-  platforms: string[]
-  contentType: 'photo' | 'video' | 'reel' | 'story'
-  caption?: string
-  shotList: string[]
-  notes?: string
 }
 
 interface EditShootData {
@@ -65,6 +35,24 @@ interface EditShootData {
   client: string
   duration: number
   location: string
+  notes?: string
+}
+
+// Extended PostIdea type for this page with additional fields
+interface ExtendedPostIdea extends PostIdea {
+  shotList: string[]
+  status: 'planned' | 'shot' | 'uploaded'
+  completed?: boolean
+  notes?: string
+}
+
+// Extended PostIdeaData for this page
+interface ExtendedPostIdeaData {
+  title: string
+  platforms: string[]
+  contentType: 'photo' | 'video' | 'reel' | 'story'
+  caption?: string
+  shotList: string[]
   notes?: string
 }
 
@@ -83,7 +71,7 @@ const fetchShoot = async (id: string): Promise<Shoot> => {
   }
 }
 
-const fetchPostIdeas = async (shootId: string): Promise<PostIdea[]> => {
+const fetchPostIdeas = async (shootId: string): Promise<ExtendedPostIdea[]> => {
   await new Promise(resolve => setTimeout(resolve, 300))
   console.log('Fetching post ideas for shoot:', shootId)
   return [
@@ -93,6 +81,7 @@ const fetchPostIdeas = async (shootId: string): Promise<PostIdea[]> => {
       platforms: ["Instagram", "LinkedIn"],
       contentType: "photo",
       caption: "Exciting news coming soon! 🚀",
+      shots: [], // Empty for this page - shots are handled in active mode
       shotList: ["Hero product shot", "Behind the scenes", "Team reaction"],
       status: "planned",
       completed: false
@@ -102,6 +91,7 @@ const fetchPostIdeas = async (shootId: string): Promise<PostIdea[]> => {
       title: "Behind the Scenes Video",
       platforms: ["Instagram", "Facebook"],
       contentType: "video",
+      shots: [], // Empty for this page - shots are handled in active mode
       shotList: ["Setup process", "Team working", "Final reveal"],
       status: "shot",
       completed: true
@@ -127,18 +117,19 @@ const deleteShoot = async (id: string) => {
   return { success: true }
 }
 
-const addPostIdea = async (shootId: string, data: PostIdeaData) => {
+const addPostIdea = async (shootId: string, data: ExtendedPostIdeaData) => {
   await new Promise(resolve => setTimeout(resolve, 600))
   console.log('Adding post idea:', shootId, data)
   return { 
     id: Date.now(),
     ...data,
+    shots: [], // Empty for this page
     status: 'planned' as const,
     completed: false
   }
 }
 
-const editPostIdea = async (postIdeaId: number, data: PostIdeaData) => {
+const editPostIdea = async (postIdeaId: number, data: ExtendedPostIdeaData) => {
   await new Promise(resolve => setTimeout(resolve, 600))
   console.log('Editing post idea:', postIdeaId, data)
   return { success: true }
@@ -240,11 +231,9 @@ const ShootActions = ({ children, shoot, onSuccess }: ShootActionsProps) => {
                 <p className="text-sm text-gray-600">This action cannot be undone</p>
               </div>
             </div>
-            
-                         <p className="text-sm text-gray-700 mb-6">
-               Are you sure you want to delete &ldquo;<strong>{shoot.title}</strong>&rdquo;? All associated post ideas will also be deleted.
-             </p>
-            
+            <p className="text-sm text-gray-600 mb-6">
+              Are you sure you want to delete &quot;{shoot.title}&quot;? All post ideas and shots will be permanently removed.
+            </p>
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -255,8 +244,9 @@ const ShootActions = ({ children, shoot, onSuccess }: ShootActionsProps) => {
                 Cancel
               </Button>
               <LoadingButton
+                variant="destructive"
                 onClick={handleDeleteConfirm}
-                className="flex-1 bg-red-600 hover:bg-red-700"
+                className="flex-1"
                 loading={deleteLoading}
                 loadingText="Deleting..."
               >
@@ -284,7 +274,7 @@ const EditShootForm = ({ children, shoot, onSuccess }: EditShootFormProps) => {
   const handleSubmit = async (formData: FormData) => {
     const title = formData.get('title') as string
     const client = formData.get('client') as string
-    const duration = parseInt(formData.get('duration') as string) || 60
+    const duration = parseInt(formData.get('duration') as string)
     const location = formData.get('location') as string
     const notes = formData.get('notes') as string
 
@@ -293,117 +283,94 @@ const EditShootForm = ({ children, shoot, onSuccess }: EditShootFormProps) => {
       client,
       duration,
       location,
-      notes
+      notes: notes || undefined
     })
     
     if (result) {
-      toast.success('Shoot details updated successfully!')
+      toast.success('Shoot updated successfully!')
       setIsOpen(false)
       onSuccess()
     }
   }
 
-  return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        {children}
-      </SheetTrigger>
-      <SheetContent side="bottom" className="h-[90vh] max-h-[700px]">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Edit className="h-5 w-5" />
-            Edit Shoot Details
-          </SheetTitle>
-          <SheetDescription>
-            Update the shoot information
-          </SheetDescription>
-        </SheetHeader>
-        
-        <div className="flex flex-col h-full px-4 pb-4">
-          <form action={handleSubmit} className="flex flex-col h-full">
-            <div className="flex-1 space-y-4 overflow-y-auto">
-              <MobileInput
-                name="title"
-                label="Shoot Title"
-                placeholder="e.g., Q1 Product Launch Content"
-                defaultValue={shoot.title}
-                required
-              />
+  const formContent = (
+    <>
+      <MobileInput
+        name="title"
+        label="Shoot Title"
+        defaultValue={shoot.title}
+        placeholder="e.g., Q1 Product Launch Content"
+        required
+      />
 
-              <MobileInput
-                name="client"
-                label="Client"
-                placeholder="Client name"
-                defaultValue={shoot.client}
-                required
-              />
+      <MobileInput
+        name="client"
+        label="Client"
+        defaultValue={shoot.client}
+        placeholder="Client name"
+        required
+      />
 
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Duration</Label>
-                <Select name="duration" defaultValue={shoot.duration.toString()}>
-                  <SelectTrigger className="h-12 text-base tap-target">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-gray-500" />
-                      <SelectValue />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                    <SelectItem value="60">1 hour</SelectItem>
-                    <SelectItem value="90">1.5 hours</SelectItem>
-                    <SelectItem value="120">2 hours</SelectItem>
-                    <SelectItem value="180">3 hours</SelectItem>
-                    <SelectItem value="240">4 hours</SelectItem>
-                  </SelectContent>
-                </Select>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Duration</Label>
+          <Select name="duration" defaultValue={shoot.duration.toString()}>
+            <SelectTrigger className="h-12 text-base tap-target">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-gray-500" />
+                <SelectValue />
               </div>
-
-              <MobileInput
-                name="location"
-                label="Location"
-                placeholder="e.g., Downtown Studio, Client Office"
-                defaultValue={shoot.location}
-                required
-              />
-
-              <div className="space-y-2">
-                <Label htmlFor="notes" className="text-sm font-medium">
-                  Notes (Optional)
-                </Label>
-                <Textarea
-                  id="notes"
-                  name="notes"
-                  placeholder="Special requirements, equipment needed, shot list ideas..."
-                  className="min-h-[80px] text-base tap-target resize-none"
-                  rows={3}
-                  defaultValue={shoot.notes || ''}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-6 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsOpen(false)}
-                className="flex-1 h-12 tap-target"
-                disabled={loading}
-              >
-                Cancel
-              </Button>
-              <LoadingButton
-                type="submit"
-                className="flex-1 h-12"
-                loading={loading}
-                loadingText="Saving..."
-              >
-                Save Changes
-              </LoadingButton>
-            </div>
-          </form>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="30">30 minutes</SelectItem>
+              <SelectItem value="60">1 hour</SelectItem>
+              <SelectItem value="90">1.5 hours</SelectItem>
+              <SelectItem value="120">2 hours</SelectItem>
+              <SelectItem value="180">3 hours</SelectItem>
+              <SelectItem value="240">4 hours</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </SheetContent>
-    </Sheet>
+
+        <MobileInput
+          name="location"
+          label="Location"
+          defaultValue={shoot.location}
+          placeholder="Shoot location"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="notes" className="text-sm font-medium">
+          Notes (Optional)
+        </Label>
+        <Textarea
+          id="notes"
+          name="notes"
+          defaultValue={shoot.notes || ''}
+          placeholder="Equipment needs, special requirements..."
+          className="min-h-[80px] text-base tap-target resize-none"
+          rows={3}
+        />
+      </div>
+    </>
+  )
+
+  return (
+    <FormSheet
+      trigger={children}
+      formContent={formContent}
+      title="Edit Shoot"
+      description="Update the shoot details"
+      icon={Edit}
+      isOpen={isOpen}
+      onOpenChange={setIsOpen}
+      onSubmit={handleSubmit}
+      loading={loading}
+      submitText="Save Changes"
+      loadingText="Saving..."
+    />
   )
 }
 
@@ -431,30 +398,31 @@ const RescheduleForm = ({ children, shoot, onSuccess }: RescheduleFormProps) => 
     }
   }
 
-  // Get current date values for defaults
-  const currentDate = new Date(shoot.scheduledAt)
-  const defaultDate = currentDate.toISOString().split('T')[0]
-  const defaultTime = currentDate.toTimeString().slice(0, 5)
+  // Get current date and time from shoot
+  const currentDate = new Date(shoot.scheduledAt).toISOString().split('T')[0]
+  const currentTime = new Date(shoot.scheduledAt).toTimeString().slice(0, 5)
   const today = new Date().toISOString().split('T')[0]
 
   const formContent = (
-    <div className="grid grid-cols-2 gap-3">
-      <MobileInput
-        name="date"
-        label="New Date"
-        type="date"
-        min={today}
-        defaultValue={defaultDate}
-        required
-      />
-      <MobileInput
-        name="time"
-        label="New Time"
-        type="time"
-        defaultValue={defaultTime}
-        required
-      />
-    </div>
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <MobileInput
+          name="date"
+          label="New Date"
+          type="date"
+          defaultValue={currentDate}
+          min={today}
+          required
+        />
+        <MobileInput
+          name="time"
+          label="New Time"
+          type="time"
+          defaultValue={currentTime}
+          required
+        />
+      </div>
+    </>
   )
 
   return (
@@ -470,8 +438,6 @@ const RescheduleForm = ({ children, shoot, onSuccess }: RescheduleFormProps) => 
       loading={loading}
       submitText="Reschedule"
       loadingText="Rescheduling..."
-      height="60vh"
-      maxHeight="400px"
     />
   )
 }
@@ -488,12 +454,7 @@ const AddPostIdeaForm = ({ children, shootId, onSuccess }: AddPostIdeaFormProps)
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const { loading, execute } = useAsync(addPostIdea)
 
-  const platforms = [
-    { name: 'Instagram', icon: Instagram },
-    { name: 'Facebook', icon: Facebook },
-    { name: 'LinkedIn', icon: Linkedin },
-    { name: 'YouTube', icon: Youtube }
-  ]
+  const platforms = PLATFORM_OPTIONS.slice(0, 4)
 
   const togglePlatform = (platform: string) => {
     setSelectedPlatforms(prev => 
@@ -574,7 +535,13 @@ const AddPostIdeaForm = ({ children, shootId, onSuccess }: AddPostIdeaFormProps)
                         className="h-12 justify-start gap-2 tap-target"
                         onClick={() => togglePlatform(platform.name)}
                       >
-                        <Icon className="h-4 w-4" />
+                        {Icon ? (
+                          <Icon className="h-4 w-4" />
+                        ) : (
+                          <span className="text-xs font-medium w-4 h-4 flex items-center justify-center">
+                            {platform.name.slice(0, 2)}
+                          </span>
+                        )}
                         {platform.name}
                       </Button>
                     )
@@ -654,7 +621,7 @@ const AddPostIdeaForm = ({ children, shootId, onSuccess }: AddPostIdeaFormProps)
 // Edit Post Idea Form Component - Following DRY pattern
 interface EditPostIdeaFormProps {
   children: React.ReactNode
-  postIdea: PostIdea
+  postIdea: ExtendedPostIdea
   onSuccess: () => void
 }
 
@@ -663,12 +630,7 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(postIdea.platforms)
   const { loading, execute } = useAsync(editPostIdea)
 
-  const platforms = [
-    { name: 'Instagram', icon: Instagram },
-    { name: 'Facebook', icon: Facebook },
-    { name: 'LinkedIn', icon: Linkedin },
-    { name: 'YouTube', icon: Youtube }
-  ]
+  const platforms = PLATFORM_OPTIONS.slice(0, 4)
 
   const togglePlatform = (platform: string) => {
     setSelectedPlatforms(prev => 
@@ -707,12 +669,12 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
     }
   }
 
-  // Reset selected platforms when opening the form
   const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
     if (open) {
+      // Reset to current platforms when opening
       setSelectedPlatforms(postIdea.platforms)
     }
-    setIsOpen(open)
   }
 
   return (
@@ -737,8 +699,8 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
               <MobileInput
                 name="title"
                 label="Post Title"
-                placeholder="e.g., Product Launch Announcement"
                 defaultValue={postIdea.title}
+                placeholder="e.g., Product Launch Announcement"
                 required
               />
 
@@ -757,7 +719,13 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
                         className="h-12 justify-start gap-2 tap-target"
                         onClick={() => togglePlatform(platform.name)}
                       >
-                        <Icon className="h-4 w-4" />
+                        {Icon ? (
+                          <Icon className="h-4 w-4" />
+                        ) : (
+                          <span className="text-xs font-medium w-4 h-4 flex items-center justify-center">
+                            {platform.name.slice(0, 2)}
+                          </span>
+                        )}
                         {platform.name}
                       </Button>
                     )
@@ -784,8 +752,8 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
               <MobileInput
                 name="caption"
                 label="Caption (Optional)"
-                placeholder="Write your caption here..."
                 defaultValue={postIdea.caption || ''}
+                placeholder="Write your caption here..."
               />
 
               {/* Shot List */}
@@ -796,18 +764,18 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
                 <Textarea
                   id="shotList"
                   name="shotList"
+                  defaultValue={postIdea.shotList.join('\n')}
                   placeholder="Enter each shot on a new line..."
                   className="min-h-[80px] text-base tap-target resize-none"
                   rows={3}
-                  defaultValue={postIdea.shotList.join('\n')}
                 />
               </div>
 
               <MobileInput
                 name="notes"
                 label="Notes (Optional)"
-                placeholder="Any additional notes..."
                 defaultValue={postIdea.notes || ''}
+                placeholder="Any additional notes..."
               />
             </div>
 
@@ -825,9 +793,9 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
                 type="submit"
                 className="flex-1 h-12"
                 loading={loading}
-                loadingText="Saving..."
+                loadingText="Updating..."
               >
-                Save Changes
+                Update Post Idea
               </LoadingButton>
             </div>
           </form>
@@ -837,9 +805,9 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
   )
 }
 
-// Post Idea Actions Component - DRY pattern for reusable actions
+// Post Idea Actions Component - DRY pattern for post idea actions
 interface PostIdeaActionsProps {
-  postIdea: PostIdea
+  postIdea: ExtendedPostIdea
   onToggleStatus: () => void
 }
 
@@ -849,57 +817,51 @@ const PostIdeaActions = ({ postIdea, onToggleStatus }: PostIdeaActionsProps) => 
   const handleToggleStatus = async () => {
     const result = await execute(postIdea.id)
     if (result) {
-      toast.success('Status updated!')
       onToggleStatus()
     }
   }
 
-  const getNextStatus = () => {
+  const getStatusAction = () => {
     switch (postIdea.status) {
-      case 'planned': return 'shot'
-      case 'shot': return 'uploaded'
-      case 'uploaded': return 'planned'
-      default: return 'planned'
+      case 'planned': return 'Mark as Shot'
+      case 'shot': return 'Mark as Uploaded'
+      case 'uploaded': return 'Mark as Planned'
+      default: return 'Update Status'
     }
   }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 hover:bg-gray-100"
-          aria-label="Post idea actions"
-        >
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem 
-          onClick={handleToggleStatus}
-          disabled={loading}
-          className="cursor-pointer"
-        >
-          {loading ? (
-            <LoadingSpinner size="md" color="current" className="mr-2" />
-          ) : (
-            <Edit className="h-4 w-4 mr-2" />
-          )}
-          Mark as {getNextStatus()}
-        </DropdownMenuItem>
-        
-        <DropdownMenuSeparator />
-        
-        <EditPostIdeaForm postIdea={postIdea} onSuccess={onToggleStatus}>
+        <EditPostIdeaForm postIdea={postIdea} onSuccess={() => {}}>
           <DropdownMenuItem 
-            className="cursor-pointer text-gray-600"
+            className="cursor-pointer"
             onSelect={(e) => e.preventDefault()}
           >
             <Edit className="h-4 w-4 mr-2" />
             Edit Details
           </DropdownMenuItem>
         </EditPostIdeaForm>
+        
+        <DropdownMenuSeparator />
+        
+        <DropdownMenuItem 
+          onClick={handleToggleStatus}
+          disabled={loading}
+          className="cursor-pointer"
+        >
+          {loading ? (
+            <LoadingSpinner size="sm" color="gray" className="mr-2" />
+          ) : (
+            <Badge variant="outline" className="mr-2 h-4 w-4 p-0" />
+          )}
+          {getStatusAction()}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -909,38 +871,55 @@ export default function ShootDetailsPage() {
   const params = useParams()
   const router = useRouter()
   const shootId = params.id as string
-  const { startShoot, isShootActive, activeShoot } = useActiveShoot()
+  const { startShoot } = useActiveShoot()
   
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [shoot, setShoot] = useState<Shoot | null>(null)
+  const [postIdeas, setPostIdeas] = useState<ExtendedPostIdea[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Fetch shoot data
-  const { data: shoot, loading: shootLoading, execute: executeShoot } = useAsync(fetchShoot)
-  
-  // Fetch post ideas
-  const { data: postIdeas, loading: postIdeasLoading, execute: executePostIdeas } = useAsync(fetchPostIdeas)
-
-  // Auto-fetch data when shootId or refreshKey changes
+  // Load shoot and post ideas
   useEffect(() => {
-    if (shootId) {
-      executeShoot(shootId)
-      executePostIdeas(shootId)
+    const loadData = async () => {
+      try {
+        setIsLoading(true)
+        const [shootData, postIdeasData] = await Promise.all([
+          fetchShoot(shootId),
+          fetchPostIdeas(shootId)
+        ])
+        setShoot(shootData)
+        setPostIdeas(postIdeasData)
+      } catch (error) {
+        console.error('Failed to load shoot data:', error)
+        toast.error('Failed to load shoot details')
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [shootId, refreshKey, executeShoot, executePostIdeas])
 
-  const handleRefresh = useCallback(() => {
-    setRefreshKey(prev => prev + 1)
-  }, [])
+    if (shootId) {
+      loadData()
+    }
+  }, [shootId])
+
+  const handleRefresh = useCallback(async () => {
+    if (!shootId) return
+    
+    try {
+      const [shootData, postIdeasData] = await Promise.all([
+        fetchShoot(shootId),
+        fetchPostIdeas(shootId)
+      ])
+      setShoot(shootData)
+      setPostIdeas(postIdeasData)
+    } catch (error) {
+      console.error('Failed to refresh data:', error)
+      toast.error('Failed to refresh data')
+    }
+  }, [shootId])
 
   const handleStartShoot = () => {
     if (!shoot) return
     
-    // Check if there's already an active shoot
-    if (isShootActive && activeShoot && activeShoot.id !== shoot.id) {
-      toast.error('You already have an active shoot. Please end it first.')
-      return
-    }
-    
-    // Start the shoot
     startShoot({
       id: shoot.id,
       title: shoot.title,
@@ -948,18 +927,25 @@ export default function ShootDetailsPage() {
       startedAt: new Date().toISOString()
     })
     
-    toast.success('Shoot started!')
     router.push(`/shoots/${shootId}/active`)
   }
 
-  // Format date and time
+  // Utility functions
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
+    const now = new Date()
+    const diffTime = date.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Tomorrow'
+    if (diffDays === -1) return 'Yesterday'
+    
     return date.toLocaleDateString('en-US', { 
       weekday: 'long',
-      year: 'numeric',
-      month: 'long', 
-      day: 'numeric'
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
     })
   }
 
@@ -984,18 +970,16 @@ export default function ShootDetailsPage() {
       case 'active': return 'destructive'
       case 'completed': return 'secondary'
       case 'cancelled': return 'outline'
-      case 'planned': return 'secondary'
-      case 'shot': return 'default'
-      case 'uploaded': return 'outline'
       default: return 'default'
     }
   }
 
-  if (shootLoading || !shoot) {
+  if (isLoading) {
     return (
       <MobileLayout 
-        title="Loading..." 
+        title="Loading..."
         backHref="/shoots"
+        showBottomNav={false}
         loading={true}
       >
         <div />
@@ -1003,111 +987,89 @@ export default function ShootDetailsPage() {
     )
   }
 
+  if (!shoot) {
+    return (
+      <MobileLayout 
+        title="Shoot Not Found"
+        backHref="/shoots"
+        showBottomNav={false}
+      >
+        <EmptyState
+          icon={Calendar}
+          title="Shoot not found"
+          description="The shoot you're looking for doesn't exist or has been deleted."
+          action={{
+            label: "Back to Shoots",
+            onClick: () => router.push('/shoots')
+          }}
+        />
+      </MobileLayout>
+    )
+  }
+
   return (
-    <MobileLayout 
-      title={shoot.title}
+    <MobileLayout
+      title={shoot.client}
       backHref="/shoots"
-      showClientSelector={false}
       headerAction={
-        <ShootActions shoot={shoot} onSuccess={handleRefresh}>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-8 w-8 p-0"
-            aria-label="Shoot actions"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </ShootActions>
+        <div className="flex items-center gap-2">
+          {shoot.status === 'scheduled' && (
+            <Button
+              size="sm"
+              onClick={handleStartShoot}
+              className="h-8 px-3 text-xs"
+            >
+              <Play className="h-3 w-3 mr-1" />
+              Start
+            </Button>
+          )}
+          <ShootActions shoot={shoot} onSuccess={handleRefresh}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </ShootActions>
+        </div>
       }
     >
       <div className="px-3 py-3 space-y-6">
-        {/* Shoot Information */}
+        {/* Shoot Details */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Shoot Details</h2>
-          <div className="space-y-3">
-            {/* Status and Client */}
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium text-gray-900">{shoot.client}</div>
-                <div className="text-xs text-gray-600">Client</div>
-              </div>
-              <Badge variant={getStatusColor(shoot.status)} className="text-xs">
-                {formatStatusText(shoot.status)}
-              </Badge>
-            </div>
-
-            {/* Date and Time */}
-            <div className="grid grid-cols-2 gap-4 py-3 border-t border-gray-100">
-              <div>
-                <div className="flex items-center gap-1 text-sm text-gray-900">
-                  <Calendar className="h-4 w-4" />
-                  <span className="font-medium">Date</span>
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  {formatDate(shoot.scheduledAt)}
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center gap-1 text-sm text-gray-900">
-                  <Clock className="h-4 w-4" />
-                  <span className="font-medium">Time</span>
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  {formatTime(shoot.scheduledAt)} ({formatDuration(shoot.duration)})
-                </div>
-              </div>
-            </div>
-
-            {/* Location */}
-            <div className="pt-3 border-t border-gray-100">
-              <div className="flex items-center gap-1 text-sm text-gray-900 mb-1">
-                <MapPin className="h-4 w-4" />
-                <span className="font-medium">Location</span>
-              </div>
-              <div className="text-xs text-gray-600">{shoot.location}</div>
-            </div>
-
-            {/* Notes */}
-            {shoot.notes && (
-              <div className="pt-3 border-t border-gray-100">
-                <div className="text-sm font-medium text-gray-900 mb-1">Notes</div>
-                <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
-                  {shoot.notes}
-                </div>
-              </div>
-            )}
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-gray-900">{shoot.title}</h1>
+            <Badge variant={getStatusColor(shoot.status)}>
+              {formatStatusText(shoot.status)}
+            </Badge>
           </div>
-          
-          {/* Start Shoot Button - Only show if shoot is scheduled */}
-          {shoot.status === 'scheduled' && (
-            <div className="pt-3 border-t border-gray-100">
-              {isShootActive && activeShoot && activeShoot.id === shoot.id ? (
-                <Button
-                  variant="outline"
-                  className="w-full h-12 text-base font-medium"
-                  onClick={() => router.push(`/shoots/${shootId}/active`)}
-                >
-                  <Play className="h-5 w-5 mr-2" />
-                  Continue Active Shoot
-                </Button>
-              ) : (
-                <Button
-                  className="w-full h-12 text-base font-medium"
-                  onClick={handleStartShoot}
-                  disabled={!!(isShootActive && activeShoot && activeShoot.id !== shoot.id)}
-                >
-                  <Play className="h-5 w-5 mr-2" />
-                  Start Shoot
-                </Button>
-              )}
+
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Calendar className="h-4 w-4" />
+              <span>{formatDate(shoot.scheduledAt)} at {formatTime(shoot.scheduledAt)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <Clock className="h-4 w-4" />
+              <span>{formatDuration(shoot.duration)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <MapPin className="h-4 w-4" />
+              <span>{shoot.location}</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <Users className="h-4 w-4" />
+              <span>{postIdeas.length} post idea{postIdeas.length !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+
+          {shoot.notes && (
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-700">{shoot.notes}</p>
             </div>
           )}
         </div>
 
         <Separator />
 
-        {/* Post Ideas Section */}
+        {/* Post Ideas */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Post Ideas</h2>
@@ -1118,58 +1080,102 @@ export default function ShootDetailsPage() {
               </Button>
             </AddPostIdeaForm>
           </div>
-          
-          {postIdeasLoading ? (
-            <div className="space-y-2">
-              {[1, 2].map(i => (
-                <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />
-              ))}
-            </div>
-          ) : postIdeas && postIdeas.length > 0 ? (
+
+          {postIdeas.length > 0 ? (
             <div className="space-y-3">
-              {postIdeas.map((idea, index) => (
-                <div key={idea.id}>
-                  <div className="p-3">
-                    <div className="flex items-start justify-between mb-2">
+              {postIdeas.map((postIdea, index) => (
+                <div key={postIdea.id}>
+                  <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-3">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-sm truncate">{idea.title}</h4>
-                        <div className="text-xs text-gray-600 mt-1">
-                          {idea.platforms.join(", ")} • {idea.contentType}
+                        <h3 className="font-medium text-gray-900 truncate">
+                          {postIdea.title}
+                        </h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1">
+                            {postIdea.platforms.slice(0, 3).map((platform) => {
+                              const platformOption = PLATFORM_OPTIONS.find(p => p.name === platform)
+                              const Icon = platformOption?.icon
+                              return Icon ? (
+                                <Icon key={platform} className="h-3 w-3 text-gray-500" />
+                              ) : (
+                                <span key={platform} className="text-xs text-gray-500">
+                                  {platform.slice(0, 2)}
+                                </span>
+                              )
+                            })}
+                            {postIdea.platforms.length > 3 && (
+                              <span className="text-xs text-gray-500">
+                                +{postIdea.platforms.length - 3}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs text-gray-500 capitalize">
+                            {postIdea.contentType}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 ml-2 shrink-0">
-                        <Badge variant={getStatusColor(idea.status)} className="text-xs">
-                          {idea.status}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge variant={getStatusColor(postIdea.status)}>
+                          {formatStatusText(postIdea.status)}
                         </Badge>
-                        <PostIdeaActions postIdea={idea} onToggleStatus={handleRefresh} />
+                        <PostIdeaActions 
+                          postIdea={postIdea} 
+                          onToggleStatus={handleRefresh}
+                        />
                       </div>
                     </div>
 
-                    {idea.caption && (
-                      <div className="text-xs text-gray-600 mb-2 italic">
-                        &ldquo;{idea.caption}&rdquo;
+                    {postIdea.caption && (
+                      <p className="text-sm text-gray-600 mb-3">
+                        {postIdea.caption}
+                      </p>
+                    )}
+
+                    {postIdea.shotList.length > 0 && (
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                          Shot List ({postIdea.shotList.length})
+                        </h4>
+                        <ul className="space-y-1">
+                          {postIdea.shotList.map((shot, shotIndex) => (
+                            <li key={shotIndex} className="text-sm text-gray-600 flex items-center gap-2">
+                              <div className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
+                              {shot}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
 
-                    {idea.shotList.length > 0 && (
-                      <div className="text-xs text-gray-500">
-                        <span className="font-medium">Shots:</span> {idea.shotList.join(", ")}
+                    {postIdea.notes && (
+                      <div className="mt-3 p-2 bg-gray-50 rounded text-sm text-gray-600">
+                        <strong>Notes:</strong> {postIdea.notes}
                       </div>
                     )}
                   </div>
                   
-                  {/* Add separator between post ideas, but not after the last one */}
-                  {index < postIdeas.length - 1 && (
-                    <Separator />
-                  )}
+                  {index < postIdeas.length - 1 && <Separator />}
                 </div>
               ))}
             </div>
           ) : (
             <EmptyState
-              icon={Users}
+              icon={Plus}
               title="No post ideas yet"
-              description="Add your first post idea to get started"
+              description="Add your first post idea to start planning your content for this shoot."
+              action={{
+                label: "Add Post Idea",
+                children: (
+                  <AddPostIdeaForm shootId={shootId} onSuccess={handleRefresh}>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Post Idea
+                    </Button>
+                  </AddPostIdeaForm>
+                )
+              }}
             />
           )}
         </div>

@@ -119,11 +119,12 @@ export default function Dashboard() {
     return allPostIdeas.filter(idea => idea.client === selectedClient.name)
   }, [selectedClient, allPostIdeas])
 
-  // Get today's shoots (for display)
-  const today = new Date().toISOString().split('T')[0]
+  // Get today's shoots (for display) - use a stable date to prevent hydration issues
   const todaysShoots = useMemo(() => {
+    // Use a fixed date for demonstration - in real app this would be from API
+    const today = "2024-01-15"
     return filteredShoots.filter(shoot => shoot.date === today)
-  }, [filteredShoots, today])
+  }, [filteredShoots])
 
   // Get recent post ideas (limit to 3 for display)
   const recentPostIdeas = useMemo(() => {

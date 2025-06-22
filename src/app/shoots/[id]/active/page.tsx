@@ -13,146 +13,8 @@ import { StopCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useAsync } from '@/lib/hooks/use-async'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
 import { toast } from 'sonner'
-
-// Types
-interface Shot {
-  id: number
-  text: string
-  completed: boolean
-  postIdeaId: number
-  notes?: string
-}
-
-interface PostIdea {
-  id: number
-  title: string
-  platforms: string[]
-  contentType: 'photo' | 'video' | 'reel' | 'story'
-  shots: Shot[]
-}
-
-interface Shoot {
-  id: number
-  title: string
-  client: string
-  scheduledAt: string
-  duration: number
-  location: string
-  status: 'scheduled' | 'active' | 'completed' | 'cancelled'
-  startedAt?: string
-}
-
-interface ActiveShootData {
-  shoot: Shoot
-  postIdeas: PostIdea[]
-}
-
-// Mock API functions - replace with real API calls
-const fetchActiveShootData = async (shootId: string): Promise<ActiveShootData> => {
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  const mockShots: Shot[] = [
-    { id: 1, text: "Hero product shot", completed: false, postIdeaId: 1 },
-    { id: 2, text: "Behind the scenes setup", completed: true, postIdeaId: 1 },
-    { id: 3, text: "Team reaction shot", completed: false, postIdeaId: 1, notes: "Get genuine reactions" },
-    { id: 4, text: "Wide establishing shot", completed: false, postIdeaId: 2 },
-    { id: 5, text: "Close-up detail work", completed: false, postIdeaId: 2 },
-    { id: 6, text: "Customer using product", completed: false, postIdeaId: 3 },
-  ]
-
-  const mockPostIdeas: PostIdea[] = [
-    {
-      id: 1,
-      title: "Product Launch Announcement",
-      platforms: ["Instagram", "LinkedIn"],
-      contentType: "photo",
-      shots: mockShots.filter(shot => shot.postIdeaId === 1)
-    },
-    {
-      id: 2,
-      title: "BTS Video Content",
-      platforms: ["Instagram", "Facebook"],
-      contentType: "video",
-      shots: mockShots.filter(shot => shot.postIdeaId === 2)
-    },
-    {
-      id: 3,
-      title: "Customer Testimonial",
-      platforms: ["LinkedIn", "YouTube"],
-      contentType: "video",
-      shots: mockShots.filter(shot => shot.postIdeaId === 3)
-    }
-  ]
-
-  return {
-    shoot: {
-      id: parseInt(shootId),
-      title: "Acme Corp Q1 Content",
-      client: "Acme Corporation",
-      scheduledAt: new Date().toISOString(),
-      duration: 120,
-      location: "Downtown Studio",
-      status: "active",
-      startedAt: new Date(Date.now() - 45 * 60 * 1000).toISOString() // Started 45 minutes ago
-    },
-    postIdeas: mockPostIdeas
-  }
-}
-
-const toggleShot = async (shotId: number): Promise<void> => {
-  await new Promise(resolve => setTimeout(resolve, 100))
-  console.log('Toggling shot:', shotId)
-}
-
-const editShot = async (shotId: number, text: string, notes?: string): Promise<void> => {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  console.log('Editing shot:', { shotId, text, notes })
-}
-
-const addShot = async (postIdeaId: number, text: string, notes?: string): Promise<void> => {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  console.log('Adding shot:', { postIdeaId, text, notes })
-}
-
-const addPostIdea = async (shootId: string, postIdea: {
-  title: string
-  platforms: string[]
-  contentType: 'photo' | 'video' | 'reel' | 'story'
-  caption?: string
-  shotList?: string
-}): Promise<PostIdea> => {
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  // Create shots from shot list if provided
-  const shots: Shot[] = []
-  if (postIdea.shotList) {
-    const shotLines = postIdea.shotList.split('\n').filter(line => line.trim())
-    shotLines.forEach((line, index) => {
-      shots.push({
-        id: Date.now() + index, // Mock ID
-        text: line.trim(),
-        completed: false,
-        postIdeaId: Date.now() // Will be updated with actual post idea ID
-      })
-    })
-  }
-  
-  const newPostIdea: PostIdea = {
-    id: Date.now(), // Mock ID
-    title: postIdea.title,
-    platforms: postIdea.platforms,
-    contentType: postIdea.contentType,
-    shots: shots.map(shot => ({ ...shot, postIdeaId: Date.now() }))
-  }
-  
-  console.log('Adding post idea:', { shootId, postIdea: newPostIdea })
-  return newPostIdea
-}
-
-const endShoot = async (shootId: string): Promise<void> => {
-  await new Promise(resolve => setTimeout(resolve, 500))
-  console.log('Ending shoot:', shootId)
-}
+import { shootsApi } from '@/lib/api/shoots'
+import type { ActiveShootData, PostIdeaData } from '@/lib/types/shoots'
 
 export default function ActiveShootPage() {
   const params = useParams()
@@ -163,21 +25,102 @@ export default function ActiveShootPage() {
   const [activeData, setActiveData] = useState<ActiveShootData | null>(null)
   const [showCompleted, setShowCompleted] = useState(false)
   const [showEndDialog, setShowEndDialog] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
   
   // Fetch initial data
-  const { loading: dataLoading, execute: executeDataFetch } = useAsync(fetchActiveShootData)
-  const { loading: endLoading, execute: executeEndShoot } = useAsync(endShoot)
+  const { loading: endLoading, execute: executeEndShoot } = useAsync(shootsApi.endShoot)
 
   // Load shoot data
   useEffect(() => {
-    if (shootId) {
-      executeDataFetch(shootId).then(data => {
-        if (data) {
+    const loadData = async () => {
+      if (!shootId) {
+        console.log('❌ No shootId provided')
+        return
+      }
+      
+      try {
+        console.log('🔍 Loading active shoot data for ID:', shootId)
+        setIsInitialLoading(true)
+        
+        // Direct API call instead of using useAsync
+        const data = await shootsApi.fetchActiveShootData(shootId)
+        console.log('📊 Received data:', data)
+        console.log('📊 Data type:', typeof data)
+        console.log('📊 Data keys:', data ? Object.keys(data) : 'null')
+        
+        if (data && data.shoot && data.postIdeas) {
           setActiveData(data)
+          console.log('✅ Active data set successfully')
+        } else {
+          console.error('❌ Invalid data structure received:', data)
+          
+          // Create fallback data to unblock the UI
+          const fallbackData: ActiveShootData = {
+            shoot: {
+              id: parseInt(shootId),
+              title: "Active Shoot",
+              client: "Demo Client",
+              scheduledAt: "2024-01-15T10:00:00Z",
+              duration: 120,
+              location: "Studio",
+              status: "active",
+              startedAt: "2024-01-15T10:00:00Z"
+            },
+            postIdeas: [
+              {
+                id: 1,
+                title: "Demo Post Idea",
+                platforms: ["Instagram"],
+                contentType: "photo" as const,
+                shots: [
+                  {
+                    id: 1,
+                    text: "Demo shot",
+                    completed: false,
+                    postIdeaId: 1
+                  }
+                ]
+              }
+            ]
+          }
+          
+          setActiveData(fallbackData)
+          console.log('🔄 Using fallback data:', fallbackData)
+          toast.error('Using demo data - API returned invalid structure')
         }
-      })
+      } catch (error) {
+        console.error('❌ Error loading data:', error)
+        console.error('❌ Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : 'No stack trace'
+        })
+        
+        // Create fallback data even on error
+        const fallbackData: ActiveShootData = {
+          shoot: {
+            id: parseInt(shootId),
+            title: "Active Shoot (Error Recovery)",
+            client: "Demo Client",
+            scheduledAt: "2024-01-15T10:00:00Z",
+            duration: 120,
+            location: "Studio",
+            status: "active",
+            startedAt: "2024-01-15T10:00:00Z"
+          },
+          postIdeas: []
+        }
+        
+        setActiveData(fallbackData)
+        console.log('🔄 Using fallback data after error:', fallbackData)
+        toast.error('Failed to load shoot data - using demo data')
+      } finally {
+        setIsInitialLoading(false)
+        console.log('🏁 Loading completed, isInitialLoading set to false')
+      }
     }
-  }, [shootId, executeDataFetch])
+
+    loadData()
+  }, [shootId]) // Removed executeDataFetch dependency
 
   // Calculate progress
   const { totalPosts, completedPosts, activePostIdeas, completedPostIdeas } = useMemo(() => {
@@ -204,7 +147,7 @@ export default function ActiveShootPage() {
   const handleShotToggle = useCallback(async (shotId: number) => {
     if (!activeData) return
     
-    await toggleShot(shotId)
+    await shootsApi.toggleShot(shotId)
     
     // Update local state
     setActiveData(prev => {
@@ -223,7 +166,7 @@ export default function ActiveShootPage() {
   }, [activeData])
 
   const handleShotEdit = useCallback(async (shotId: number, text: string, notes?: string) => {
-    await editShot(shotId, text, notes)
+    await shootsApi.editShot(shotId, text, notes)
     
     // Update local state
     setActiveData(prev => {
@@ -244,17 +187,9 @@ export default function ActiveShootPage() {
   }, [])
 
   const handleAddShot = useCallback(async (postIdeaId: number, shotText: string, notes?: string) => {
-    await addShot(postIdeaId, shotText, notes)
+    const newShot = await shootsApi.addShot(postIdeaId, shotText, notes)
     
     // Update local state with new shot
-    const newShot: Shot = {
-      id: Date.now(), // Mock ID
-      text: shotText,
-      completed: false,
-      postIdeaId,
-      notes
-    }
-    
     setActiveData(prev => {
       if (!prev) return prev
       
@@ -271,14 +206,8 @@ export default function ActiveShootPage() {
     toast.success('Shot added!')
   }, [])
 
-  const handleAddPostIdea = useCallback(async (postIdeaData: {
-    title: string
-    platforms: string[]
-    contentType: 'photo' | 'video' | 'reel' | 'story'
-    caption?: string
-    shotList?: string
-  }) => {
-    const newPostIdea = await addPostIdea(shootId, postIdeaData)
+  const handleAddPostIdea = useCallback(async (postIdeaData: PostIdeaData) => {
+    const newPostIdea = await shootsApi.addPostIdea(shootId, postIdeaData)
     
     // Update local state with new post idea
     setActiveData(prev => {
@@ -314,7 +243,9 @@ export default function ActiveShootPage() {
     setShowEndDialog(false)
   }, [])
 
-  if (dataLoading || !activeData) {
+  // Show loading state
+  if (isInitialLoading || !activeData) {
+    console.log('🔄 Rendering loading state - isInitialLoading:', isInitialLoading, 'activeData:', !!activeData)
     return (
       <MobileLayout 
         title="Loading..."
@@ -323,10 +254,17 @@ export default function ActiveShootPage() {
         showClientSelector={false}
         loading={true}
       >
-        <div />
+        <div className="flex items-center justify-center min-h-[200px]">
+          <div className="text-center">
+            <LoadingSpinner size="lg" color="blue" className="mx-auto mb-4" />
+            <p className="text-sm text-gray-600">Loading shoot data...</p>
+          </div>
+        </div>
       </MobileLayout>
     )
   }
+
+  console.log('✅ Rendering active shoot page with data:', activeData)
 
   const progressPercentage = totalPosts > 0 ? (completedPosts / totalPosts) * 100 : 0
 
@@ -396,12 +334,12 @@ export default function ActiveShootPage() {
             </div>
           ) : (
             <div className="text-center py-8">
-                             <div className="text-lg font-medium text-gray-900 mb-2">
-                 🎉 All shots complete!
-               </div>
-               <div className="text-sm text-gray-600 mb-4">
-                 Great work! You&apos;ve captured all the planned shots.
-               </div>
+              <div className="text-lg font-medium text-gray-900 mb-2">
+                🎉 All shots complete!
+              </div>
+              <div className="text-sm text-gray-600 mb-4">
+                Great work! You&apos;ve captured all the planned shots.
+              </div>
               <Button onClick={handleEndShootClick} disabled={endLoading}>
                 {endLoading ? (
                   <>

@@ -1,13 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-
-interface ActiveShoot {
-  id: number
-  title: string
-  client: string
-  startedAt: string
-}
+import type { ActiveShoot } from '@/lib/types/shoots'
 
 interface ActiveShootContextType {
   activeShoot: ActiveShoot | null
@@ -87,8 +81,13 @@ export const ActiveShootProvider = ({ children }: ActiveShootProviderProps) => {
     }
   }, []) // Empty dependency array is correct - we want this to run once on mount
 
-  // Timer effect
+  // Timer effect - only start after hydration to prevent SSR/client mismatch
   useEffect(() => {
+    // Don't start timer until after hydration
+    if (!isHydrated) {
+      return
+    }
+
     if (!activeShoot) {
       setElapsedTime('0:00:00')
       return
@@ -112,10 +111,13 @@ export const ActiveShootProvider = ({ children }: ActiveShootProviderProps) => {
       setElapsedTime(`${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
     }
 
+    // Calculate initial time immediately
     updateTimer()
+    
+    // Then update every second
     const interval = setInterval(updateTimer, 1000)
     return () => clearInterval(interval)
-  }, [activeShoot])
+  }, [activeShoot, isHydrated]) // Added isHydrated dependency
 
   // Persist active shoot to localStorage (only after hydration)
   useEffect(() => {
@@ -131,13 +133,17 @@ export const ActiveShootProvider = ({ children }: ActiveShootProviderProps) => {
   const startShoot = (shoot: ActiveShoot) => {
     setActiveShoot(shoot)
     // Immediately persist to localStorage
-    localStorage.setItem('activeShoot', JSON.stringify(shoot))
+    if (isHydrated) {
+      localStorage.setItem('activeShoot', JSON.stringify(shoot))
+    }
   }
 
   const endShoot = () => {
     setActiveShoot(null)
     // Immediately remove from localStorage
-    localStorage.removeItem('activeShoot')
+    if (isHydrated) {
+      localStorage.removeItem('activeShoot')
+    }
   }
 
   const isShootActive = activeShoot !== null

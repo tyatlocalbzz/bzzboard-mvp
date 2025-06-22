@@ -2,14 +2,21 @@
 
 import { useRouter, usePathname } from 'next/navigation'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
+import { useState, useEffect } from 'react'
 
 export const ActiveShootTimer = () => {
   const { activeShoot, elapsedTime, isShootActive, isHydrated } = useActiveShoot()
   const router = useRouter()
   const pathname = usePathname()
+  const [isClientReady, setIsClientReady] = useState(false)
+
+  // Ensure component is fully hydrated before showing time-sensitive content
+  useEffect(() => {
+    setIsClientReady(true)
+  }, [])
 
   // Don't render anything until hydrated to prevent flash
-  if (!isHydrated) {
+  if (!isHydrated || !isClientReady) {
     return null
   }
 

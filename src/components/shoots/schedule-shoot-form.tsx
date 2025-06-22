@@ -42,7 +42,7 @@ const scheduleShoot = async (data: ScheduleShootData) => {
   
   // Mock success response
   return { 
-    id: Date.now(),
+    id: Math.floor(Math.random() * 1000000), // Use random ID for demo
     message: 'Shoot scheduled successfully',
     ...data 
   }

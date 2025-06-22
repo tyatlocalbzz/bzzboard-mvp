@@ -92,8 +92,6 @@ export const InviteUserForm = ({ children }: InviteUserFormProps) => {
       loading={isLoading}
       submitText="Send Invitation"
       loadingText="Sending..."
-      height="70vh"
-      maxHeight="500px"
     />
   )
 } 

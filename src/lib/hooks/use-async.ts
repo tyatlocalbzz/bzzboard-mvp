@@ -1,39 +1,31 @@
 import { useState, useCallback } from 'react'
 
-interface AsyncState<T> {
-  data: T | null
+export interface AsyncState<T> {
   loading: boolean
   error: string | null
-}
-
-interface UseAsyncReturn<T, TArgs extends unknown[]> {
   data: T | null
-  loading: boolean
-  error: string | null
-  execute: (...args: TArgs) => Promise<T | null>
-  reset: () => void
 }
 
-export const useAsync = <T = unknown, TArgs extends unknown[] = []>(
-  asyncFunction: (...args: TArgs) => Promise<T>
-): UseAsyncReturn<T, TArgs> => {
+export const useAsync = <T, Args extends unknown[]>(
+  asyncFunction: (...args: Args) => Promise<T>
+) => {
   const [state, setState] = useState<AsyncState<T>>({
-    data: null,
     loading: false,
     error: null,
+    data: null
   })
 
   const execute = useCallback(
-    async (...args: TArgs): Promise<T | null> => {
+    async (...args: Args): Promise<T | null> => {
       setState(prev => ({ ...prev, loading: true, error: null }))
       
       try {
         const result = await asyncFunction(...args)
-        setState({ data: result, loading: false, error: null })
+        setState({ loading: false, error: null, data: result })
         return result
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An error occurred'
-        setState({ data: null, loading: false, error: errorMessage })
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'An error occurred'
+        setState({ loading: false, error, data: null })
         return null
       }
     },
@@ -41,14 +33,46 @@ export const useAsync = <T = unknown, TArgs extends unknown[] = []>(
   )
 
   const reset = useCallback(() => {
-    setState({ data: null, loading: false, error: null })
+    setState({ loading: false, error: null, data: null })
   }, [])
 
   return {
-    data: state.data,
-    loading: state.loading,
-    error: state.error,
+    ...state,
     execute,
-    reset,
+    reset
+  }
+}
+
+// Custom hook for hydration-safe date operations
+export const useHydrationSafeDate = () => {
+  const [isHydrated, setIsHydrated] = useState(false)
+  
+  useState(() => {
+    // This will only run on client-side
+    if (typeof window !== 'undefined') {
+      setIsHydrated(true)
+    }
+  })
+
+  const getTodayString = useCallback(() => {
+    if (!isHydrated) {
+      // Return a fallback date during SSR
+      return '2024-01-15'
+    }
+    return new Date().toISOString().split('T')[0]
+  }, [isHydrated])
+
+  const getCurrentTimestamp = useCallback(() => {
+    if (!isHydrated) {
+      // Return a fallback timestamp during SSR
+      return 1705329600000 // 2024-01-15 10:00:00 UTC
+    }
+    return Date.now()
+  }, [isHydrated])
+
+  return {
+    isHydrated,
+    getTodayString,
+    getCurrentTimestamp
   }
 } 

@@ -55,4 +55,39 @@ export interface ActiveShoot {
 // API response types
 export interface ShootWithPostIdeas extends Shoot {
   postIdeas: PostIdea[]
+}
+
+// Upload-related types
+export interface UploadedFile {
+  id: number
+  fileName: string
+  fileSize: number
+  mimeType: string
+  webViewLink: string
+  webContentLink?: string
+  driveFileId: string
+  uploadedAt: string
+  postIdeaId?: number
+  shootId?: number
+}
+
+export interface UploadProgress {
+  uploadedBytes: number
+  totalBytes: number
+  percentage: number
+  status: 'uploading' | 'completed' | 'failed' | 'paused'
+}
+
+export interface UploadRequest {
+  file: File
+  postIdeaId?: number
+  shootId?: number
+  notes?: string
+}
+
+export interface DriveFolder {
+  id: string
+  name: string
+  webViewLink: string
+  shareLink?: string
 } 

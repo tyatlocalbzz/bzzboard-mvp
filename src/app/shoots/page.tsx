@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileLayout } from "@/components/layout/mobile-layout"
 import { ListItem } from "@/components/ui/list-item"
@@ -13,7 +13,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Calendar, MapPin, Clock, Users, Filter, ArrowUpDown } from "lucide-react"
 import { ScheduleShootForm } from "@/components/shoots/schedule-shoot-form"
 import { useClient } from "@/contexts/client-context"
-import { formatStatusText } from "@/lib/utils/status"
+import { formatStatusText, getStatusColor } from "@/lib/utils/status"
 
 // Mock shoot data type
 interface Shoot {
@@ -28,23 +28,26 @@ interface Shoot {
   notes?: string
 }
 
-// Mock data - replace with real API call
-const generateMockShoots = (): Shoot[] => {
-  const clients = ["Acme Corporation", "TechStart Inc", "StyleCo", "GreenTech Solutions", "Creative Agency"]
-  const locations = ["Downtown Studio", "Client Office", "Photo Studio", "Outdoor Location", "Co-working Space"]
-  const statuses: Shoot['status'][] = ['scheduled', 'active', 'completed', 'cancelled']
+// Real API function to fetch shoots
+const fetchShoots = async (clientName?: string): Promise<Shoot[]> => {
+  const params = new URLSearchParams()
+  if (clientName && clientName !== 'All Clients') {
+    params.append('client', clientName)
+  }
   
-  return Array.from({ length: 50 }, (_, i) => ({
-    id: i + 1,
-    title: `${clients[i % clients.length]} Content Shoot ${Math.floor(i / clients.length) + 1}`,
-    client: clients[i % clients.length],
-    scheduledAt: new Date(Date.now() + (i - 25) * 24 * 60 * 60 * 1000).toISOString(),
-    duration: [30, 60, 90, 120, 180, 240][i % 6],
-    location: locations[i % locations.length],
-    status: statuses[i % statuses.length],
-    postIdeasCount: Math.floor(Math.random() * 8) + 1,
-    notes: i % 3 === 0 ? "Special equipment needed" : undefined
-  }))
+  const response = await fetch(`/api/shoots${params.toString() ? `?${params.toString()}` : ''}`)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch shoots: ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to fetch shoots')
+  }
+  
+  return data.shoots || []
 }
 
 const ITEMS_PER_PAGE = 10
@@ -54,13 +57,32 @@ export default function ShootsPage() {
   const router = useRouter()
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [allShoots, setAllShoots] = useState<Shoot[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   
   // Filter and sort state
   const [statusFilter, setStatusFilter] = useState<'all' | Shoot['status']>('all')
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'title-asc' | 'title-desc'>('date-desc')
 
-  // Mock data - in real app, this would come from an API
-  const allShoots = useMemo(() => generateMockShoots(), [])
+  // Load shoots from API
+  useEffect(() => {
+    const loadShoots = async () => {
+      try {
+        setIsLoading(true)
+        setError(null)
+        const shoots = await fetchShoots(selectedClient.type === 'all' ? undefined : selectedClient.name)
+        setAllShoots(shoots)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load shoots')
+        console.error('Error loading shoots:', err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadShoots()
+  }, [selectedClient])
 
   // Navigate to shoot details
   const handleShootClick = useCallback((shootId: number) => {
@@ -160,16 +182,7 @@ export default function ShootsPage() {
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
   }
 
-  // Get status color
-  const getStatusColor = (status: Shoot['status']) => {
-    switch (status) {
-      case 'scheduled': return 'default'
-      case 'active': return 'destructive'
-      case 'completed': return 'secondary'
-      case 'cancelled': return 'outline'
-      default: return 'default'
-    }
-  }
+  // Status color now handled by centralized status management
 
   // Filter menu items
   const filterMenuItems = [
@@ -283,7 +296,32 @@ export default function ShootsPage() {
         {/* Shoots List */}
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Shoots</h2>
-          {displayedShoots.length > 0 ? (
+          
+          {/* Loading State */}
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-white border border-gray-200 rounded-lg p-4">
+                  <div className="animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : error ? (
+            /* Error State */
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="mt-2 text-sm text-red-700 underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : displayedShoots.length > 0 ? (
             <div className="space-y-3">
               {displayedShoots.map((shoot, index) => (
                 <div key={shoot.id}>

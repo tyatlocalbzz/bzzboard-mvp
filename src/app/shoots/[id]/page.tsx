@@ -16,12 +16,13 @@ import { MobileInput } from "@/components/ui/mobile-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Trash2, Play } from "lucide-react"
-import { formatStatusText } from "@/lib/utils/status"
+import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Trash2, Play, Upload, CheckCircle } from "lucide-react"
+import { formatStatusText, getStatusColor, shootStatusManager, ShootStatus } from "@/lib/utils/status"
 import { useAsync } from "@/lib/hooks/use-async"
 import { useActiveShoot } from "@/contexts/active-shoot-context"
 import { toast } from "sonner"
 import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
+import Link from 'next/link'
 import type { Shoot, PostIdea } from '@/lib/types/shoots'
 
 // Additional types for this page
@@ -56,47 +57,43 @@ interface ExtendedPostIdeaData {
   notes?: string
 }
 
-// Mock API functions - replace with real API calls
+// Real API functions using database
 const fetchShoot = async (id: string): Promise<Shoot> => {
-  await new Promise(resolve => setTimeout(resolve, 500))
-  return {
-    id: parseInt(id),
-    title: "Acme Corp Q1 Content Shoot",
-    client: "Acme Corporation",
-    scheduledAt: "2024-01-20T14:00:00Z",
-    duration: 120,
-    location: "Downtown Studio",
-    status: "scheduled",
-    notes: "Bring extra lighting equipment for product shots"
+  const response = await fetch(`/api/shoots/${id}`)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch shoot: ${response.statusText}`)
   }
+  
+  const data = await response.json()
+  
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to fetch shoot')
+  }
+  
+  return data.shoot
 }
 
 const fetchPostIdeas = async (shootId: string): Promise<ExtendedPostIdea[]> => {
-  await new Promise(resolve => setTimeout(resolve, 300))
-  console.log('Fetching post ideas for shoot:', shootId)
-  return [
-    {
-      id: 1,
-      title: "Product Launch Announcement",
-      platforms: ["Instagram", "LinkedIn"],
-      contentType: "photo",
-      caption: "Exciting news coming soon! 🚀",
-      shots: [], // Empty for this page - shots are handled in active mode
-      shotList: ["Hero product shot", "Behind the scenes", "Team reaction"],
-      status: "planned",
-      completed: false
-    },
-    {
-      id: 2,
-      title: "Behind the Scenes Video",
-      platforms: ["Instagram", "Facebook"],
-      contentType: "video",
-      shots: [], // Empty for this page - shots are handled in active mode
-      shotList: ["Setup process", "Team working", "Final reveal"],
-      status: "shot",
-      completed: true
-    }
-  ]
+  const response = await fetch(`/api/shoots/${shootId}`)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch post ideas: ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to fetch post ideas')
+  }
+  
+  // Transform the post ideas to match the extended format
+  const postIdeas = data.postIdeas || []
+  return postIdeas.map((postIdea: { id: number; title: string; platforms: string[]; shots?: { text: string; completed: boolean }[] }) => ({
+    ...postIdea,
+    shotList: postIdea.shots?.map((shot: { text: string; completed: boolean }) => shot.text) || [],
+    completed: postIdea.shots?.every((shot: { text: string; completed: boolean }) => shot.completed) || false
+  }))
 }
 
 const rescheduleShoot = async (id: string, data: RescheduleData) => {
@@ -115,6 +112,35 @@ const deleteShoot = async (id: string) => {
   await new Promise(resolve => setTimeout(resolve, 1000))
   console.log('Deleting shoot:', id)
   return { success: true }
+}
+
+// Change shoot status - Real API implementation using centralized status management
+const changeShootStatus = async (id: string, newStatus: ShootStatus, action?: string) => {
+  const response = await fetch(`/api/shoots/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: newStatus,
+      action
+    })
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to change shoot status: ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to change shoot status')
+  }
+  
+  return {
+    success: true,
+    message: data.message || `Shoot status changed to ${shootStatusManager.getLabel(newStatus)}`
+  }
 }
 
 const addPostIdea = async (shootId: string, data: ExtendedPostIdeaData) => {
@@ -152,6 +178,7 @@ const ShootActions = ({ children, shoot, onSuccess }: ShootActionsProps) => {
   const router = useRouter()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const { loading: deleteLoading, execute: executeDelete } = useAsync(deleteShoot)
+  const { loading: statusLoading, execute: executeStatusChange } = useAsync(changeShootStatus)
 
   const handleDelete = async () => {
     const result = await executeDelete(shoot.id.toString())
@@ -173,6 +200,17 @@ const ShootActions = ({ children, shoot, onSuccess }: ShootActionsProps) => {
   const handleDeleteCancel = () => {
     setShowDeleteConfirm(false)
   }
+
+  const handleStatusChange = async (newStatus: ShootStatus) => {
+    const result = await executeStatusChange(shoot.id.toString(), newStatus)
+    if (result) {
+      toast.success(result.message)
+      onSuccess()
+    }
+  }
+
+  // Get valid status transitions using centralized status management
+  const validTransitions = shootStatusManager.getValidTransitions(shoot.status as ShootStatus)
 
   return (
     <>
@@ -200,6 +238,30 @@ const ShootActions = ({ children, shoot, onSuccess }: ShootActionsProps) => {
               Reschedule
             </DropdownMenuItem>
           </RescheduleForm>
+
+          {/* Status Change Options - DRY implementation using centralized status management */}
+          {validTransitions.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              {validTransitions.map((status) => (
+                <DropdownMenuItem
+                  key={status}
+                  onClick={() => handleStatusChange(status)}
+                  disabled={statusLoading}
+                  className="cursor-pointer"
+                >
+                  {statusLoading ? (
+                    <LoadingSpinner size="sm" className="mr-2" />
+                  ) : (
+                    <div className="w-4 h-4 mr-2 flex items-center justify-center">
+                      <div className={`w-2 h-2 rounded-full ${shootStatusManager.getBgColor(status).replace('bg-', 'bg-')}`} />
+                    </div>
+                  )}
+                  Change to {shootStatusManager.getLabel(status)}
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
 
           <DropdownMenuSeparator />
           
@@ -877,6 +939,9 @@ export default function ShootDetailsPage() {
   const [postIdeas, setPostIdeas] = useState<ExtendedPostIdea[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  // Status change functionality using DRY centralized system
+  const { loading: statusChangeLoading, execute: executeStatusChange } = useAsync(changeShootStatus)
+
   // Load shoot and post ideas
   useEffect(() => {
     const loadData = async () => {
@@ -917,9 +982,14 @@ export default function ShootDetailsPage() {
     }
   }, [shootId])
 
-  const handleStartShoot = () => {
-    if (!shoot) return
+  const handleStartShoot = async () => {
+    if (!shoot || statusChangeLoading) return
     
+    // First change the shoot status to 'active' using real API with action parameter
+    const statusResult = await executeStatusChange(shoot.id.toString(), 'active', 'start')
+    if (!statusResult) return
+    
+    // Then start the active shoot context
     startShoot({
       id: shoot.id,
       title: shoot.title,
@@ -927,7 +997,26 @@ export default function ShootDetailsPage() {
       startedAt: new Date().toISOString()
     })
     
+    toast.success('Shoot started successfully!')
+    
+    // Refresh data to show updated status
+    await handleRefresh()
+    
+    // Navigate to active shoot page
     router.push(`/shoots/${shootId}/active`)
+  }
+
+  const handleCompleteShoot = async () => {
+    if (!shoot || statusChangeLoading) return
+    
+    // Change the shoot status to 'completed' using real API with action parameter
+    const statusResult = await executeStatusChange(shoot.id.toString(), 'completed', 'complete')
+    if (!statusResult) return
+    
+    toast.success('Shoot completed successfully!')
+    
+    // Refresh data to show updated status
+    await handleRefresh()
   }
 
   // Utility functions
@@ -964,15 +1053,7 @@ export default function ShootDetailsPage() {
     return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'scheduled': return 'default'
-      case 'active': return 'destructive'
-      case 'completed': return 'secondary'
-      case 'cancelled': return 'outline'
-      default: return 'default'
-    }
-  }
+  // Status color now handled by centralized status management
 
   if (isLoading) {
     return (
@@ -1013,15 +1094,40 @@ export default function ShootDetailsPage() {
       backHref="/shoots"
       headerAction={
         <div className="flex items-center gap-2">
+          {shoot.status === 'completed' && (
+            <Link href={`/shoots/${shootId}/upload`}>
+              <Button
+                size="sm"
+                className="h-8 px-3 text-xs"
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                Upload
+              </Button>
+            </Link>
+          )}
           {shoot.status === 'scheduled' && (
-            <Button
+            <LoadingButton
               size="sm"
               onClick={handleStartShoot}
               className="h-8 px-3 text-xs"
+              loading={statusChangeLoading}
+              loadingText="Starting..."
             >
               <Play className="h-3 w-3 mr-1" />
               Start
-            </Button>
+            </LoadingButton>
+          )}
+          {shoot.status === 'active' && (
+            <LoadingButton
+              size="sm"
+              onClick={handleCompleteShoot}
+              className="h-8 px-3 text-xs"
+              loading={statusChangeLoading}
+              loadingText="Completing..."
+            >
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Complete
+            </LoadingButton>
           )}
           <ShootActions shoot={shoot} onSuccess={handleRefresh}>
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0">

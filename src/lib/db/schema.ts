@@ -7,6 +7,7 @@ export const contentTypeEnum = pgEnum('content_type', ['photo', 'video', 'reel',
 export const shootStatusEnum = pgEnum('shoot_status', ['scheduled', 'active', 'completed', 'cancelled'])
 export const userRoleEnum = pgEnum('user_role', ['admin', 'user'])
 export const userStatusEnum = pgEnum('user_status', ['active', 'inactive', 'pending'])
+export const integrationProviderEnum = pgEnum('integration_provider', ['google-drive', 'google-calendar'])
 
 // Users table (for simple authentication)
 export const users = pgTable('users', {
@@ -76,7 +77,7 @@ export const shootPostIdeas = pgTable('shoot_post_ideas', {
 // Uploaded files table
 export const uploadedFiles = pgTable('uploaded_files', {
   id: serial('id').primaryKey(),
-  postIdeaId: integer('post_idea_id').references(() => postIdeas.id).notNull(),
+  postIdeaId: integer('post_idea_id').references(() => postIdeas.id),
   shootId: integer('shoot_id').references(() => shoots.id),
   fileName: varchar('file_name', { length: 255 }).notNull(),
   filePath: varchar('file_path', { length: 500 }).notNull(), // Path in Google Drive
@@ -84,6 +85,38 @@ export const uploadedFiles = pgTable('uploaded_files', {
   mimeType: varchar('mime_type', { length: 100 }),
   googleDriveId: varchar('google_drive_id', { length: 255 }),
   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+})
+
+// Integrations table
+export const integrations = pgTable('integrations', {
+  id: serial('id').primaryKey(),
+  userEmail: varchar('user_email', { length: 255 }).notNull(),
+  provider: integrationProviderEnum('provider').notNull(),
+  connected: boolean('connected').default(false).notNull(),
+  connectedEmail: varchar('connected_email', { length: 255 }),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  metadata: json('metadata'), // For storing settings and other metadata
+  error: text('error'),
+  lastSync: timestamp('last_sync'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Client Settings table - for per-client configuration
+export const clientSettings = pgTable('client_settings', {
+  id: serial('id').primaryKey(),
+  clientId: integer('client_id').references(() => clients.id).notNull(),
+  userEmail: varchar('user_email', { length: 255 }).notNull(),
+  storageProvider: varchar('storage_provider', { length: 50 }).default('google-drive'),
+  storageFolderId: varchar('storage_folder_id', { length: 255 }),
+  storageFolderName: varchar('storage_folder_name', { length: 255 }),
+  storageFolderPath: varchar('storage_folder_path', { length: 500 }),
+  customNaming: boolean('custom_naming').default(false),
+  namingTemplate: varchar('naming_template', { length: 255 }),
+  metadata: json('metadata'), // For additional settings
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
 // Define relationships
@@ -132,11 +165,20 @@ export const uploadedFilesRelations = relations(uploadedFiles, ({ one }) => ({
   }),
 }))
 
+export const clientSettingsRelations = relations(clientSettings, ({ one }) => ({
+  client: one(clients, {
+    fields: [clientSettings.clientId],
+    references: [clients.id],
+  }),
+}))
+
 // Export types for TypeScript
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type Client = typeof clients.$inferSelect
 export type NewClient = typeof clients.$inferInsert
+export type ClientSettings = typeof clientSettings.$inferSelect
+export type NewClientSettings = typeof clientSettings.$inferInsert
 export type PostIdea = typeof postIdeas.$inferSelect
 export type NewPostIdea = typeof postIdeas.$inferInsert
 export type Shoot = typeof shoots.$inferSelect
@@ -144,4 +186,6 @@ export type NewShoot = typeof shoots.$inferInsert
 export type ShootPostIdea = typeof shootPostIdeas.$inferSelect
 export type NewShootPostIdea = typeof shootPostIdeas.$inferInsert
 export type UploadedFile = typeof uploadedFiles.$inferSelect
-export type NewUploadedFile = typeof uploadedFiles.$inferInsert 
+export type NewUploadedFile = typeof uploadedFiles.$inferInsert
+export type Integration = typeof integrations.$inferSelect
+export type NewIntegration = typeof integrations.$inferInsert 

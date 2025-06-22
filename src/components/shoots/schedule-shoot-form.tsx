@@ -28,24 +28,27 @@ interface ScheduleShootData {
   notes?: string
 }
 
-// Mock API function - replace with real API call
+// Real API function using database
 const scheduleShoot = async (data: ScheduleShootData) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  const response = await fetch('/api/shoots', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data)
+  })
   
-  // Mock validation
-  if (!data.title || !data.clientName || !data.date || !data.time) {
-    throw new Error('Please fill in all required fields')
+  if (!response.ok) {
+    throw new Error(`Failed to schedule shoot: ${response.statusText}`)
   }
   
-  console.log('Scheduling shoot:', data)
+  const result = await response.json()
   
-  // Mock success response
-  return { 
-    id: Math.floor(Math.random() * 1000000), // Use random ID for demo
-    message: 'Shoot scheduled successfully',
-    ...data 
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to schedule shoot')
   }
+  
+  return result.shoot
 }
 
 export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {

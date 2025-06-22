@@ -33,10 +33,10 @@ const navItems = [
     activePatterns: ['/resources']
   },
   {
-    href: '/account',
+    href: '/settings',
     icon: User,
-    label: 'Account',
-    activePatterns: ['/account', '/profile', '/admin', '/settings']
+    label: 'Settings',
+    activePatterns: ['/settings', '/account', '/profile', '/admin']
   }
 ]
 

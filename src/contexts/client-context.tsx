@@ -2,7 +2,28 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ClientData, ClientContextType, mockClients, DEFAULT_CLIENT } from '@/lib/types/client'
+import { ClientData, ClientContextType, DEFAULT_CLIENT } from '@/lib/types/client'
+
+// API function to fetch clients
+const fetchClients = async (): Promise<ClientData[]> => {
+  const response = await fetch('/api/clients')
+  
+  if (!response.ok) {
+    console.error('Failed to fetch clients:', response.statusText)
+    // Return default clients on error
+    return [DEFAULT_CLIENT]
+  }
+  
+  const data = await response.json()
+  
+  if (!data.success) {
+    console.error('Failed to fetch clients:', data.error)
+    // Return default clients on error
+    return [DEFAULT_CLIENT]
+  }
+  
+  return data.clients || [DEFAULT_CLIENT]
+}
 
 const ClientContext = createContext<ClientContextType | undefined>(undefined)
 
@@ -12,21 +33,37 @@ interface ClientProviderProps {
 
 export const ClientProvider = ({ children }: ClientProviderProps) => {
   const [selectedClient, setSelectedClientState] = useState<ClientData>(DEFAULT_CLIENT)
+  const [clients, setClients] = useState<ClientData[]>([DEFAULT_CLIENT])
   const [isMounted, setIsMounted] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // Load clients from API
+  useEffect(() => {
+    const loadClients = async () => {
+      try {
+        const fetchedClients = await fetchClients()
+        setClients(fetchedClients)
+      } catch (error) {
+        console.error('Error loading clients:', error)
+        // Keep default clients on error
+      }
+    }
+
+    loadClients()
+  }, [])
 
   // Initialize from URL params after mounting
   useEffect(() => {
     setIsMounted(true)
     const clientId = searchParams.get('client')
     if (clientId) {
-      const client = mockClients.find(c => c.id === clientId)
+      const client = clients.find((c: ClientData) => c.id === clientId)
       if (client) {
         setSelectedClientState(client)
       }
     }
-  }, [searchParams])
+  }, [searchParams, clients])
 
   const setSelectedClient = useCallback((client: ClientData) => {
     setSelectedClientState(client)
@@ -57,7 +94,7 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
   const value: ClientContextType = {
     selectedClient,
     setSelectedClient,
-    clients: mockClients,
+    clients,
   }
 
   return (

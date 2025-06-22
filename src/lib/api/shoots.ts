@@ -1,77 +1,51 @@
 // Centralized API functions for shoot-related operations
-// This eliminates duplication of mock API functions across multiple files
+// Real database-backed API calls
 
-import type { Shot, PostIdea, Shoot, ActiveShootData, PostIdeaData } from '@/lib/types/shoots'
+import type { 
+  Shot, 
+  PostIdea, 
+  Shoot, 
+  ActiveShootData, 
+  PostIdeaData, 
+  UploadedFile, 
+  UploadProgress, 
+  UploadRequest,
+  DriveFolder 
+} from '@/lib/types/shoots'
 
-// Mock API functions - replace with real API calls when backend is ready
+// Real API functions using database
 
 export const shootsApi = {
   async fetchShoot(id: string): Promise<Shoot> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500))
+    const response = await fetch(`/api/shoots/${id}`)
     
-    // Mock validation
-    if (!id) {
-      throw new Error('Shoot ID is required')
+    if (!response.ok) {
+      throw new Error(`Failed to fetch shoot: ${response.statusText}`)
     }
     
-    // Mock shoot data
-    return {
-      id: parseInt(id),
-      title: "Acme Corp Q1 Content",
-      client: "Acme Corporation",
-      scheduledAt: "2024-01-15T10:00:00Z",
-      duration: 120,
-      location: "Downtown Studio",
-      status: "scheduled",
-      notes: "Bring extra lighting equipment",
-      postIdeasCount: 3
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch shoot')
     }
+    
+    return data.shoot
   },
 
   async fetchPostIdeas(shootId: string): Promise<PostIdea[]> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 300))
+    const response = await fetch(`/api/shoots/${shootId}`)
     
-    // Mock validation
-    if (!shootId) {
-      throw new Error('Shoot ID is required')
+    if (!response.ok) {
+      throw new Error(`Failed to fetch post ideas: ${response.statusText}`)
     }
     
-    // Mock post ideas data
-    const mockShots: Shot[] = [
-      { id: 1, text: "Hero product shot", completed: false, postIdeaId: 1 },
-      { id: 2, text: "Behind the scenes setup", completed: true, postIdeaId: 1 },
-      { id: 3, text: "Team reaction shot", completed: false, postIdeaId: 1, notes: "Get genuine reactions" },
-      { id: 4, text: "Wide establishing shot", completed: false, postIdeaId: 2 },
-      { id: 5, text: "Close-up detail work", completed: false, postIdeaId: 2 },
-      { id: 6, text: "Customer using product", completed: false, postIdeaId: 3 },
-    ]
-
-    return [
-      {
-        id: 1,
-        title: "Product Launch Announcement",
-        platforms: ["Instagram", "LinkedIn"],
-        contentType: "photo",
-        shots: mockShots.filter(shot => shot.postIdeaId === 1),
-        caption: "Exciting product launch content"
-      },
-      {
-        id: 2,
-        title: "BTS Video Content",
-        platforms: ["Instagram", "Facebook"],
-        contentType: "video",
-        shots: mockShots.filter(shot => shot.postIdeaId === 2)
-      },
-      {
-        id: 3,
-        title: "Customer Testimonial",
-        platforms: ["LinkedIn", "YouTube"],
-        contentType: "video",
-        shots: mockShots.filter(shot => shot.postIdeaId === 3)
-      }
-    ]
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch post ideas')
+    }
+    
+    return data.postIdeas || []
   },
 
   async fetchActiveShootData(shootId: string): Promise<ActiveShootData> {
@@ -191,5 +165,158 @@ export const shootsApi = {
     await new Promise(resolve => setTimeout(resolve, 500))
     console.log('Ending shoot:', shootId)
     // In real implementation, this would update the shoot status to 'completed'
+  },
+
+  // Upload-related functions
+  async uploadFile(request: UploadRequest, onProgress?: (progress: UploadProgress) => void): Promise<UploadedFile> {
+    console.log('📤 [shootsApi.uploadFile] Starting file upload...')
+    console.log('📋 [shootsApi.uploadFile] Upload request:', {
+      fileName: request.file.name,
+      fileSize: request.file.size,
+      fileType: request.file.type,
+      postIdeaId: request.postIdeaId,
+      shootId: request.shootId,
+      hasNotes: !!request.notes,
+      notesLength: request.notes?.length || 0,
+      hasProgressCallback: !!onProgress
+    })
+
+    // Simulate upload progress
+    if (onProgress) {
+      console.log('📊 [shootsApi.uploadFile] Simulating upload progress...')
+      const totalBytes = request.file.size
+      for (let uploadedBytes = 0; uploadedBytes <= totalBytes; uploadedBytes += Math.floor(totalBytes / 10)) {
+        const percentage = Math.round((uploadedBytes / totalBytes) * 100)
+        const progressData = {
+          uploadedBytes,
+          totalBytes,
+          percentage,
+          status: uploadedBytes === totalBytes ? 'completed' : 'uploading'
+        } as UploadProgress
+        
+        console.log(`📈 [shootsApi.uploadFile] Progress: ${percentage}% (${uploadedBytes}/${totalBytes} bytes)`)
+        onProgress(progressData)
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      console.log('✅ [shootsApi.uploadFile] Progress simulation completed')
+    }
+
+    // Simulate API call to upload endpoint
+    console.log('📦 [shootsApi.uploadFile] Preparing FormData...')
+    const formData = new FormData()
+    formData.append('file', request.file)
+    
+    if (request.postIdeaId) {
+      formData.append('postIdeaId', request.postIdeaId.toString())
+      console.log('🎯 [shootsApi.uploadFile] Added postIdeaId:', request.postIdeaId)
+    }
+    if (request.shootId) {
+      formData.append('shootId', request.shootId.toString())
+      console.log('📸 [shootsApi.uploadFile] Added shootId:', request.shootId)
+    }
+    if (request.notes) {
+      formData.append('notes', request.notes)
+      console.log('📝 [shootsApi.uploadFile] Added notes:', `${request.notes.length} characters`)
+    }
+
+    console.log('🚀 [shootsApi.uploadFile] Sending request to /api/uploads...')
+    const startTime = Date.now()
+
+    const response = await fetch('/api/uploads', {
+      method: 'POST',
+      body: formData
+    })
+
+    const endTime = Date.now()
+    const duration = endTime - startTime
+    console.log('⏱️  [shootsApi.uploadFile] API request completed in:', `${duration}ms`)
+
+    console.log('📊 [shootsApi.uploadFile] Response status:', {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries())
+    })
+
+    if (!response.ok) {
+      console.error('❌ [shootsApi.uploadFile] Upload failed')
+      const errorText = await response.text()
+      console.error('🔍 [shootsApi.uploadFile] Error response:', errorText)
+      throw new Error('Upload failed')
+    }
+
+    console.log('✅ [shootsApi.uploadFile] Upload successful - parsing response...')
+    const result = await response.json()
+    console.log('📄 [shootsApi.uploadFile] Upload result:', {
+      success: result.success,
+      fileName: result.file?.fileName,
+      fileSize: result.file?.fileSize,
+      driveFileId: result.file?.driveFileId,
+      webViewLink: result.file?.webViewLink,
+      uploadDestination: result.uploadDestination,
+      folderStructure: result.folderStructure
+    })
+
+    console.log('🎉 [shootsApi.uploadFile] File upload completed successfully!')
+    return result.file
+  },
+
+  async getUploadedFiles(shootId?: number, postIdeaId?: number): Promise<UploadedFile[]> {
+    const params = new URLSearchParams()
+    if (shootId) params.append('shootId', shootId.toString())
+    if (postIdeaId) params.append('postIdeaId', postIdeaId.toString())
+
+    const response = await fetch(`/api/uploads?${params.toString()}`)
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch uploaded files')
+    }
+
+    const result = await response.json()
+    return result.files
+  },
+
+  async createDriveFolder(clientName: string, shootTitle: string, shootDate: string): Promise<DriveFolder> {
+    console.log('🗂️  [shootsApi.createDriveFolder] Creating Google Drive folder structure...')
+    console.log('📋 [shootsApi.createDriveFolder] Input parameters:', {
+      clientName,
+      shootTitle,
+      shootDate,
+      parsedDate: new Date(shootDate).toISOString()
+    })
+
+    // Mock folder creation - replace with real Google Drive API call
+    console.log('⏱️  [shootsApi.createDriveFolder] Simulating folder creation delay...')
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    const formattedDate = new Date(shootDate).toISOString().split('T')[0]
+    const folderName = `[${formattedDate}] ${shootTitle}`
+    console.log('📅 [shootsApi.createDriveFolder] Formatted folder name:', folderName)
+
+    const mockFolder = {
+      id: `mock_folder_${Date.now()}`,
+      name: folderName,
+      webViewLink: `https://drive.google.com/drive/folders/mock_folder_${Date.now()}`,
+      shareLink: `https://drive.google.com/drive/folders/mock_folder_${Date.now()}?usp=sharing`
+    }
+
+    console.log('📂 [shootsApi.createDriveFolder] Mock folder structure created:', mockFolder)
+    console.log('🎯 [shootsApi.createDriveFolder] Expected folder hierarchy:')
+    console.log(`   📁 ${clientName}/`)
+    console.log(`   └── 📁 ${folderName}/`)
+    console.log(`       ├── 📁 [Post Idea 1]/`)
+    console.log(`       │   └── 📁 raw-files/`)
+    console.log(`       ├── 📁 [Post Idea 2]/`)
+    console.log(`       │   └── 📁 raw-files/`)
+    console.log(`       └── 📁 misc-files/`)
+
+    console.log('✅ [shootsApi.createDriveFolder] Folder creation completed!')
+    return mockFolder
+  },
+
+  async shareDriveFolder(folderId: string): Promise<string> {
+    // Mock sharing - replace with real Google Drive API call
+    await new Promise(resolve => setTimeout(resolve, 500))
+    return `https://drive.google.com/drive/folders/${folderId}?usp=sharing`
   }
 } 

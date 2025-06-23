@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { 
   getClientSettings, 
   upsertClientSettings, 
@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -79,7 +79,7 @@ export async function POST(
   { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -128,7 +128,7 @@ export async function DELETE(
   { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

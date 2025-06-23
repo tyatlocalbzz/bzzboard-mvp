@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getAllClientSettings, toClientStorageSettings } from '@/lib/db/client-settings'
 
 export async function GET() {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

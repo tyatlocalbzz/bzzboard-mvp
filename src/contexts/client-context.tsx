@@ -6,23 +6,48 @@ import { ClientData, ClientContextType, DEFAULT_CLIENT } from '@/lib/types/clien
 
 // API function to fetch clients
 const fetchClients = async (): Promise<ClientData[]> => {
-  const response = await fetch('/api/clients')
-  
-  if (!response.ok) {
-    console.error('Failed to fetch clients:', response.statusText)
-    // Return default clients on error
+  try {
+    console.log('🔄 [ClientContext] Fetching clients from API...')
+    const response = await fetch('/api/clients', { credentials: 'include' })
+    
+    console.log('📡 [ClientContext] API response status:', response.status)
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        console.warn('🔒 [ClientContext] Authentication required - user not signed in')
+        // Return default client for unauthenticated users
+        return [DEFAULT_CLIENT]
+      }
+      
+      console.error('❌ [ClientContext] Failed to fetch clients:', response.status, response.statusText)
+      // Return default clients on other errors
+      return [DEFAULT_CLIENT]
+    }
+    
+    const data = await response.json()
+    console.log('📊 [ClientContext] API response data:', { success: data.success, clientCount: data.clients?.length || 0 })
+    
+    if (!data.success) {
+      console.error('❌ [ClientContext] API returned error:', data.error)
+      // Return default clients on API error
+      return [DEFAULT_CLIENT]
+    }
+    
+    const apiClients = data.clients || []
+    
+    // Always include the "All Clients" option as the first item
+    // Filter out any existing "All Clients" entries from API response to avoid duplicates
+    const realClients = apiClients.filter((client: ClientData) => client.type !== 'all')
+    const clients = [DEFAULT_CLIENT, ...realClients]
+    
+    console.log('✅ [ClientContext] Successfully loaded', clients.length, 'clients (including All Clients option)')
+    return clients
+    
+  } catch (error) {
+    console.error('❌ [ClientContext] Network or parsing error:', error)
+    // Return default clients on network/parsing errors
     return [DEFAULT_CLIENT]
   }
-  
-  const data = await response.json()
-  
-  if (!data.success) {
-    console.error('Failed to fetch clients:', data.error)
-    // Return default clients on error
-    return [DEFAULT_CLIENT]
-  }
-  
-  return data.clients || [DEFAULT_CLIENT]
 }
 
 const ClientContext = createContext<ClientContextType | undefined>(undefined)
@@ -43,10 +68,18 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
     const loadClients = async () => {
       try {
         const fetchedClients = await fetchClients()
-        setClients(fetchedClients)
+        
+        // Always include the "All Clients" option as the first item
+        // Filter out any existing "All Clients" entries from API response to avoid duplicates
+        const realClients = fetchedClients.filter(client => client.type !== 'all')
+        const allClients = [DEFAULT_CLIENT, ...realClients]
+        
+        console.log('✅ [ClientContext] Setting clients list:', allClients.map(c => ({ id: c.id, name: c.name, type: c.type })))
+        setClients(allClients)
       } catch (error) {
         console.error('Error loading clients:', error)
         // Keep default clients on error
+        setClients([DEFAULT_CLIENT])
       }
     }
 

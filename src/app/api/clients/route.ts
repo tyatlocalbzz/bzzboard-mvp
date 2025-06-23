@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession, getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getAllClients, createClient } from '@/lib/db/clients'
 
 export async function GET() {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -12,9 +12,25 @@ export async function GET() {
     console.log('📖 [ClientsAPI] Loading all clients for user:', user.email)
 
     // Get all clients
-    const clients = await getAllClients()
+    const dbClients = await getAllClients()
 
-    console.log('📖 [ClientsAPI] Loaded', clients.length, 'clients')
+    console.log('📖 [ClientsAPI] Loaded', dbClients.length, 'clients from database')
+
+    // Transform database clients to match ClientData interface
+    const clients = dbClients.map(client => ({
+      id: client.id.toString(), // Convert number to string
+      name: client.name,
+      type: 'client' as const, // Add required type field
+      activeProjects: client.activeProjects,
+      primaryContactName: client.primaryContactName,
+      primaryContactEmail: client.primaryContactEmail,
+      primaryContactPhone: client.primaryContactPhone,
+      website: client.website,
+      socialMedia: client.socialMedia,
+      notes: client.notes
+    }))
+
+    console.log('📖 [ClientsAPI] Transformed clients:', clients.map(c => ({ id: c.id, name: c.name, type: c.type })))
 
     return NextResponse.json({ 
       success: true,
@@ -33,14 +49,22 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
-    const session = await getSession()
-    if (!session) {
+    const user = await getCurrentUserForAPI()
+    if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Parse request body
     const body = await request.json()
-    const { name, email, phone, notes } = body
+    const { 
+      name, 
+      primaryContactName, 
+      primaryContactEmail, 
+      primaryContactPhone,
+      website,
+      socialMedia,
+      notes 
+    } = body
 
     // Validate required fields
     if (!name) {
@@ -50,11 +74,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Basic validation for email format if provided
+    if (primaryContactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryContactEmail)) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      )
+    }
+
+    // Basic validation for website URL if provided
+    if (website && website.trim() && !website.startsWith('http')) {
+      return NextResponse.json(
+        { error: 'Website must start with http:// or https://' },
+        { status: 400 }
+      )
+    }
+
     // Create the client
     const newClient = await createClient({
       name,
-      email,
-      phone,
+      primaryContactName,
+      primaryContactEmail,
+      primaryContactPhone,
+      website,
+      socialMedia: socialMedia || {},
       notes
     })
 
@@ -66,8 +109,11 @@ export async function POST(request: NextRequest) {
         name: newClient.name,
         type: 'client' as const,
         activeProjects: 0,
-        email: newClient.email,
-        phone: newClient.phone,
+        primaryContactName: newClient.primaryContactName,
+        primaryContactEmail: newClient.primaryContactEmail,
+        primaryContactPhone: newClient.primaryContactPhone,
+        website: newClient.website,
+        socialMedia: newClient.socialMedia,
         notes: newClient.notes
       }
     })

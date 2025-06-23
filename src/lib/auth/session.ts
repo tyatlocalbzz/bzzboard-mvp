@@ -26,6 +26,15 @@ export const getCurrentUser = cache(async () => {
 })
 
 /**
+ * Get the current session user for API routes
+ * Returns null if not authenticated (doesn't redirect)
+ */
+export const getCurrentUserForAPI = cache(async () => {
+  const session = await getSession()
+  return session?.user || null
+})
+
+/**
  * Check if user is authenticated (for conditional rendering)
  * Returns boolean without redirecting
  */

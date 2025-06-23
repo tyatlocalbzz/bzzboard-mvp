@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getIntegration } from '@/lib/db/integrations'
 import { UnifiedGoogleDriveService } from '@/lib/services/google-drive-unified'
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       console.log('❌ [GoogleDriveBrowse] Unauthorized - no user')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -172,7 +172,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       console.log('❌ [GoogleDriveCreateFolder] Unauthorized - no user')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

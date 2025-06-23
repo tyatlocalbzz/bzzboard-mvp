@@ -9,7 +9,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { PLATFORM_OPTIONS, CONTENT_TYPE_OPTIONS } from '@/lib/constants/platforms'
+import { CONTENT_TYPE_OPTIONS } from '@/lib/constants/platforms'
+import { useAllPlatformsWithStatus } from '@/lib/hooks/use-client-platforms'
+import { CheckCircle } from 'lucide-react'
 import type { PostIdeaData } from '@/lib/types/shoots'
 
 interface QuickAddPostIdeaProps {
@@ -124,7 +126,7 @@ export const QuickAddAction = ({ onAddPostIdea }: QuickAddPostIdeaProps) => {
                 Platforms <span className="text-red-500">*</span>
               </Label>
               <div className="flex flex-wrap gap-2">
-                {PLATFORM_OPTIONS.map((platform) => {
+                {useAllPlatformsWithStatus().map((platform) => {
                   const Icon = platform.icon
                   const isSelected = selectedPlatforms.includes(platform.name)
                   return (
@@ -134,20 +136,31 @@ export const QuickAddAction = ({ onAddPostIdea }: QuickAddPostIdeaProps) => {
                       variant={isSelected ? "default" : "outline"}
                       size="sm"
                       onClick={() => handlePlatformToggle(platform.name)}
-                      className="h-10 w-10 flex items-center justify-center tap-target p-0"
-                      title={platform.name}
+                      className={`h-10 w-10 flex items-center justify-center tap-target p-0 relative ${
+                        !isSelected && platform.isConfigured 
+                          ? 'border-green-200 bg-green-50 hover:bg-green-100' 
+                          : ''
+                      }`}
+                      title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
                     >
-                      {Icon ? (
-                        <Icon className="h-5 w-5" />
-                      ) : (
-                        <span className="text-xs font-medium">{platform.name.slice(0, 3)}</span>
-                      )}
+                      <div className="flex items-center justify-center relative">
+                        {Icon ? (
+                          <Icon className="h-5 w-5" />
+                        ) : (
+                          <span className="text-xs font-medium">{platform.name.slice(0, 3)}</span>
+                        )}
+                        {platform.isConfigured && !isSelected && (
+                          <CheckCircle className="h-3 w-3 absolute -top-1 -right-1 text-green-600 bg-white rounded-full" />
+                        )}
+                      </div>
                     </Button>
                   )
                 })}
               </div>
               {selectedPlatforms.length === 0 && (
-                <p className="text-xs text-gray-500">Select at least one platform</p>
+                <p className="text-xs text-gray-500">
+                  Select at least one platform • ✓ indicates configured handles
+                </p>
               )}
             </div>
 

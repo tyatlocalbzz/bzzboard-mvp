@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ActionMenu } from "@/components/ui/action-menu"
-import { ContextIndicator } from "@/components/ui/context-indicator"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Calendar, MapPin, Clock, Users, Filter, ArrowUpDown } from "lucide-react"
 import { ScheduleShootForm } from "@/components/shoots/schedule-shoot-form"
@@ -277,21 +276,6 @@ export default function ShootsPage() {
       }
     >
       <div className="px-3 py-3 space-y-6">
-        {/* Client Context and Filter Indicator */}
-        {(selectedClient.type !== 'all' || statusFilter !== 'all' || sortBy !== 'date-desc') && (
-          <ContextIndicator
-            title={selectedClient.type !== 'all' ? `Shoots for: ${selectedClient.name}` : 'All Shoots'}
-            subtitle={`${sortedShoots.length} shoot${sortedShoots.length !== 1 ? 's' : ''}${statusFilter !== 'all' ? ` • ${formatStatusText(statusFilter)} only` : ''}`}
-            metadata={
-              (statusFilter !== 'all' || sortBy !== 'date-desc') ? (
-                sortBy === 'date-asc' ? 'Oldest first' :
-                sortBy === 'title-asc' ? 'A-Z' :
-                sortBy === 'title-desc' ? 'Z-A' :
-                sortBy === 'date-desc' && statusFilter !== 'all' ? 'Newest first' : undefined
-              ) : undefined
-            }
-          />
-        )}
 
         {/* Shoots List */}
         <div className="space-y-3">

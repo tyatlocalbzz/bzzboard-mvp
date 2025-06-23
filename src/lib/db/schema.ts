@@ -27,8 +27,18 @@ export const users = pgTable('users', {
 export const clients = pgTable('clients', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
-  email: varchar('email', { length: 255 }),
-  phone: varchar('phone', { length: 50 }),
+  primaryContactName: varchar('primary_contact_name', { length: 255 }),
+  primaryContactEmail: varchar('primary_contact_email', { length: 255 }),
+  primaryContactPhone: varchar('primary_contact_phone', { length: 50 }),
+  website: varchar('website', { length: 255 }),
+  socialMedia: json('social_media').$type<{
+    instagram?: string
+    facebook?: string
+    linkedin?: string
+    twitter?: string
+    tiktok?: string
+    youtube?: string
+  }>().default({}),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

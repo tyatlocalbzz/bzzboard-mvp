@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { createInvitedUser, userExists } from '@/lib/db/users'
 import { z } from 'zod'
 
@@ -11,8 +11,8 @@ const inviteUserSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     // Check if user is authenticated
-    const currentUser = await getCurrentUser()
-    if (!currentUser) {
+    const currentUser = await getCurrentUserForAPI()
+    if (!currentUser || !currentUser.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

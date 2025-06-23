@@ -11,6 +11,10 @@ export default auth((req) => {
     pathname.startsWith(route)
   )
 
+  // API routes should handle their own authentication and return JSON responses
+  // Don't redirect API routes to signin page
+  const isApiRoute = pathname.startsWith('/api/')
+  
   // If user is authenticated and trying to access signin, redirect to dashboard
   if (isAuthenticated && pathname === '/auth/signin') {
     return NextResponse.redirect(new URL('/', req.url))
@@ -21,7 +25,12 @@ export default auth((req) => {
     return NextResponse.next()
   }
 
-  // Redirect to signin if not authenticated
+  // Allow API routes to handle their own authentication
+  if (isApiRoute) {
+    return NextResponse.next()
+  }
+
+  // Redirect to signin if not authenticated (only for page routes)
   if (!isAuthenticated) {
     const signInUrl = new URL('/auth/signin', req.url)
     signInUrl.searchParams.set('callbackUrl', pathname)

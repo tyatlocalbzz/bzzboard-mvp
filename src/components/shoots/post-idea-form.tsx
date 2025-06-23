@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { useAsync } from "@/lib/hooks/use-async"
 import { toast } from "sonner"
-import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
+import { useAllPlatformsWithStatus } from '@/lib/hooks/use-client-platforms'
+import { CheckCircle } from 'lucide-react'
 
 interface PostIdeaData {
   title: string
@@ -161,18 +162,26 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
           <div className="space-y-3">
             <Label>Platforms *</Label>
             <div className="flex flex-wrap gap-2">
-              {PLATFORM_OPTIONS.map((platform) => (
+              {useAllPlatformsWithStatus().map((platform) => (
                 <button
                   key={platform.name}
                   type="button"
                   onClick={() => togglePlatform(platform.name)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors relative ${
                     platforms.includes(platform.name)
                       ? 'bg-blue-500 text-white'
+                      : platform.isConfigured
+                      ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
+                  title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
                 >
-                  {platform.name}
+                  <div className="flex items-center gap-1">
+                    {platform.name}
+                    {platform.isConfigured && (
+                      <CheckCircle className="h-3 w-3" />
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
@@ -185,6 +194,9 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
                 ))}
               </div>
             )}
+            <p className="text-xs text-gray-500">
+              Platforms with ✓ have social media handles configured in client settings
+            </p>
           </div>
 
           {/* Content Type */}

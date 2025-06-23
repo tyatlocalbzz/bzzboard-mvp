@@ -3,8 +3,18 @@ export interface ClientData {
   name: string
   type: 'all' | 'client'
   activeProjects?: number
-  email?: string
-  phone?: string
+  primaryContactName?: string
+  primaryContactEmail?: string
+  primaryContactPhone?: string
+  website?: string
+  socialMedia?: {
+    instagram?: string
+    facebook?: string
+    linkedin?: string
+    twitter?: string
+    tiktok?: string
+    youtube?: string
+  }
   notes?: string
 }
 

@@ -24,6 +24,8 @@ import { toast } from "sonner"
 import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
 import Link from 'next/link'
 import type { Shoot, PostIdea } from '@/lib/types/shoots'
+import { useAllPlatformsWithStatus } from '@/lib/hooks/use-client-platforms'
+import { CheckCircle as CheckCircleIcon } from 'lucide-react'
 
 // Additional types for this page
 interface RescheduleData {
@@ -516,7 +518,7 @@ const AddPostIdeaForm = ({ children, shootId, onSuccess }: AddPostIdeaFormProps)
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const { loading, execute } = useAsync(addPostIdea)
 
-  const platforms = PLATFORM_OPTIONS.slice(0, 4)
+  const platforms = useAllPlatformsWithStatus()
 
   const togglePlatform = (platform: string) => {
     setSelectedPlatforms(prev => 
@@ -594,8 +596,13 @@ const AddPostIdeaForm = ({ children, shootId, onSuccess }: AddPostIdeaFormProps)
                         key={platform.name}
                         type="button"
                         variant={isSelected ? "default" : "outline"}
-                        className="h-12 justify-start gap-2 tap-target"
+                        className={`h-12 justify-start gap-2 tap-target relative ${
+                          !isSelected && platform.isConfigured 
+                            ? 'border-green-200 bg-green-50 hover:bg-green-100' 
+                            : ''
+                        }`}
                         onClick={() => togglePlatform(platform.name)}
+                        title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
                       >
                         {Icon ? (
                           <Icon className="h-4 w-4" />
@@ -605,10 +612,16 @@ const AddPostIdeaForm = ({ children, shootId, onSuccess }: AddPostIdeaFormProps)
                           </span>
                         )}
                         {platform.name}
+                        {platform.isConfigured && !isSelected && (
+                          <CheckCircleIcon className="h-3 w-3 absolute top-1 right-1 text-green-600" />
+                        )}
                       </Button>
                     )
                   })}
                 </div>
+                <p className="text-xs text-gray-500">
+                  Platforms with ✓ have social media handles configured
+                </p>
               </div>
 
               {/* Content Type */}
@@ -692,7 +705,7 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(postIdea.platforms)
   const { loading, execute } = useAsync(editPostIdea)
 
-  const platforms = PLATFORM_OPTIONS.slice(0, 4)
+  const platforms = useAllPlatformsWithStatus()
 
   const togglePlatform = (platform: string) => {
     setSelectedPlatforms(prev => 
@@ -778,8 +791,13 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
                         key={platform.name}
                         type="button"
                         variant={isSelected ? "default" : "outline"}
-                        className="h-12 justify-start gap-2 tap-target"
+                        className={`h-12 justify-start gap-2 tap-target relative ${
+                          !isSelected && platform.isConfigured 
+                            ? 'border-green-200 bg-green-50 hover:bg-green-100' 
+                            : ''
+                        }`}
                         onClick={() => togglePlatform(platform.name)}
+                        title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
                       >
                         {Icon ? (
                           <Icon className="h-4 w-4" />
@@ -789,10 +807,16 @@ const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormPro
                           </span>
                         )}
                         {platform.name}
+                        {platform.isConfigured && !isSelected && (
+                          <CheckCircleIcon className="h-3 w-3 absolute top-1 right-1 text-green-600" />
+                        )}
                       </Button>
                     )
                   })}
                 </div>
+                <p className="text-xs text-gray-500">
+                  Platforms with ✓ have social media handles configured
+                </p>
               </div>
 
               {/* Content Type */}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { updateUser } from '@/lib/db/users'
 import { z } from 'zod'
 
@@ -10,8 +10,8 @@ const updateProfileSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
+    const user = await getCurrentUserForAPI()
+    if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

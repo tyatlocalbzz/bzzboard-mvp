@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { upsertIntegration, getIntegration } from '@/lib/db/integrations'
 import { GoogleDriveSettings } from '@/lib/types/settings'
 
 export async function GET() {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -50,7 +50,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

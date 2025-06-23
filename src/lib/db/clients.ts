@@ -12,8 +12,18 @@ export interface ClientWithStats extends ClientSelect {
 
 export interface CreateClientInput {
   name: string
-  email?: string
-  phone?: string
+  primaryContactName?: string
+  primaryContactEmail?: string
+  primaryContactPhone?: string
+  website?: string
+  socialMedia?: {
+    instagram?: string
+    facebook?: string
+    linkedin?: string
+    twitter?: string
+    tiktok?: string
+    youtube?: string
+  }
   notes?: string
 }
 
@@ -23,8 +33,11 @@ export const getAllClients = async (): Promise<ClientWithStats[]> => {
     .select({
       id: clients.id,
       name: clients.name,
-      email: clients.email,
-      phone: clients.phone,
+      primaryContactName: clients.primaryContactName,
+      primaryContactEmail: clients.primaryContactEmail,
+      primaryContactPhone: clients.primaryContactPhone,
+      website: clients.website,
+      socialMedia: clients.socialMedia,
       notes: clients.notes,
       createdAt: clients.createdAt,
       updatedAt: clients.updatedAt,
@@ -66,8 +79,11 @@ export const createClient = async (clientData: CreateClientInput): Promise<Clien
     .insert(clients)
     .values({
       name: clientData.name,
-      email: clientData.email,
-      phone: clientData.phone,
+      primaryContactName: clientData.primaryContactName,
+      primaryContactEmail: clientData.primaryContactEmail,
+      primaryContactPhone: clientData.primaryContactPhone,
+      website: clientData.website,
+      socialMedia: clientData.socialMedia || {},
       notes: clientData.notes,
     })
     .returning()

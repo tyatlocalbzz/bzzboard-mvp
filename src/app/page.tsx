@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ListItem } from "@/components/ui/list-item"
-import { ContextIndicator } from "@/components/ui/context-indicator"
-import { Calendar, Upload, Clock, MapPin, Target } from "lucide-react"
+import { Calendar, Upload, Clock, MapPin, Target, UserPlus } from "lucide-react"
 import { ScheduleShootForm } from "@/components/shoots/schedule-shoot-form"
+import { AddClientWizard } from "@/components/clients/add-client-wizard"
 import { useClient } from "@/contexts/client-context"
 import { formatStatusText } from "@/lib/utils/status"
 
@@ -134,13 +134,7 @@ export default function Dashboard() {
   return (
     <MobileLayout title="Buzzboard">
       <div className="px-3 py-3 space-y-6">
-        {/* Client Context Indicator */}
-        {selectedClient.type !== 'all' && (
-          <ContextIndicator
-            title={`Dashboard for: ${selectedClient.name}`}
-            subtitle={`${filteredShoots.length} shoots • ${filteredPostIdeas.length} post ideas`}
-          />
-        )}
+
 
         {/* Today's Shoots */}
         <div className="space-y-3">
@@ -239,6 +233,14 @@ export default function Dashboard() {
                 Schedule Shoot
               </Button>
             </ScheduleShootForm>
+            <AddClientWizard>
+              <Button className="h-12 flex-col gap-1 text-xs tap-target" variant="outline">
+                <UserPlus className="h-4 w-4" />
+                Add Client
+              </Button>
+            </AddClientWizard>
+          </div>
+          <div className="grid grid-cols-1 gap-3">
             <Button className="h-12 flex-col gap-1 text-xs tap-target" variant="outline">
               <Upload className="h-4 w-4" />
               Upload Files

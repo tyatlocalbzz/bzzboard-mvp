@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/auth/session'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getUserIntegrations } from '@/lib/db/integrations'
 
 export async function GET() {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
+    const user = await getCurrentUserForAPI()
+    if (!user || !user.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

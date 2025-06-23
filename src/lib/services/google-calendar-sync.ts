@@ -10,6 +10,14 @@ import {
   clearEventCache,
   checkSchedulingConflicts
 } from '@/lib/db/calendar'
+import { getIntegration } from '@/lib/db/integrations'
+import { 
+  GoogleCalendarSettings, 
+  DEFAULT_GOOGLE_CALENDAR_SETTINGS, 
+  getSyncEndDate, 
+  isShootEvent, 
+  isWithinWorkingHours 
+} from '@/lib/types/calendar'
 
 export interface SyncResult {
   success: boolean
@@ -115,6 +123,22 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
       await deleteSyncToken(userEmail, calendarId)
     }
 
+    // Get user's calendar settings
+    const integration = await getIntegration(userEmail, 'google-calendar')
+    const settings: GoogleCalendarSettings = {
+      ...DEFAULT_GOOGLE_CALENDAR_SETTINGS,
+      ...(integration?.data as Partial<GoogleCalendarSettings> || {})
+    }
+
+    console.log('🔧 [CalendarSync] Using settings:', settings)
+
+    // Determine sync time range based on user settings
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const syncEndDate = getSyncEndDate(settings.syncTimeRange)
+    
+    console.log(`📅 [CalendarSync] Syncing events from ${today.toISOString()} to ${syncEndDate.toISOString()}`)
+    
     // Sync events from Google Calendar
     do {
       const response = await this.calendar.events.list({
@@ -123,7 +147,9 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
         pageToken: nextPageToken,
         maxResults: 250,
         singleEvents: true, // Expand recurring events
-        orderBy: 'startTime'
+        orderBy: 'startTime',
+        timeMin: today.toISOString(), // Start from today
+        timeMax: syncEndDate.toISOString() // Respect user's sync time range
       })
 
       const events = response.data.items || []
@@ -146,9 +172,16 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
           } else {
             // Handle updated/new events - only process events with valid data
             if (googleEvent.summary && googleEvent.start && googleEvent.end) {
-              const eventData = this.convertGoogleEventToCache(googleEvent, userEmail, calendarId)
-              await upsertCachedEvent(eventData)
-              syncedEvents++
+              // Apply filtering based on user settings
+              const shouldIncludeEvent = this.shouldIncludeEvent(googleEvent, settings)
+              
+              if (shouldIncludeEvent) {
+                const eventData = this.convertGoogleEventToCache(googleEvent, userEmail, calendarId, settings)
+                await upsertCachedEvent(eventData)
+                syncedEvents++
+              } else {
+                console.log('🔍 [CalendarSync] Filtered out event:', googleEvent.summary)
+              }
             } else {
               console.warn('⚠️ [CalendarSync] Skipping event with incomplete data:', googleEvent.id)
             }
@@ -220,11 +253,43 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
   }
 
   /**
+   * Check if an event should be included based on user settings
+   * DRY: Centralized filtering logic
+   */
+  private shouldIncludeEvent(googleEvent: calendar_v3.Schema$Event, settings: GoogleCalendarSettings): boolean {
+    // Skip all-day events if user preference is set
+    if (settings.excludeAllDayEvents && googleEvent.start?.date) {
+      return false
+    }
+
+    // Apply working hours filter if enabled
+    if (settings.eventTypeFilter === 'business-hours-only' && settings.workingHours.enabled) {
+      if (googleEvent.start?.dateTime && googleEvent.end?.dateTime) {
+        const startTime = new Date(googleEvent.start.dateTime)
+        const endTime = new Date(googleEvent.end.dateTime)
+        
+        if (!isWithinWorkingHours(startTime, endTime, settings.workingHours)) {
+          return false
+        }
+      }
+    }
+
+    // Apply shoots-only filter if enabled
+    if (settings.eventTypeFilter === 'shoots-only') {
+      if (!googleEvent.summary || !isShootEvent(googleEvent.summary, settings.shootKeywords)) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  /**
    * Convert Google Calendar event to our cache format
    * DRY: Centralized conversion logic
    * Note: This method should only be called after validating googleEvent.id exists
    */
-  private convertGoogleEventToCache(googleEvent: calendar_v3.Schema$Event, userEmail: string, calendarId: string) {
+  private convertGoogleEventToCache(googleEvent: calendar_v3.Schema$Event, userEmail: string, calendarId: string, settings?: GoogleCalendarSettings) {
     const baseEvent = this.convertGoogleEvent(googleEvent)
     
     // Following Google Calendar API best practices: validate required fields
@@ -232,10 +297,22 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
       throw new CalendarError('Cannot convert event without ID', 'INVALID_EVENT')
     }
     
+    // Auto-detect shoot events if settings are provided and enabled
+    const shootId: number | null = null
+    if (settings?.autoTagShootEvents && baseEvent.title) {
+      const isShoot = isShootEvent(baseEvent.title, settings.shootKeywords)
+      if (isShoot) {
+        console.log('🎯 [CalendarSync] Detected shoot event:', baseEvent.title)
+        // Note: In a full implementation, you'd link to an actual shoot record
+        // For now, we'll just mark it as a shoot event with a placeholder
+      }
+    }
+
     return {
       userEmail,
       calendarId,
       googleEventId: googleEvent.id, // Now guaranteed to be string
+      shootId,
       title: baseEvent.title,
       description: baseEvent.description,
       startTime: baseEvent.startTime,

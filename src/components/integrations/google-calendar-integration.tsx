@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { IntegrationCard } from './integration-card'
+import { GoogleCalendarSettings } from './google-calendar-settings'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Calendar, CalendarCheck, Shield, RefreshCw } from 'lucide-react'
+import { Calendar, CalendarCheck, Shield, RefreshCw, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface GoogleCalendarIntegrationProps {
@@ -24,6 +25,7 @@ export const GoogleCalendarIntegration = ({
 }: GoogleCalendarIntegrationProps) => {
   const [isConnecting, setIsConnecting] = useState(false)
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   const handleConnect = async () => {
     setShowPermissionsDialog(true)
@@ -89,7 +91,7 @@ export const GoogleCalendarIntegration = ({
 
   return (
     <>
-      <IntegrationCard
+            <IntegrationCard
         name="Google Calendar"
         description="Automatically sync your shoot schedules and check availability"
         icon={<Calendar className="h-5 w-5 text-green-600" />}
@@ -100,6 +102,19 @@ export const GoogleCalendarIntegration = ({
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
         onRetry={handleRetry}
+        additionalActions={
+          status.connected ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-1 h-8"
+            >
+              <Settings className="h-3 w-3" />
+              Configure
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* Permissions Dialog */}
@@ -177,6 +192,35 @@ export const GoogleCalendarIntegration = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Calendar Settings Dialog */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-green-600" />
+              Google Calendar Settings
+            </DialogTitle>
+            <DialogDescription>
+              Configure your Google Calendar integration preferences
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <GoogleCalendarSettings
+              isConnected={status.connected}
+            />
+          </div>
+
+          <div className="flex justify-end pt-4 border-t">
+            <Button onClick={() => setShowSettings(false)}>
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
     </>
   )
 } 

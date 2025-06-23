@@ -20,6 +20,7 @@ interface IntegrationCardProps {
   onRetry?: () => void
   disabled?: boolean
   className?: string
+  additionalActions?: ReactNode
 }
 
 export const IntegrationCard = ({
@@ -34,7 +35,8 @@ export const IntegrationCard = ({
   onDisconnect,
   onRetry,
   disabled = false,
-  className
+  className,
+  additionalActions
 }: IntegrationCardProps) => {
   const getStatusIcon = () => {
     switch (status) {
@@ -184,7 +186,14 @@ export const IntegrationCard = ({
 
         {/* Action Button */}
         <div className="flex-shrink-0 ml-3">
-          {getActionButton()}
+          <div className="flex flex-col items-end gap-2">
+            {getActionButton()}
+            {additionalActions && (
+              <div className="flex items-center">
+                {additionalActions}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

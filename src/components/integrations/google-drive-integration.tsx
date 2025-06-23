@@ -5,7 +5,7 @@ import { IntegrationCard } from './integration-card'
 import { GoogleDriveSettingsComponent } from './google-drive-settings'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { FolderOpen, HardDrive, Shield, Zap, Settings, ChevronDown } from 'lucide-react'
+import { FolderOpen, HardDrive, Shield, Zap, Settings } from 'lucide-react'
 import { GoogleDriveSettings } from '@/lib/types/settings'
 import { FolderBrowserItem } from '@/lib/services/google-drive-unified'
 import { toast } from 'sonner'
@@ -27,7 +27,7 @@ export const GoogleDriveIntegration = ({
 }: GoogleDriveIntegrationProps) => {
   const [isConnecting, setIsConnecting] = useState(false)
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+
   const [showSettingsDialog, setShowSettingsDialog] = useState(false)
   const [currentSettings, setCurrentSettings] = useState<GoogleDriveSettings>({
     folderNamingPattern: 'client-only',
@@ -193,74 +193,32 @@ export const GoogleDriveIntegration = ({
 
   return (
     <>
-      <div className="space-y-3">
-        <IntegrationCard
-          name="Google Drive"
-          description="Automatically organize and store your content files in the cloud"
-          icon={<HardDrive className="h-5 w-5 text-blue-600" />}
-          status={getIntegrationStatus()}
-          connectedEmail={status.email}
-          lastSync={status.lastSync}
-          error={status.error}
-          onConnect={handleConnect}
-          onDisconnect={handleDisconnect}
-          onRetry={handleRetry}
-        />
-
-        {/* Settings Section - Only show when connected */}
-        {status.connected && (
-          <div className="ml-4 pl-4 border-l-2 border-gray-100">
-            <div className="space-y-2">
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-              >
-                <Settings className="h-4 w-4" />
-                <span>Organization Settings</span>
-                <ChevronDown className={`h-3 w-3 transition-transform ${showSettings ? 'rotate-180' : ''}`} />
-              </button>
-
-              {showSettings && (
-                <div className="space-y-3 pt-2">
-                  {isLoadingSettings ? (
-                    <div className="text-xs text-gray-500">Loading settings...</div>
-                  ) : (
-                    <div className="text-xs text-gray-500 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span>Parent Folder:</span>
-                        <span className="font-mono">
-                          {currentSettings.parentFolderPath || '/My Drive (Root)'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Year Folders:</span>
-                        <span>{currentSettings.autoCreateYearFolders ? 'Enabled' : 'Disabled'}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Naming:</span>
-                        <span className="capitalize">
-                          {currentSettings.folderNamingPattern?.replace('-', ' ') || 'Client Only'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowSettingsDialog(true)}
-                    className="h-7 text-xs"
-                    disabled={isLoadingSettings}
-                  >
-                    <Settings className="h-3 w-3 mr-1" />
-                    Configure
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      <IntegrationCard
+        name="Google Drive"
+        description="Automatically organize and store your content files in the cloud"
+        icon={<HardDrive className="h-5 w-5 text-blue-600" />}
+        status={getIntegrationStatus()}
+        connectedEmail={status.email}
+        lastSync={status.lastSync}
+        error={status.error}
+        onConnect={handleConnect}
+        onDisconnect={handleDisconnect}
+        onRetry={handleRetry}
+        additionalActions={
+          status.connected ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSettingsDialog(true)}
+              className="flex items-center gap-1 h-8"
+              disabled={isLoadingSettings}
+            >
+              <Settings className="h-3 w-3" />
+              Configure
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* Permissions Dialog */}
       <Dialog open={showPermissionsDialog} onOpenChange={setShowPermissionsDialog}>

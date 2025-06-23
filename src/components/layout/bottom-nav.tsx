@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, Calendar, BookOpen, User, Plus, Play } from 'lucide-react'
+import { Home, Calendar, User, Plus, Play, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
 
@@ -27,10 +27,10 @@ const navItems = [
     isAction: true
   },
   {
-    href: '/resources',
-    icon: BookOpen,
-    label: 'Resources',
-    activePatterns: ['/resources']
+    href: '/calendar',
+    icon: CalendarDays,
+    label: 'Calendar',
+    activePatterns: ['/calendar']
   },
   {
     href: '/settings',

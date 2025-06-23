@@ -38,6 +38,11 @@ export const getAllShoots = async (): Promise<ShootWithClient[]> => {
       status: shoots.status,
       startedAt: shoots.startedAt,
       completedAt: shoots.completedAt,
+      // Google Calendar integration fields
+      googleCalendarEventId: shoots.googleCalendarEventId,
+      googleCalendarSyncStatus: shoots.googleCalendarSyncStatus,
+      googleCalendarLastSync: shoots.googleCalendarLastSync,
+      googleCalendarError: shoots.googleCalendarError,
       createdAt: shoots.createdAt,
       updatedAt: shoots.updatedAt,
       client: {
@@ -69,6 +74,11 @@ export const getShootsByClient = async (clientId: number): Promise<ShootWithClie
       status: shoots.status,
       startedAt: shoots.startedAt,
       completedAt: shoots.completedAt,
+      // Google Calendar integration fields
+      googleCalendarEventId: shoots.googleCalendarEventId,
+      googleCalendarSyncStatus: shoots.googleCalendarSyncStatus,
+      googleCalendarLastSync: shoots.googleCalendarLastSync,
+      googleCalendarError: shoots.googleCalendarError,
       createdAt: shoots.createdAt,
       updatedAt: shoots.updatedAt,
       client: {
@@ -101,6 +111,11 @@ export const getShootById = async (id: number): Promise<ShootWithClient | null> 
       status: shoots.status,
       startedAt: shoots.startedAt,
       completedAt: shoots.completedAt,
+      // Google Calendar integration fields
+      googleCalendarEventId: shoots.googleCalendarEventId,
+      googleCalendarSyncStatus: shoots.googleCalendarSyncStatus,
+      googleCalendarLastSync: shoots.googleCalendarLastSync,
+      googleCalendarError: shoots.googleCalendarError,
       createdAt: shoots.createdAt,
       updatedAt: shoots.updatedAt,
       client: {

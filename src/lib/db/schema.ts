@@ -8,6 +8,8 @@ export const shootStatusEnum = pgEnum('shoot_status', ['scheduled', 'active', 'c
 export const userRoleEnum = pgEnum('user_role', ['admin', 'user'])
 export const userStatusEnum = pgEnum('user_status', ['active', 'inactive', 'pending'])
 export const integrationProviderEnum = pgEnum('integration_provider', ['google-drive', 'google-calendar'])
+export const calendarEventStatusEnum = pgEnum('calendar_event_status', ['confirmed', 'tentative', 'cancelled'])
+export const calendarSyncStatusEnum = pgEnum('calendar_sync_status', ['synced', 'pending', 'error'])
 
 // Users table (for simple authentication)
 export const users = pgTable('users', {
@@ -71,6 +73,11 @@ export const shoots = pgTable('shoots', {
   status: shootStatusEnum('status').default('scheduled').notNull(),
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
+  // Google Calendar integration fields
+  googleCalendarEventId: varchar('google_calendar_event_id', { length: 255 }),
+  googleCalendarSyncStatus: calendarSyncStatusEnum('google_calendar_sync_status').default('pending'),
+  googleCalendarLastSync: timestamp('google_calendar_last_sync'),
+  googleCalendarError: text('google_calendar_error'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -129,6 +136,60 @@ export const clientSettings = pgTable('client_settings', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
 
+// Calendar sync tokens table - for efficient incremental sync
+export const calendarSyncTokens = pgTable('calendar_sync_tokens', {
+  id: serial('id').primaryKey(),
+  userEmail: varchar('user_email', { length: 255 }).notNull(),
+  calendarId: varchar('calendar_id', { length: 255 }).notNull().default('primary'),
+  syncToken: text('sync_token').notNull(),
+  lastSync: timestamp('last_sync').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Calendar webhook channels table - for push notifications
+export const calendarWebhookChannels = pgTable('calendar_webhook_channels', {
+  id: serial('id').primaryKey(),
+  userEmail: varchar('user_email', { length: 255 }).notNull(),
+  calendarId: varchar('calendar_id', { length: 255 }).notNull().default('primary'),
+  channelId: varchar('channel_id', { length: 255 }).notNull().unique(),
+  resourceId: varchar('resource_id', { length: 255 }).notNull(),
+  resourceUri: varchar('resource_uri', { length: 500 }).notNull(),
+  token: varchar('token', { length: 255 }),
+  expiration: timestamp('expiration'),
+  active: boolean('active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+// Calendar events cache table - for local optimization and conflict detection
+export const calendarEventsCache = pgTable('calendar_events_cache', {
+  id: serial('id').primaryKey(),
+  userEmail: varchar('user_email', { length: 255 }).notNull(),
+  calendarId: varchar('calendar_id', { length: 255 }).notNull().default('primary'),
+  googleEventId: varchar('google_event_id', { length: 255 }).notNull(),
+  shootId: integer('shoot_id').references(() => shoots.id), // Link to our shoots if applicable
+  title: varchar('title', { length: 255 }).notNull(),
+  description: text('description'),
+  startTime: timestamp('start_time').notNull(),
+  endTime: timestamp('end_time').notNull(),
+  location: varchar('location', { length: 255 }),
+  status: calendarEventStatusEnum('status').default('confirmed').notNull(),
+  attendees: json('attendees').$type<Array<{
+    email: string
+    displayName?: string
+    responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted'
+  }>>().default([]),
+  isRecurring: boolean('is_recurring').default(false).notNull(),
+  recurringEventId: varchar('recurring_event_id', { length: 255 }),
+  etag: varchar('etag', { length: 255 }), // For optimistic concurrency control
+  lastModified: timestamp('last_modified').notNull(),
+  syncStatus: calendarSyncStatusEnum('sync_status').default('synced').notNull(),
+  conflictDetected: boolean('conflict_detected').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
 // Define relationships
 export const clientsRelations = relations(clients, ({ many }) => ({
   postIdeas: many(postIdeas),
@@ -182,6 +243,13 @@ export const clientSettingsRelations = relations(clientSettings, ({ one }) => ({
   }),
 }))
 
+export const calendarEventsCacheRelations = relations(calendarEventsCache, ({ one }) => ({
+  shoot: one(shoots, {
+    fields: [calendarEventsCache.shootId],
+    references: [shoots.id],
+  }),
+}))
+
 // Export types for TypeScript
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -198,4 +266,10 @@ export type NewShootPostIdea = typeof shootPostIdeas.$inferInsert
 export type UploadedFile = typeof uploadedFiles.$inferSelect
 export type NewUploadedFile = typeof uploadedFiles.$inferInsert
 export type Integration = typeof integrations.$inferSelect
-export type NewIntegration = typeof integrations.$inferInsert 
+export type NewIntegration = typeof integrations.$inferInsert
+export type CalendarSyncToken = typeof calendarSyncTokens.$inferSelect
+export type NewCalendarSyncToken = typeof calendarSyncTokens.$inferInsert
+export type CalendarWebhookChannel = typeof calendarWebhookChannels.$inferSelect
+export type NewCalendarWebhookChannel = typeof calendarWebhookChannels.$inferInsert
+export type CalendarEventCache = typeof calendarEventsCache.$inferSelect
+export type NewCalendarEventCache = typeof calendarEventsCache.$inferInsert 

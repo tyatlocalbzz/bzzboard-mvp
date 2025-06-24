@@ -16,14 +16,22 @@ import { MobileInput } from "@/components/ui/mobile-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Trash2, Play, Upload, CheckCircle } from "lucide-react"
+import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Trash2, Play, Upload, CheckCircle, ExternalLink, AlertTriangle } from "lucide-react"
 import { formatStatusText, getStatusColor, shootStatusManager, ShootStatus } from "@/lib/utils/status"
 import { useAsync } from "@/lib/hooks/use-async"
+import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { useActiveShoot } from "@/contexts/active-shoot-context"
 import { toast } from "sonner"
 import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
 import Link from 'next/link'
-import type { Shoot, PostIdea } from '@/lib/types/shoots'
+import type { Shoot as BaseShoot, PostIdea } from '@/lib/types/shoots'
+
+// Extended shoot type with Google Calendar fields
+interface Shoot extends BaseShoot {
+  googleCalendarEventId?: string | null
+  googleCalendarSyncStatus?: 'pending' | 'synced' | 'error' | null
+  googleCalendarError?: string | null
+}
 import { useAllPlatformsWithStatus } from '@/lib/hooks/use-client-platforms'
 import { CheckCircle as CheckCircleIcon } from 'lucide-react'
 
@@ -111,9 +119,25 @@ const editShoot = async (id: string, data: EditShootData) => {
 }
 
 const deleteShoot = async (id: string) => {
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  console.log('Deleting shoot:', id)
-  return { success: true }
+  const response = await fetch(`/api/shoots/${id}`, {
+    method: 'DELETE',
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to delete shoot: ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to delete shoot')
+  }
+  
+  return {
+    success: true,
+    message: data.message || 'Shoot deleted successfully',
+    recoveryNote: data.recoveryNote || 'No recovery note provided'
+  }
 }
 
 // Change shoot status - Real API implementation using centralized status management
@@ -174,19 +198,52 @@ interface ShootActionsProps {
   children: React.ReactNode
   shoot: Shoot
   onSuccess: () => void
+  onOptimisticDelete?: () => void
 }
 
-const ShootActions = ({ children, shoot, onSuccess }: ShootActionsProps) => {
+const ShootActions = ({ children, shoot, onSuccess, onOptimisticDelete }: ShootActionsProps) => {
   const router = useRouter()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const { loading: deleteLoading, execute: executeDelete } = useAsync(deleteShoot)
   const { loading: statusLoading, execute: executeStatusChange } = useAsync(changeShootStatus)
 
   const handleDelete = async () => {
-    const result = await executeDelete(shoot.id.toString())
-    if (result) {
-      toast.success('Shoot deleted successfully!')
-      router.push('/shoots')
+    try {
+      // 1. Optimistic update - immediately show loading and trigger optimistic UI
+      toast.loading('Deleting shoot...', { id: 'delete-shoot' })
+      
+      // 2. Trigger optimistic delete in parent component
+      if (onOptimisticDelete) {
+        onOptimisticDelete()
+      }
+      
+      // 3. Execute actual deletion
+      const result = await executeDelete(shoot.id.toString())
+      
+      if (result) {
+        // 4. Success - update toast
+        toast.success('Shoot deleted successfully!', { id: 'delete-shoot' })
+        
+        // If shoot had Google Calendar integration, inform user
+        if (shoot.googleCalendarEventId) {
+          toast.info('Calendar event removed from Google Calendar')
+        }
+        
+        // Show recovery option
+        if (result.recoveryNote) {
+          toast.info(result.recoveryNote, { duration: 5000 })
+        }
+        
+        // Navigate to shoots list
+        router.push('/shoots')
+      }
+    } catch (error) {
+      // 5. On failure, let parent component handle rollback
+      console.error('Delete error:', error)
+      toast.error('Failed to delete shoot. Please try again.', { id: 'delete-shoot' })
+      
+      // Refresh to restore state
+      onSuccess()
     }
   }
 
@@ -333,21 +390,64 @@ interface EditShootFormProps {
 
 const EditShootForm = ({ children, shoot, onSuccess }: EditShootFormProps) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [selectedDuration, setSelectedDuration] = useState(shoot.duration.toString())
   const { loading, execute } = useAsync(editShoot)
 
-  const handleSubmit = async (formData: FormData) => {
-    const title = formData.get('title') as string
-    const client = formData.get('client') as string
-    const duration = parseInt(formData.get('duration') as string)
-    const location = formData.get('location') as string
-    const notes = formData.get('notes') as string
+  // Field validation hooks
+  const titleField = useFieldValidation({
+    fieldName: 'name',
+    initialValue: shoot.title,
+    validateOnChange: true,
+    validateOnBlur: true,
+    showValidation: isOpen
+  })
+
+  const clientField = useFieldValidation({
+    fieldName: 'name',
+    initialValue: shoot.client,
+    validateOnChange: true,
+    validateOnBlur: true,
+    showValidation: isOpen
+  })
+
+  const locationField = useFieldValidation({
+    fieldName: 'name',
+    initialValue: shoot.location,
+    validateOnChange: true,
+    validateOnBlur: true,
+    showValidation: isOpen
+  })
+
+  const validateForm = (): string | null => {
+    if (!titleField.value.trim()) return 'Shoot title is required'
+    if (!clientField.value.trim()) return 'Client is required'
+    if (!locationField.value.trim()) return 'Location is required'
+    return null
+  }
+
+  const handleSubmit = async () => {
+    // Validate all fields
+    const titleValidation = titleField.validate()
+    const clientValidation = clientField.validate()
+    const locationValidation = locationField.validate()
+    
+    if (!titleValidation.valid || !clientValidation.valid || !locationValidation.valid) {
+      toast.error('Please fix the validation errors before submitting')
+      return
+    }
+
+    const validationError = validateForm()
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
 
     const result = await execute(shoot.id.toString(), {
-      title,
-      client,
-      duration,
-      location,
-      notes: notes || undefined
+      title: titleField.value,
+      client: clientField.value,
+      duration: parseInt(selectedDuration),
+      location: locationField.value,
+      notes: undefined // Notes are optional and not validated
     })
     
     if (result) {
@@ -357,28 +457,45 @@ const EditShootForm = ({ children, shoot, onSuccess }: EditShootFormProps) => {
     }
   }
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
+    if (!open) {
+      // Reset fields when closing
+      titleField.setValue(shoot.title)
+      clientField.setValue(shoot.client)
+      locationField.setValue(shoot.location)
+      setSelectedDuration(shoot.duration.toString())
+    }
+  }
+
   const formContent = (
     <>
       <MobileInput
-        name="title"
-        label="Shoot Title"
-        defaultValue={shoot.title}
+        label="Shoot Title *"
         placeholder="e.g., Q1 Product Launch Content"
+        value={titleField.value}
+        onChange={titleField.handleChange}
+        onBlur={titleField.handleBlur}
+        error={titleField.validationResult.error}
+        validationState={titleField.validationResult.state}
         required
       />
 
       <MobileInput
-        name="client"
-        label="Client"
-        defaultValue={shoot.client}
+        label="Client *"
         placeholder="Client name"
+        value={clientField.value}
+        onChange={clientField.handleChange}
+        onBlur={clientField.handleBlur}
+        error={clientField.validationResult.error}
+        validationState={clientField.validationResult.state}
         required
       />
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label className="text-sm font-medium">Duration</Label>
-          <Select name="duration" defaultValue={shoot.duration.toString()}>
+          <Select value={selectedDuration} onValueChange={setSelectedDuration}>
             <SelectTrigger className="h-12 text-base tap-target">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-gray-500" />
@@ -397,10 +514,13 @@ const EditShootForm = ({ children, shoot, onSuccess }: EditShootFormProps) => {
         </div>
 
         <MobileInput
-          name="location"
-          label="Location"
-          defaultValue={shoot.location}
+          label="Location *"
           placeholder="Shoot location"
+          value={locationField.value}
+          onChange={locationField.handleChange}
+          onBlur={locationField.handleBlur}
+          error={locationField.validationResult.error}
+          validationState={locationField.validationResult.state}
           required
         />
       </div>
@@ -429,7 +549,7 @@ const EditShootForm = ({ children, shoot, onSuccess }: EditShootFormProps) => {
       description="Update the shoot details"
       icon={Edit}
       isOpen={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={handleOpenChange}
       onSubmit={handleSubmit}
       loading={loading}
       submitText="Save Changes"
@@ -449,11 +569,54 @@ const RescheduleForm = ({ children, shoot, onSuccess }: RescheduleFormProps) => 
   const [isOpen, setIsOpen] = useState(false)
   const { loading, execute } = useAsync(rescheduleShoot)
 
-  const handleSubmit = async (formData: FormData) => {
-    const date = formData.get('date') as string
-    const time = formData.get('time') as string
+  // Get current date and time from shoot
+  const currentDate = new Date(shoot.scheduledAt).toISOString().split('T')[0]
+  const currentTime = new Date(shoot.scheduledAt).toTimeString().slice(0, 5)
+  const today = new Date().toISOString().split('T')[0]
 
-    const result = await execute(shoot.id.toString(), { date, time })
+  // Field validation hooks
+  const dateField = useFieldValidation({
+    fieldName: 'name',
+    initialValue: currentDate,
+    validateOnChange: true,
+    validateOnBlur: true,
+    showValidation: isOpen
+  })
+
+  const timeField = useFieldValidation({
+    fieldName: 'name',
+    initialValue: currentTime,
+    validateOnChange: true,
+    validateOnBlur: true,
+    showValidation: isOpen
+  })
+
+  const validateForm = (): string | null => {
+    if (!dateField.value) return 'Date is required'
+    if (!timeField.value) return 'Time is required'
+    return null
+  }
+
+  const handleSubmit = async () => {
+    // Validate all fields
+    const dateValidation = dateField.validate()
+    const timeValidation = timeField.validate()
+    
+    if (!dateValidation.valid || !timeValidation.valid) {
+      toast.error('Please fix the validation errors before submitting')
+      return
+    }
+
+    const validationError = validateForm()
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+
+    const result = await execute(shoot.id.toString(), { 
+      date: dateField.value, 
+      time: timeField.value
+    })
     
     if (result) {
       toast.success('Shoot rescheduled successfully!')
@@ -462,27 +625,37 @@ const RescheduleForm = ({ children, shoot, onSuccess }: RescheduleFormProps) => 
     }
   }
 
-  // Get current date and time from shoot
-  const currentDate = new Date(shoot.scheduledAt).toISOString().split('T')[0]
-  const currentTime = new Date(shoot.scheduledAt).toTimeString().slice(0, 5)
-  const today = new Date().toISOString().split('T')[0]
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
+    if (!open) {
+      // Reset fields when closing
+      dateField.setValue(currentDate)
+      timeField.setValue(currentTime)
+    }
+  }
 
   const formContent = (
     <>
       <div className="grid grid-cols-2 gap-3">
         <MobileInput
-          name="date"
-          label="New Date"
+          label="New Date *"
           type="date"
-          defaultValue={currentDate}
+          value={dateField.value}
+          onChange={dateField.handleChange}
+          onBlur={dateField.handleBlur}
           min={today}
+          error={dateField.validationResult.error}
+          validationState={dateField.validationResult.state}
           required
         />
         <MobileInput
-          name="time"
-          label="New Time"
+          label="New Time *"
           type="time"
-          defaultValue={currentTime}
+          value={timeField.value}
+          onChange={timeField.handleChange}
+          onBlur={timeField.handleBlur}
+          error={timeField.validationResult.error}
+          validationState={timeField.validationResult.state}
           required
         />
       </div>
@@ -497,7 +670,7 @@ const RescheduleForm = ({ children, shoot, onSuccess }: RescheduleFormProps) => 
       description="Update the date and time for this shoot"
       icon={Calendar}
       isOpen={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={handleOpenChange}
       onSubmit={handleSubmit}
       loading={loading}
       submitText="Reschedule"
@@ -1043,6 +1216,13 @@ export default function ShootDetailsPage() {
     await handleRefresh()
   }
 
+  // Optimistic delete handler
+  const handleOptimisticDelete = useCallback(() => {
+    // Immediately hide the shoot and navigate away
+    setShoot(null)
+    router.push('/shoots')
+  }, [router])
+
   // Utility functions
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -1117,50 +1297,53 @@ export default function ShootDetailsPage() {
       title={shoot.client}
       backHref="/shoots"
       headerAction={
-        <div className="flex items-center gap-2">
-          {shoot.status === 'completed' && (
-            <Link href={`/shoots/${shootId}/upload`}>
-              <Button
-                size="sm"
-                className="h-8 px-3 text-xs"
-              >
-                <Upload className="h-3 w-3 mr-1" />
-                Upload
-              </Button>
-            </Link>
-          )}
+        <ShootActions 
+          shoot={shoot} 
+          onSuccess={handleRefresh} 
+          onOptimisticDelete={handleOptimisticDelete}
+        >
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </ShootActions>
+      }
+    >
+      {/* Action Button Section - Below Header */}
+      {(shoot.status === 'scheduled' || shoot.status === 'active' || shoot.status === 'completed') && (
+        <div className="border-b border-gray-200 bg-white px-3 py-3">
           {shoot.status === 'scheduled' && (
             <LoadingButton
-              size="sm"
               onClick={handleStartShoot}
-              className="h-8 px-3 text-xs"
+              className="w-full h-12 text-base font-medium"
               loading={statusChangeLoading}
               loadingText="Starting..."
             >
-              <Play className="h-3 w-3 mr-1" />
-              Start
+              <Play className="h-5 w-5 mr-2" />
+              Start Shoot
             </LoadingButton>
           )}
           {shoot.status === 'active' && (
             <LoadingButton
-              size="sm"
               onClick={handleCompleteShoot}
-              className="h-8 px-3 text-xs"
+              className="w-full h-12 text-base font-medium"
               loading={statusChangeLoading}
               loadingText="Completing..."
             >
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Complete
+              <CheckCircle className="h-5 w-5 mr-2" />
+              Complete Shoot
             </LoadingButton>
           )}
-          <ShootActions shoot={shoot} onSuccess={handleRefresh}>
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </ShootActions>
+          {shoot.status === 'completed' && (
+            <Link href={`/shoots/${shootId}/upload`} className="block">
+              <Button className="w-full h-12 text-base font-medium">
+                <Upload className="h-5 w-5 mr-2" />
+                Upload Content
+              </Button>
+            </Link>
+          )}
         </div>
-      }
-    >
+      )}
+
       <div className="px-3 py-3 space-y-6">
         {/* Shoot Details */}
         <div className="space-y-3">
@@ -1189,6 +1372,48 @@ export default function ShootDetailsPage() {
               <span>{postIdeas.length} post idea{postIdeas.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
+
+          {/* Google Calendar Integration Status */}
+          {shoot.googleCalendarEventId && (
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-900">
+                    Added to Google Calendar
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    const calendarUrl = `https://calendar.google.com/calendar/event?eid=${shoot.googleCalendarEventId}`
+                    window.open(calendarUrl, '_blank')
+                  }}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  View
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {shoot.googleCalendarError && !shoot.googleCalendarEventId && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-yellow-900">
+                    Calendar sync failed
+                  </span>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    {shoot.googleCalendarError}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {shoot.notes && (
             <div className="p-3 bg-gray-50 rounded-lg">

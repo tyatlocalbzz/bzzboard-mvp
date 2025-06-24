@@ -1,6 +1,6 @@
 import { db } from './index'
 import { shoots, clients, postIdeas, shootPostIdeas } from './schema'
-import { eq, desc, asc, and, sql } from 'drizzle-orm'
+import { eq, desc, asc, and, sql, isNull } from 'drizzle-orm'
 
 // Types for database operations
 export type NewShoot = typeof shoots.$inferInsert
@@ -24,7 +24,7 @@ export interface CreateShootInput {
   notes?: string
 }
 
-// Get all shoots with client information and post ideas count
+// Get all active (non-deleted) shoots with client information and post ideas count
 export const getAllShoots = async (): Promise<ShootWithClient[]> => {
   const result = await db
     .select({
@@ -43,6 +43,9 @@ export const getAllShoots = async (): Promise<ShootWithClient[]> => {
       googleCalendarSyncStatus: shoots.googleCalendarSyncStatus,
       googleCalendarLastSync: shoots.googleCalendarLastSync,
       googleCalendarError: shoots.googleCalendarError,
+      // Soft delete fields
+      deletedAt: shoots.deletedAt,
+      deletedBy: shoots.deletedBy,
       createdAt: shoots.createdAt,
       updatedAt: shoots.updatedAt,
       client: {
@@ -54,6 +57,7 @@ export const getAllShoots = async (): Promise<ShootWithClient[]> => {
     .from(shoots)
     .leftJoin(clients, eq(shoots.clientId, clients.id))
     .leftJoin(shootPostIdeas, eq(shoots.id, shootPostIdeas.shootId))
+    .where(isNull(shoots.deletedAt)) // Only return non-deleted shoots
     .groupBy(shoots.id, clients.id, clients.name)
     .orderBy(desc(shoots.scheduledAt))
 
@@ -79,6 +83,9 @@ export const getShootsByClient = async (clientId: number): Promise<ShootWithClie
       googleCalendarSyncStatus: shoots.googleCalendarSyncStatus,
       googleCalendarLastSync: shoots.googleCalendarLastSync,
       googleCalendarError: shoots.googleCalendarError,
+      // Soft delete fields
+      deletedAt: shoots.deletedAt,
+      deletedBy: shoots.deletedBy,
       createdAt: shoots.createdAt,
       updatedAt: shoots.updatedAt,
       client: {
@@ -90,7 +97,10 @@ export const getShootsByClient = async (clientId: number): Promise<ShootWithClie
     .from(shoots)
     .leftJoin(clients, eq(shoots.clientId, clients.id))
     .leftJoin(shootPostIdeas, eq(shoots.id, shootPostIdeas.shootId))
-    .where(eq(shoots.clientId, clientId))
+    .where(and(
+      eq(shoots.clientId, clientId),
+      isNull(shoots.deletedAt) // Only return non-deleted shoots
+    ))
     .groupBy(shoots.id, clients.id, clients.name)
     .orderBy(desc(shoots.scheduledAt))
 
@@ -116,6 +126,9 @@ export const getShootById = async (id: number): Promise<ShootWithClient | null> 
       googleCalendarSyncStatus: shoots.googleCalendarSyncStatus,
       googleCalendarLastSync: shoots.googleCalendarLastSync,
       googleCalendarError: shoots.googleCalendarError,
+      // Soft delete fields
+      deletedAt: shoots.deletedAt,
+      deletedBy: shoots.deletedBy,
       createdAt: shoots.createdAt,
       updatedAt: shoots.updatedAt,
       client: {
@@ -127,7 +140,10 @@ export const getShootById = async (id: number): Promise<ShootWithClient | null> 
     .from(shoots)
     .leftJoin(clients, eq(shoots.clientId, clients.id))
     .leftJoin(shootPostIdeas, eq(shoots.id, shootPostIdeas.shootId))
-    .where(eq(shoots.id, id))
+    .where(and(
+      eq(shoots.id, id),
+      isNull(shoots.deletedAt) // Only return non-deleted shoots
+    ))
     .groupBy(shoots.id, clients.id, clients.name)
     .limit(1)
 
@@ -183,7 +199,12 @@ export const updateShootStatus = async (
 // Update shoot details
 export const updateShoot = async (
   id: number,
-  updates: Partial<CreateShootInput>
+  updates: Partial<CreateShootInput & {
+    googleCalendarEventId?: string | null
+    googleCalendarSyncStatus?: 'pending' | 'synced' | 'error' | null
+    googleCalendarLastSync?: Date | null
+    googleCalendarError?: string | null
+  }>
 ): Promise<ShootSelect | null> => {
   const [updatedShoot] = await db
     .update(shoots)
@@ -197,15 +218,103 @@ export const updateShoot = async (
   return updatedShoot || null
 }
 
-// Delete shoot
-export const deleteShoot = async (id: number): Promise<boolean> => {
-  // First delete related shoot_post_ideas
-  await db.delete(shootPostIdeas).where(eq(shootPostIdeas.shootId, id))
-  
-  // Then delete the shoot
-  const result = await db.delete(shoots).where(eq(shoots.id, id))
-  
-  return result.length > 0
+// Soft delete shoot
+export const deleteShoot = async (id: number, deletedBy?: number): Promise<boolean> => {
+  try {
+    const result = await db
+      .update(shoots)
+      .set({
+        deletedAt: new Date(),
+        deletedBy: deletedBy || null,
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(shoots.id, id),
+        isNull(shoots.deletedAt) // Only delete if not already deleted
+      ))
+      .returning()
+    
+    return result.length > 0
+  } catch (error) {
+    console.error('❌ [DB] Error soft deleting shoot:', error)
+    throw new Error('Failed to delete shoot from database')
+  }
+}
+
+// Hard delete shoot (for permanent cleanup)
+export const hardDeleteShoot = async (id: number): Promise<boolean> => {
+  try {
+    // First delete related shoot_post_ideas
+    await db.delete(shootPostIdeas).where(eq(shootPostIdeas.shootId, id))
+    
+    // Then delete the shoot
+    const result = await db.delete(shoots).where(eq(shoots.id, id))
+    
+    return result.length > 0
+  } catch (error) {
+    console.error('❌ [DB] Error hard deleting shoot:', error)
+    throw new Error('Failed to permanently delete shoot from database')
+  }
+}
+
+// Restore soft deleted shoot
+export const restoreShoot = async (id: number): Promise<boolean> => {
+  try {
+    const result = await db
+      .update(shoots)
+      .set({
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: new Date()
+      })
+      .where(eq(shoots.id, id))
+      .returning()
+    
+    return result.length > 0
+  } catch (error) {
+    console.error('❌ [DB] Error restoring shoot:', error)
+    throw new Error('Failed to restore shoot')
+  }
+}
+
+// Get deleted shoots (for recovery interface)
+export const getDeletedShoots = async (): Promise<ShootWithClient[]> => {
+  const result = await db
+    .select({
+      id: shoots.id,
+      title: shoots.title,
+      clientId: shoots.clientId,
+      scheduledAt: shoots.scheduledAt,
+      duration: shoots.duration,
+      location: shoots.location,
+      notes: shoots.notes,
+      status: shoots.status,
+      startedAt: shoots.startedAt,
+      completedAt: shoots.completedAt,
+      // Google Calendar integration fields
+      googleCalendarEventId: shoots.googleCalendarEventId,
+      googleCalendarSyncStatus: shoots.googleCalendarSyncStatus,
+      googleCalendarLastSync: shoots.googleCalendarLastSync,
+      googleCalendarError: shoots.googleCalendarError,
+      // Soft delete fields
+      deletedAt: shoots.deletedAt,
+      deletedBy: shoots.deletedBy,
+      createdAt: shoots.createdAt,
+      updatedAt: shoots.updatedAt,
+      client: {
+        id: clients.id,
+        name: clients.name,
+      },
+      postIdeasCount: sql<number>`cast(count(${shootPostIdeas.id}) as int)`,
+    })
+    .from(shoots)
+    .leftJoin(clients, eq(shoots.clientId, clients.id))
+    .leftJoin(shootPostIdeas, eq(shoots.id, shootPostIdeas.shootId))
+    .where(sql`${shoots.deletedAt} IS NOT NULL`) // Only return deleted shoots
+    .groupBy(shoots.id, clients.id, clients.name)
+    .orderBy(desc(shoots.deletedAt))
+
+  return result
 }
 
 // Get post ideas for a shoot with their shot lists
@@ -266,4 +375,45 @@ export const toggleShotCompletion = async (
       eq(shootPostIdeas.shootId, shootId),
       eq(shootPostIdeas.postIdeaId, postIdeaId)
     ))
+}
+
+// Clear calendar sync data when calendar event is deleted externally
+export const clearCalendarSync = async (id: number): Promise<boolean> => {
+  try {
+    const result = await db
+      .update(shoots)
+      .set({
+        googleCalendarEventId: null,
+        googleCalendarSyncStatus: null,
+        googleCalendarLastSync: null,
+        googleCalendarError: 'Calendar event deleted externally',
+        updatedAt: new Date()
+      })
+      .where(eq(shoots.id, id))
+      .returning()
+    
+    return result.length > 0
+  } catch (error) {
+    console.error('❌ [DB] Error clearing calendar sync data:', error)
+    return false
+  }
+}
+
+// Get shoots by Google Calendar event ID (for webhook processing)
+export const getShootByCalendarEventId = async (eventId: string): Promise<ShootSelect | null> => {
+  try {
+    const result = await db
+      .select()
+      .from(shoots)
+      .where(and(
+        eq(shoots.googleCalendarEventId, eventId),
+        isNull(shoots.deletedAt) // Only return non-deleted shoots
+      ))
+      .limit(1)
+
+    return result[0] || null
+  } catch (error) {
+    console.error('❌ [DB] Error getting shoot by calendar event ID:', error)
+    return null
+  }
 } 

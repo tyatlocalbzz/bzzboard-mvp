@@ -9,7 +9,7 @@ import {
   type CalendarEventCache,
   type NewCalendarEventCache
 } from './schema'
-import { eq, and, desc, lt } from 'drizzle-orm'
+import { eq, and, desc, lt, sql } from 'drizzle-orm'
 
 // ==================== SYNC TOKENS ====================
 
@@ -430,33 +430,153 @@ export async function checkSchedulingConflicts(
   calendarId: string = 'primary'
 ): Promise<CalendarEventCache[]> {
   try {
-    // This is a simplified conflict check - in production you'd want more sophisticated overlap detection
-    const conflicts = await db
+    console.log(`🔍 [Calendar DB] Checking conflicts for ${userEmail} from ${startTime.toISOString()} to ${endTime.toISOString()}`)
+    
+    // Get all events for the user in the calendar
+    const allEvents = await db
       .select()
       .from(calendarEventsCache)
       .where(
         and(
           eq(calendarEventsCache.userEmail, userEmail),
-          eq(calendarEventsCache.calendarId, calendarId),
-          // Add time overlap conditions here
-          excludeEventId ? 
-            and(eq(calendarEventsCache.googleEventId, excludeEventId)) : 
-            undefined
+          eq(calendarEventsCache.calendarId, calendarId)
         )
       )
 
-    // Filter for actual time conflicts (simplified)
-    return conflicts.filter(event => {
+    console.log(`📅 [Calendar DB] Found ${allEvents.length} total events to check`)
+
+    // Filter for actual time conflicts
+    const conflicts = allEvents.filter(event => {
+      // Skip excluded event
       if (excludeEventId && event.googleEventId === excludeEventId) {
+        console.log(`🚫 [Calendar DB] Skipping excluded event: "${event.title}" (${event.googleEventId})`)
         return false
       }
       
       const eventStart = new Date(event.startTime)
       const eventEnd = new Date(event.endTime)
       
-      // Check for overlap
-      return (startTime < eventEnd && endTime > eventStart)
+      // Check for time overlap: events overlap if one starts before the other ends
+      const hasOverlap = (startTime < eventEnd && endTime > eventStart)
+      
+      if (hasOverlap) {
+        console.log(`⚠️ [Calendar DB] Conflict detected with "${event.title}" (${eventStart.toISOString()} - ${eventEnd.toISOString()})`)
+        console.log(`📋 [Calendar DB] Event details: ID=${event.googleEventId}, shootId=${event.shootId}, created=${event.createdAt}`)
+      } else {
+        console.log(`✅ [Calendar DB] No conflict with "${event.title}" (${eventStart.toISOString()} - ${eventEnd.toISOString()})`)
+      }
+      
+      return hasOverlap
     })
+
+    console.log(`🔍 [Calendar DB] Found ${conflicts.length} conflicts`)
+    return conflicts
+  } catch (error) {
+    console.error('❌ [Calendar DB] Error checking conflicts:', error)
+    return []
+  }
+}
+
+/**
+ * Clean up orphaned calendar events (events created for shoots that no longer exist)
+ * DRY: Centralized cleanup for stale calendar data
+ */
+export async function cleanupOrphanedCalendarEvents(
+  userEmail: string,
+  calendarId: string = 'primary'
+): Promise<number> {
+  try {
+    // Get all calendar events that are linked to shoots
+    const eventsWithShoots = await db
+      .select()
+      .from(calendarEventsCache)
+      .where(
+        and(
+          eq(calendarEventsCache.userEmail, userEmail),
+          eq(calendarEventsCache.calendarId, calendarId),
+          sql`${calendarEventsCache.shootId} IS NOT NULL`
+        )
+      )
+
+    let cleanedCount = 0
+
+    // Check each event to see if its associated shoot still exists
+    for (const event of eventsWithShoots) {
+      if (event.shootId) {
+        // Check if the shoot still exists in the database
+        const { getShootById } = await import('./shoots')
+        const shoot = await getShootById(event.shootId)
+        
+        if (!shoot) {
+          // Shoot no longer exists, remove the calendar event from cache
+          console.log(`🧹 [Calendar Cleanup] Removing orphaned event: "${event.title}" (shoot ${event.shootId} not found)`)
+          await deleteCachedEvent(userEmail, event.googleEventId, calendarId)
+          cleanedCount++
+        }
+      }
+    }
+
+    console.log(`✅ [Calendar Cleanup] Cleaned up ${cleanedCount} orphaned calendar events`)
+    return cleanedCount
+  } catch (error) {
+    console.error('❌ [Calendar Cleanup] Error cleaning up orphaned events:', error)
+    return 0
+  }
+}
+
+/**
+ * Check for scheduling conflicts with improved orphan detection
+ * DRY: Enhanced conflict detection that handles stale events
+ */
+export async function checkSchedulingConflictsImproved(
+  userEmail: string,
+  startTime: Date,
+  endTime: Date,
+  excludeEventId?: string,
+  calendarId: string = 'primary'
+): Promise<CalendarEventCache[]> {
+  try {
+    console.log(`🔍 [Calendar DB] Checking conflicts for ${userEmail} from ${startTime.toISOString()} to ${endTime.toISOString()}`)
+    
+    // Get all events for the user in the calendar
+    const allEvents = await db
+      .select()
+      .from(calendarEventsCache)
+      .where(
+        and(
+          eq(calendarEventsCache.userEmail, userEmail),
+          eq(calendarEventsCache.calendarId, calendarId)
+        )
+      )
+
+    console.log(`📅 [Calendar DB] Found ${allEvents.length} total events to check`)
+
+    // Filter for actual time conflicts
+    const conflicts = allEvents.filter(event => {
+      // Skip excluded event
+      if (excludeEventId && event.googleEventId === excludeEventId) {
+        console.log(`🚫 [Calendar DB] Skipping excluded event: "${event.title}" (${event.googleEventId})`)
+        return false
+      }
+      
+      const eventStart = new Date(event.startTime)
+      const eventEnd = new Date(event.endTime)
+      
+      // Check for time overlap: events overlap if one starts before the other ends
+      const hasOverlap = (startTime < eventEnd && endTime > eventStart)
+      
+      if (hasOverlap) {
+        console.log(`⚠️ [Calendar DB] Conflict detected with "${event.title}" (${eventStart.toISOString()} - ${eventEnd.toISOString()})`)
+        console.log(`📋 [Calendar DB] Event details: ID=${event.googleEventId}, shootId=${event.shootId}, created=${event.createdAt}`)
+      } else {
+        console.log(`✅ [Calendar DB] No conflict with "${event.title}" (${eventStart.toISOString()} - ${eventEnd.toISOString()})`)
+      }
+      
+      return hasOverlap
+    })
+
+    console.log(`🔍 [Calendar DB] Found ${conflicts.length} conflicts`)
+    return conflicts
   } catch (error) {
     console.error('❌ [Calendar DB] Error checking conflicts:', error)
     return []

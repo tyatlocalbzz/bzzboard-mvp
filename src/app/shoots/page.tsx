@@ -1,53 +1,19 @@
 'use client'
 
-import { useMemo, useState, useCallback, useEffect } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileLayout } from "@/components/layout/mobile-layout"
-import { ListItem } from "@/components/ui/list-item"
+import { UnifiedEventItem } from "@/components/shoots/unified-event-item"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { EmptyState } from "@/components/ui/empty-state"
-import { ActionMenu } from "@/components/ui/action-menu"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { Calendar, MapPin, Clock, Users, Filter, ArrowUpDown } from "lucide-react"
+import { Calendar, Camera, RefreshCw } from "lucide-react"
 import { ScheduleShootForm } from "@/components/shoots/schedule-shoot-form"
 import { useClient } from "@/contexts/client-context"
-import { formatStatusText, getStatusColor } from "@/lib/utils/status"
-
-// Mock shoot data type
-interface Shoot {
-  id: number
-  title: string
-  client: string
-  scheduledAt: string
-  duration: number // in minutes
-  location: string
-  status: 'scheduled' | 'active' | 'completed' | 'cancelled'
-  postIdeasCount: number
-  notes?: string
-}
-
-// Real API function to fetch shoots
-const fetchShoots = async (clientName?: string): Promise<Shoot[]> => {
-  const params = new URLSearchParams()
-  if (clientName && clientName !== 'All Clients') {
-    params.append('client', clientName)
-  }
-  
-  const response = await fetch(`/api/shoots${params.toString() ? `?${params.toString()}` : ''}`)
-  
-  if (!response.ok) {
-    throw new Error(`Failed to fetch shoots: ${response.statusText}`)
-  }
-  
-  const data = await response.json()
-  
-  if (!data.success) {
-    throw new Error(data.error || 'Failed to fetch shoots')
-  }
-  
-  return data.shoots || []
-}
+import { useUnifiedEvents } from "@/lib/hooks/use-unified-events"
+import type { UnifiedEvent, UnifiedEventFilter } from '@/lib/types/shoots'
+import { toast } from 'sonner'
 
 const ITEMS_PER_PAGE = 10
 
@@ -56,80 +22,56 @@ export default function ShootsPage() {
   const router = useRouter()
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [allShoots, setAllShoots] = useState<Shoot[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   
-  // Filter and sort state
-  const [statusFilter, setStatusFilter] = useState<'all' | Shoot['status']>('all')
-  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'title-asc' | 'title-desc'>('date-desc')
-
-  // Load shoots from API
-  useEffect(() => {
-    const loadShoots = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
-        const shoots = await fetchShoots(selectedClient.type === 'all' ? undefined : selectedClient.name)
-        setAllShoots(shoots)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load shoots')
-        console.error('Error loading shoots:', err)
-      } finally {
-        setIsLoading(false)
-      }
+  // Get initial filter from URL query parameter
+  const [eventFilter, setEventFilter] = useState<UnifiedEventFilter>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const filterParam = urlParams.get('filter') as UnifiedEventFilter
+      return ['shoots', 'calendar', 'all'].includes(filterParam) ? filterParam : 'shoots'
     }
+    return 'shoots'
+  })
+  // Always sort chronologically - no user sorting options needed for schedule view
 
-    loadShoots()
-  }, [selectedClient])
+  // Load unified events from API
+  const { 
+    events: allEvents, 
+    loading, 
+    error, 
+    refresh,
+    syncCalendar
+  } = useUnifiedEvents({
+    clientName: selectedClient.type === 'all' ? undefined : selectedClient.name,
+    filter: eventFilter,
+    autoRefresh: true
+  })
 
-  // Navigate to shoot details
-  const handleShootClick = useCallback((shootId: number) => {
-    router.push(`/shoots/${shootId}`)
+  // Navigate to event details
+  const handleEventClick = useCallback((event: UnifiedEvent) => {
+    if (event.type === 'shoot' && event.shootId) {
+      router.push(`/shoots/${event.shootId}`)
+    } else if (event.type === 'calendar') {
+      // For calendar events, show a toast for now
+      // TODO: Implement calendar event details or link to Google Calendar
+      toast.info(`Calendar Event: ${event.title}`)
+    }
   }, [router])
 
-  // Filter shoots based on selected client and status filter
-  const filteredShoots = useMemo(() => {
-    let shoots = allShoots
-    
-    // Filter by client
-    if (selectedClient.type !== 'all') {
-      shoots = shoots.filter(shoot => shoot.client === selectedClient.name)
-    }
-    
-    // Filter by status
-    if (statusFilter !== 'all') {
-      shoots = shoots.filter(shoot => shoot.status === statusFilter)
-    }
-    
-    return shoots
-  }, [selectedClient, allShoots, statusFilter])
-
-  // Sort shoots based on selected sort option
-  const sortedShoots = useMemo(() => {
-    return [...filteredShoots].sort((a, b) => {
-      switch (sortBy) {
-        case 'date-asc':
-          return new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
-        case 'date-desc':
-          return new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime()
-        case 'title-asc':
-          return a.title.localeCompare(b.title)
-        case 'title-desc':
-          return b.title.localeCompare(a.title)
-        default:
-          return new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime()
-      }
+  // Sort events chronologically (what's happening next)
+  const sortedEvents = useMemo(() => {
+    return [...allEvents].sort((a, b) => {
+      return new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
     })
-  }, [filteredShoots, sortBy])
+  }, [allEvents])
 
-  // Get shoots to display (with pagination)
-  const displayedShoots = useMemo(() => {
-    return sortedShoots.slice(0, displayCount)
-  }, [sortedShoots, displayCount])
+  // Get events to display (with pagination)
+  const displayedEvents = useMemo(() => {
+    return sortedEvents.slice(0, displayCount)
+  }, [sortedEvents, displayCount])
 
-  // Check if there are more shoots to load
-  const hasMore = displayCount < sortedShoots.length
+  // Check if there are more events to load
+  const hasMore = displayCount < sortedEvents.length
 
   // Load more function with simulated delay
   const loadMore = useCallback(async () => {
@@ -144,145 +86,149 @@ export default function ShootsPage() {
     setIsLoadingMore(false)
   }, [isLoadingMore, hasMore])
 
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffTime = date.getTime() - now.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Tomorrow'
-    if (diffDays === -1) return 'Yesterday'
-    if (diffDays > 0 && diffDays <= 7) return `In ${diffDays} days`
-    if (diffDays < 0 && diffDays >= -7) return `${Math.abs(diffDays)} days ago`
-    
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-    })
-  }
-
-  // Format time for display
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-  }
-
-  // Format duration
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes}m`
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
-  }
-
-  // Status color now handled by centralized status management
-
-  // Filter menu items
-  const filterMenuItems = [
-    {
-      label: 'All Status',
-      icon: Filter,
-      onClick: () => setStatusFilter('all')
-    },
-    {
-      label: 'Scheduled',
-      icon: Filter,
-      onClick: () => setStatusFilter('scheduled')
-    },
-    {
-      label: 'Active',
-      icon: Filter,
-      onClick: () => setStatusFilter('active')
-    },
-    {
-      label: 'Completed',
-      icon: Filter,
-      onClick: () => setStatusFilter('completed')
-    },
-    {
-      label: 'Cancelled',
-      icon: Filter,
-      onClick: () => setStatusFilter('cancelled')
+  // Handle calendar sync
+  const handleSync = async () => {
+    try {
+      await syncCalendar()
+      
+      // Provide contextual success message based on current filter
+      if (eventFilter === 'shoots') {
+        toast.success('Calendar synced successfully - conflict detection updated')
+      } else if (eventFilter === 'calendar') {
+        toast.success('Calendar events synced successfully')
+      } else {
+        toast.success('Calendar synced successfully')
+      }
+    } catch {
+      toast.error('Failed to sync calendar - check your Google Calendar connection')
     }
-  ]
+  }
 
-  // Sort menu items
-  const sortMenuItems = [
-    {
-      label: 'Date (Newest First)',
-      icon: ArrowUpDown,
-      onClick: () => setSortBy('date-desc')
-    },
-    {
-      label: 'Date (Oldest First)',
-      icon: ArrowUpDown,
-      onClick: () => setSortBy('date-asc')
-    },
-    'separator' as const,
-    {
-      label: 'Title (A-Z)',
-      icon: ArrowUpDown,
-      onClick: () => setSortBy('title-asc')
-    },
-    {
-      label: 'Title (Z-A)',
-      icon: ArrowUpDown,
-      onClick: () => setSortBy('title-desc')
+  // Reset pagination when filter changes
+  const handleFilterChange = (newFilter: UnifiedEventFilter) => {
+    setEventFilter(newFilter)
+    setDisplayCount(ITEMS_PER_PAGE)
+    
+    // Update URL to reflect the new filter
+    const url = new URL(window.location.href)
+    if (newFilter === 'shoots') {
+      url.searchParams.delete('filter')
+    } else {
+      url.searchParams.set('filter', newFilter)
     }
-  ]
+    router.replace(url.pathname + url.search, { scroll: false })
+  }
+
+  // No sorting needed - always chronological
+
+  // No filter menu needed - using tabs instead
+
+  // No sort menu needed - always chronological order
+
+  // Get page title based on filter
+  const getPageTitle = () => {
+    switch (eventFilter) {
+      case 'shoots': return 'Shoots'
+      case 'calendar': return 'Calendar'
+      case 'all': return 'Schedule'
+      default: return 'Schedule'
+    }
+  }
+
+  // Get empty state props based on filter
+  const getEmptyStateProps = () => {
+    switch (eventFilter) {
+      case 'shoots':
+        return {
+          icon: Camera,
+          title: "No shoots found",
+          description: selectedClient.type === 'all' 
+            ? "You haven't scheduled any shoots yet. Create your first shoot to get started."
+            : `No shoots scheduled for ${selectedClient.name}. Schedule a shoot to get started.`,
+          actionLabel: "Schedule Your First Shoot"
+        }
+      case 'calendar':
+        return {
+          icon: Calendar,
+          title: "No calendar events",
+          description: "No calendar events found. Make sure your Google Calendar is connected and synced.",
+          actionLabel: "Sync Calendar"
+        }
+      case 'all':
+        return {
+          icon: Calendar,
+          title: "No events found",
+          description: "No shoots or calendar events found. Schedule a shoot or sync your calendar to get started.",
+          actionLabel: "Schedule Your First Shoot"
+        }
+      default:
+        return {
+          icon: Calendar,
+          title: "No events found",
+          description: "No events found.",
+          actionLabel: "Schedule Event"
+        }
+    }
+  }
+
+  const emptyStateProps = getEmptyStateProps()
 
   return (
     <MobileLayout 
-      title="Shoots"
+      title={getPageTitle()}
       headerAction={
         <div className="flex items-center gap-1">
-          <ActionMenu
-            trigger={
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className={`h-8 w-8 p-0 ${statusFilter !== 'all' ? 'bg-blue-100 text-blue-700' : ''}`}
-              >
-                <Filter className="h-4 w-4" />
-              </Button>
-            }
-            items={filterMenuItems}
-          />
-          <ActionMenu
-            trigger={
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className={`h-8 w-8 p-0 ${sortBy !== 'date-desc' ? 'bg-blue-100 text-blue-700' : ''}`}
-              >
-                <ArrowUpDown className="h-4 w-4" />
-              </Button>
-            }
-            items={sortMenuItems}
-          />
+          {/* Calendar sync button - always show for calendar integration */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={handleSync}
+            disabled={loading}
+            title="Sync Calendar"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
           <ScheduleShootForm>
             <Button size="sm" className="h-8 px-3 text-xs">
-              <Calendar className="h-3 w-3 mr-1" />
+              <Camera className="h-3 w-3 mr-1" />
               Schedule
             </Button>
           </ScheduleShootForm>
         </div>
       }
     >
-      <div className="px-3 py-3 space-y-6">
+      {/* Filter Tabs */}
+      <div className="border-b border-gray-200 bg-white">
+        <div className="flex">
+          <button
+            onClick={() => handleFilterChange('shoots')}
+            className={`flex-1 py-3 px-4 text-sm font-medium text-center border-b-2 transition-colors ${
+              eventFilter === 'shoots'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Shoots
+          </button>
+          <button
+            onClick={() => handleFilterChange('all')}
+            className={`flex-1 py-3 px-4 text-sm font-medium text-center border-b-2 transition-colors ${
+              eventFilter === 'all'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            All
+          </button>
+        </div>
+      </div>
 
-        {/* Shoots List */}
+      <div className="px-3 py-3 space-y-6">
+        {/* Events List */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Shoots</h2>
-          
           {/* Loading State */}
-          {isLoading ? (
+          {loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
                 <div key={i} className="bg-white border border-gray-200 rounded-lg p-4">
@@ -299,35 +245,23 @@ export default function ShootsPage() {
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-600">{error}</p>
               <button 
-                onClick={() => window.location.reload()} 
+                onClick={refresh} 
                 className="mt-2 text-sm text-red-700 underline"
               >
                 Try again
               </button>
             </div>
-          ) : displayedShoots.length > 0 ? (
+          ) : displayedEvents.length > 0 ? (
             <div className="space-y-3">
-              {displayedShoots.map((shoot, index) => (
-                <div key={shoot.id}>
-                  <ListItem
-                    title={shoot.title}
-                    subtitle={selectedClient.type === 'all' ? shoot.client : undefined}
-                    badges={[
-                      { text: formatStatusText(shoot.status), variant: getStatusColor(shoot.status) }
-                    ]}
-                    metadata={[
-                      { icon: Calendar, text: formatDate(shoot.scheduledAt) },
-                      { icon: Clock, text: `${formatTime(shoot.scheduledAt)} (${formatDuration(shoot.duration)})` },
-                      { icon: MapPin, text: shoot.location },
-                      { icon: Users, text: `${shoot.postIdeasCount} post idea${shoot.postIdeasCount !== 1 ? 's' : ''}` }
-                    ]}
-                    notes={shoot.notes}
-                    onClick={() => handleShootClick(shoot.id)}
-                    ariaLabel={`View details for ${shoot.title}`}
+              {displayedEvents.map((event, index) => (
+                <div key={event.id}>
+                  <UnifiedEventItem
+                    event={event}
+                    onClick={() => handleEventClick(event)}
                   />
                   
-                  {/* Add separator between shoots, but not after the last one */}
-                  {index < displayedShoots.length - 1 && (
+                  {/* Add separator between events, but not after the last one */}
+                  {index < displayedEvents.length - 1 && (
                     <Separator />
                   )}
                 </div>
@@ -348,7 +282,7 @@ export default function ShootsPage() {
                         Loading...
                       </>
                     ) : (
-                      `Load More (${sortedShoots.length - displayCount} remaining)`
+                      `Load More (${sortedEvents.length - displayCount} remaining)`
                     )}
                   </Button>
                 </div>
@@ -357,22 +291,25 @@ export default function ShootsPage() {
           ) : (
             /* Empty State */
             <EmptyState
-              icon={Calendar}
-              title="No shoots found"
-              description={
-                selectedClient.type === 'all' 
-                  ? "You haven't scheduled any shoots yet. Create your first shoot to get started."
-                  : `No shoots scheduled for ${selectedClient.name}. Schedule a shoot to get started.`
-              }
+              icon={emptyStateProps.icon}
+              title={emptyStateProps.title}
+              description={emptyStateProps.description}
               action={{
-                label: "Schedule Your First Shoot",
+                label: emptyStateProps.actionLabel,
                 children: (
-                  <ScheduleShootForm>
-                    <Button className="tap-target">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Schedule Your First Shoot
+                  eventFilter === 'calendar' ? (
+                    <Button className="tap-target" onClick={handleSync}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      {emptyStateProps.actionLabel}
                     </Button>
-                  </ScheduleShootForm>
+                  ) : (
+                    <ScheduleShootForm>
+                      <Button className="tap-target">
+                        <Camera className="h-4 w-4 mr-2" />
+                        {emptyStateProps.actionLabel}
+                      </Button>
+                    </ScheduleShootForm>
+                  )
                 )
               }}
             />

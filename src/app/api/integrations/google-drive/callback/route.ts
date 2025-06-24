@@ -9,99 +9,86 @@ export async function GET(req: NextRequest) {
     const state = searchParams.get('state') // User email
     const error = searchParams.get('error')
 
-    console.log('🔄 [GoogleDriveCallback] Processing OAuth callback')
-    console.log('📋 [GoogleDriveCallback] Parameters:', { 
+    console.log('🔄 [GoogleDriveCallback] Processing OAuth callback for user:', state)
+    console.log('🔍 [GoogleDriveCallback] Callback parameters:', { 
       hasCode: !!code, 
       hasState: !!state, 
       error: error || 'none' 
     })
 
-    if (error) {
-      console.error('❌ [GoogleDriveCallback] OAuth error:', error)
+    if (error || !code || !state) {
+      console.log('❌ [GoogleDriveCallback] Invalid callback parameters')
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings?tab=integrations&error=${error}`
-      )
-    }
-
-    if (!code || !state) {
-      console.error('❌ [GoogleDriveCallback] Missing required parameters')
-      return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings?tab=integrations&error=invalid_request`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=${error || 'invalid_request'}`
       )
     }
 
     // Check if Google OAuth credentials are configured
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-      console.error('❌ [GoogleDriveCallback] OAuth credentials not configured')
+      console.log('❌ [GoogleDriveCallback] OAuth credentials not configured')
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings?tab=integrations&error=oauth_not_configured`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=oauth_not_configured`
       )
     }
 
-    console.log('🔐 [GoogleDriveCallback] Initializing OAuth client')
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
       `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/integrations/google-drive/callback`
     )
 
-    console.log('🔑 [GoogleDriveCallback] Exchanging authorization code for tokens')
+    console.log('🔑 [GoogleDriveCallback] Exchanging authorization code for tokens...')
+
     // Exchange authorization code for tokens
     const { tokens } = await oauth2Client.getToken(code)
-    
-    if (!tokens.access_token) {
-      console.error('❌ [GoogleDriveCallback] No access token received')
-      return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings?tab=integrations&error=no_access_token`
-      )
-    }
-
     oauth2Client.setCredentials(tokens)
 
-    console.log('👤 [GoogleDriveCallback] Fetching user information')
+    console.log('✅ [GoogleDriveCallback] Tokens received:', {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      scope: tokens.scope || 'not provided',
+      expiryDate: tokens.expiry_date
+    })
+
     // Get user info to verify the connected email
+    console.log('👤 [GoogleDriveCallback] Getting user info...')
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
     const userInfo = await oauth2.userinfo.get()
 
     if (!userInfo.data.email) {
-      console.error('❌ [GoogleDriveCallback] No email in user info')
+      console.log('❌ [GoogleDriveCallback] No email in user info')
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings?tab=integrations&error=no_email`
+        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=no_email`
       )
     }
 
-    console.log('✅ [GoogleDriveCallback] User verified:', userInfo.data.email)
-    console.log('💾 [GoogleDriveCallback] Saving integration to database')
+    console.log('👤 [GoogleDriveCallback] User info retrieved:', {
+      email: userInfo.data.email,
+      name: userInfo.data.name
+    })
 
-    // Save integration to database with both access and refresh tokens
+    // Save integration to database
+    console.log('💾 [GoogleDriveCallback] Saving integration to database...')
     await upsertIntegration(state, 'google-drive', {
       connected: true,
       email: userInfo.data.email,
-      accessToken: tokens.access_token,
+      accessToken: tokens.access_token || undefined,
       refreshToken: tokens.refresh_token || undefined,
-      lastSync: new Date().toISOString(),
-      // Store additional metadata separately
-      expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : undefined,
-      scope: tokens.scope,
-      tokenType: tokens.token_type
+      scope: tokens.scope || undefined, // Store the granted scope
+      lastSync: new Date().toISOString()
     })
 
-    console.log('🎉 [GoogleDriveCallback] Integration saved successfully')
+    console.log('✅ [GoogleDriveCallback] Integration saved successfully')
 
-    // Redirect back to settings page with success
+    // Redirect back to integrations page with success
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings?tab=integrations&success=google-drive`
+      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?success=google-drive`
     )
     
   } catch (error) {
-    console.error('❌ [GoogleDriveCallback] Callback processing error:', error)
-    console.error('🔍 [GoogleDriveCallback] Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
-    })
-    
+    console.error('❌ [GoogleDriveCallback] Callback error:', error)
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/settings?tab=integrations&error=callback_failed`
+      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=callback_failed`
     )
   }
 } 

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Home, Calendar, User, Plus, Play, CalendarDays } from 'lucide-react'
+import { Home, User, Plus, Play, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
 
@@ -15,9 +15,9 @@ const navItems = [
   },
   {
     href: '/shoots',
-    icon: Calendar,
-    label: 'Shoots',
-    activePatterns: ['/shoots']
+    icon: CalendarDays,
+    label: 'Schedule',
+    activePatterns: ['/shoots', '/calendar']
   },
   {
     href: '/quick-actions',
@@ -25,12 +25,6 @@ const navItems = [
     label: 'Quick',
     activePatterns: ['/quick-actions'],
     isAction: true
-  },
-  {
-    href: '/calendar',
-    icon: CalendarDays,
-    label: 'Calendar',
-    activePatterns: ['/calendar']
   },
   {
     href: '/settings',
@@ -51,8 +45,8 @@ export const BottomNav = () => {
         return pathname === pattern
       }
       if (pattern === '/shoots') {
-        // Special case: /shoots should not match active shoot pages
-        return pathname.startsWith('/shoots') && !pathname.includes('/active')
+        // Special case: /shoots should not match active shoot pages, but should include calendar
+        return (pathname.startsWith('/shoots') && !pathname.includes('/active')) || pathname.startsWith('/calendar')
       }
       return pathname.startsWith(pattern)
     })

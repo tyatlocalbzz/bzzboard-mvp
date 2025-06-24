@@ -25,8 +25,24 @@ export async function GET(req: NextRequest) {
       connected: integration?.connected,
       hasAccessToken: !!integration?.accessToken,
       hasRefreshToken: !!integration?.refreshToken,
-      email: integration?.email
+      email: integration?.email,
+      scope: integration?.data?.scope || 'not stored'
     })
+
+    // Check if we have the right scopes for shared drive access
+    const storedScope = integration?.data?.scope as string | undefined
+    const hasReadOnlyScope = storedScope?.includes('drive.readonly') || false
+    const hasFileScope = storedScope?.includes('drive.file') || false
+    
+    console.log('🔑 [GoogleDriveBrowse] Scope analysis:', {
+      hasReadOnlyScope,
+      hasFileScope,
+      fullScope: storedScope
+    })
+
+    if (!hasReadOnlyScope) {
+      console.log('⚠️ [GoogleDriveBrowse] WARNING: Missing drive.readonly scope - may not be able to browse existing folders')
+    }
 
     if (!integration) {
       console.log('❌ [GoogleDriveBrowse] No Google Drive integration found')
@@ -133,40 +149,13 @@ export async function GET(req: NextRequest) {
       }
     }
     
-    // Return mock data for development with clear indication
-    console.log('🔄 [GoogleDriveBrowse] Returning mock data for development')
+    // Return error instead of mock data
+    console.log('❌ [GoogleDriveBrowse] API error - returning error response')
     
-    return NextResponse.json({
-      folders: [
-        {
-          id: 'mock-folder-1',
-          name: 'Business Content',
-          webViewLink: '',
-          path: '/My Drive/Business Content'
-        },
-        {
-          id: 'mock-folder-2',
-          name: 'Client Work',
-          webViewLink: '',
-          path: '/My Drive/Client Work'
-        },
-        {
-          id: 'mock-folder-3',
-          name: 'Photography Projects',
-          webViewLink: '',
-          path: '/My Drive/Photography Projects'
-        },
-        {
-          id: 'mock-folder-4',
-          name: '2024 Content',
-          webViewLink: '',
-          path: '/My Drive/2024 Content'
-        }
-      ],
-      parentId: 'root',
-      mock: true,
-      message: 'Using mock data due to API error'
-    })
+    return NextResponse.json(
+      { error: 'Failed to browse Google Drive folders. Please check your connection and try again.' },
+      { status: 500 }
+    )
   }
 }
 

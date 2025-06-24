@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { createInvitedUser, userExists } from '@/lib/db/users'
-import { z } from 'zod'
-
-const inviteUserSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  name: z.string().min(1, 'Name is required'),
-})
+import { clientValidation } from '@/lib/validation/client-validation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +13,24 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.json()
-    const { email, name } = inviteUserSchema.parse(body)
+    
+    // Validate using shared validation library
+    const validation = clientValidation.userProfile({
+      name: body.name,
+      email: body.email
+    })
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        { 
+          error: 'Invalid input', 
+          details: validation.errors 
+        },
+        { status: 400 }
+      )
+    }
+
+    const { email, name } = body
 
     // Check if user already exists
     const exists = await userExists(email)
@@ -47,13 +59,6 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Invite user error:', error)
     
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: error.errors },
-        { status: 400 }
-      )
-    }
-
     return NextResponse.json(
       { error: 'Failed to invite user' },
       { status: 500 }

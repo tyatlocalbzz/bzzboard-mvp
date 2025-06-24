@@ -59,9 +59,9 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
 
     if (success) {
       if (success === 'google-drive') {
-        toast.success('Google Drive connected successfully!')
+        toast.success('Google Drive connected!')
       } else if (success === 'google-calendar') {
-        toast.success('Google Calendar connected successfully!')
+        toast.success('Google Calendar connected!')
       }
       // Refresh status after successful connection
       setTimeout(() => {
@@ -73,16 +73,16 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
       let errorMessage = 'Connection failed'
       switch (error) {
         case 'oauth_not_configured':
-          errorMessage = 'Google OAuth is not configured. Please contact support.'
+          errorMessage = 'Google OAuth not configured'
           break
         case 'invalid_request':
-          errorMessage = 'Invalid request. Please try again.'
+          errorMessage = 'Invalid request'
           break
         case 'no_email':
-          errorMessage = 'Unable to access email from Google account.'
+          errorMessage = 'Unable to access email'
           break
         case 'callback_failed':
-          errorMessage = 'Connection failed. Please try again.'
+          errorMessage = 'Connection failed'
           break
       }
       toast.error(errorMessage)
@@ -100,7 +100,7 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
       }
     } catch (error) {
       console.error('Failed to load integration status:', error)
-      toast.error('Failed to load integration status')
+      toast.error('Failed to load status')
     } finally {
       setIsLoading(false)
     }
@@ -110,7 +110,7 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
     setIsRefreshing(true)
     await loadIntegrationStatus()
     setIsRefreshing(false)
-    toast.success('Integration status refreshed')
+    toast.success('Status refreshed')
   }
 
   const handleIntegrationChange = () => {
@@ -130,10 +130,20 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">Integrations</h1>
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+            <Zap className="h-4 w-4 text-blue-500" />
+            <span className="text-sm font-medium text-gray-700">
+              {connectedCount} of {totalCount} connected
+            </span>
+            {connectedCount === totalCount && (
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                All connected
+              </span>
+            )}
+          </div>
+          
           <Button
             variant="outline"
             size="sm"
@@ -144,23 +154,6 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
             <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-        </div>
-        
-        <p className="text-sm text-gray-600">
-          Connect your favorite tools to streamline your content production workflow.
-        </p>
-
-        {/* Status Overview */}
-        <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-          <Zap className="h-4 w-4 text-blue-500" />
-          <span className="text-sm font-medium text-gray-700">
-            {connectedCount} of {totalCount} integrations connected
-          </span>
-          {connectedCount === totalCount && (
-            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-              All connected
-            </span>
-          )}
         </div>
       </div>
 
@@ -194,7 +187,7 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
         <div className="space-y-3">
           <IntegrationCard
             name="Dropbox"
-            description="Alternative cloud storage for your content files"
+            description="Alternative cloud storage"
             icon="📦"
             status="coming-soon"
             disabled
@@ -202,16 +195,16 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
           
           <IntegrationCard
             name="Slack"
-            description="Get notifications about shoots and uploads"
+            description="Team notifications"
             icon="💬"
             status="coming-soon"
             disabled
           />
           
           <IntegrationCard
-            name="Adobe Creative Cloud"
-            description="Direct integration with editing workflows"
-            icon="🎨"
+            name="Notion"
+            description="Project documentation"
+            icon="📝"
             status="coming-soon"
             disabled
           />

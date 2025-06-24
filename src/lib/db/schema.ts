@@ -64,20 +64,26 @@ export const postIdeas = pgTable('post_ideas', {
 // Shoots table
 export const shoots = pgTable('shoots', {
   id: serial('id').primaryKey(),
-  clientId: integer('client_id').references(() => clients.id).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
+  clientId: integer('client_id').references(() => clients.id).notNull(),
   scheduledAt: timestamp('scheduled_at').notNull(),
-  duration: integer('duration').notNull(), // Duration in minutes
+  duration: integer('duration').notNull(), // in minutes
   location: varchar('location', { length: 255 }),
   notes: text('notes'),
-  status: shootStatusEnum('status').default('scheduled').notNull(),
+  status: varchar('status', { length: 50 }).notNull().default('scheduled'), // scheduled, active, completed, cancelled
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
+  
   // Google Calendar integration fields
   googleCalendarEventId: varchar('google_calendar_event_id', { length: 255 }),
-  googleCalendarSyncStatus: calendarSyncStatusEnum('google_calendar_sync_status').default('pending'),
+  googleCalendarSyncStatus: varchar('google_calendar_sync_status', { length: 50 }), // pending, synced, error
   googleCalendarLastSync: timestamp('google_calendar_last_sync'),
   googleCalendarError: text('google_calendar_error'),
+  
+  // Soft delete fields
+  deletedAt: timestamp('deleted_at'),
+  deletedBy: integer('deleted_by').references(() => users.id),
+  
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -113,6 +119,7 @@ export const integrations = pgTable('integrations', {
   connectedEmail: varchar('connected_email', { length: 255 }),
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
+  expiryDate: timestamp('expiry_date'), // For OAuth token expiration
   metadata: json('metadata'), // For storing settings and other metadata
   error: text('error'),
   lastSync: timestamp('last_sync'),
@@ -126,9 +133,18 @@ export const clientSettings = pgTable('client_settings', {
   clientId: integer('client_id').references(() => clients.id).notNull(),
   userEmail: varchar('user_email', { length: 255 }).notNull(),
   storageProvider: varchar('storage_provider', { length: 50 }).default('google-drive'),
+  // Legacy single folder structure (maintained for backward compatibility)
   storageFolderId: varchar('storage_folder_id', { length: 255 }),
   storageFolderName: varchar('storage_folder_name', { length: 255 }),
   storageFolderPath: varchar('storage_folder_path', { length: 500 }),
+  // New two-tier folder structure
+  clientRootFolderId: varchar('client_root_folder_id', { length: 255 }),
+  clientRootFolderName: varchar('client_root_folder_name', { length: 255 }),
+  clientRootFolderPath: text('client_root_folder_path'),
+  contentFolderId: varchar('content_folder_id', { length: 255 }),
+  contentFolderName: varchar('content_folder_name', { length: 255 }),
+  contentFolderPath: text('content_folder_path'),
+  // Custom naming settings
   customNaming: boolean('custom_naming').default(false),
   namingTemplate: varchar('naming_template', { length: 255 }),
   metadata: json('metadata'), // For additional settings

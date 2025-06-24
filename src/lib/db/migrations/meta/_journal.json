@@ -43,6 +43,13 @@
       "when": 1750654486909,
       "tag": "0005_dusty_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1750699596705,
+      "tag": "0006_add_expiry_date_to_integrations",
+      "breakpoints": true
     }
   ]
 }

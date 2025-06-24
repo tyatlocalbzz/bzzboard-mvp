@@ -44,17 +44,34 @@ export interface GoogleDriveError {
  * Unified Google Drive Service
  * Consolidates functionality from google-drive.ts, google-drive-enhanced.ts, and google-drive-folder-browser.ts
  * Applies DRY principles to eliminate code duplication
+ * Optimized for performance with minimal API calls and smart caching
+ * 
+ * Performance Optimizations Implemented:
+ * 1. Optimized field selection - Request only needed fields to reduce bandwidth
+ * 2. Smart caching - Cache paths and drive context to avoid redundant API calls
+ * 3. Batch processing - Process multiple folders efficiently without individual path lookups
+ * 4. Drive context caching - Cache shared drive information to avoid repeated checks
+ * 5. Minimal API calls - Use single API calls for multiple data points where possible
+ * 6. Path construction optimization - Build paths from cached parent paths when available
+ * 7. Duplicate detection optimization - Use minimal fields for existence checks
+ * 8. Cache management - Provide cache control and monitoring capabilities
  */
 export class UnifiedGoogleDriveService {
   private drive: ReturnType<typeof google.drive>
   private oauth2Client: InstanceType<typeof google.auth.OAuth2>
   private settings?: GoogleDriveSettings
   private pathCache = new Map<string, string>()
+  private driveContextCache = new Map<string, { isSharedDrive: boolean; driveId?: string }>()
   
   // Configuration
   private readonly maxRetries = 3
   private readonly baseDelay = 1000
   private readonly pageSize = 100
+  
+  // Optimized field selections based on Google Drive API best practices
+  private readonly folderFields = 'files(id,name,webViewLink,parents,driveId)'
+  private readonly driveFields = 'drives(id,name)'
+  private readonly pathFields = 'id,name,parents,driveId'
 
   constructor(accessToken: string, refreshToken?: string, settings?: GoogleDriveSettings) {
     this.oauth2Client = new google.auth.OAuth2()
@@ -213,14 +230,14 @@ export class UnifiedGoogleDriveService {
   }
 
   /**
-   * Get My Drive folders with path caching
+   * Get My Drive folders with optimized field selection
    */
   private async getMyDriveFolders(): Promise<FolderBrowserItem[]> {
     console.log('📁 [GoogleDriveService] Getting My Drive folders...')
     
     const response = await this.drive.files.list({
       q: this.buildFolderQuery('root'),
-      fields: 'files(id,name,webViewLink)',
+      fields: this.folderFields,
       orderBy: 'name',
       pageSize: this.pageSize
     })
@@ -228,9 +245,11 @@ export class UnifiedGoogleDriveService {
     const folders = response.data.files?.map((file) => {
       const path = `/My Drive/${file.name || 'Unknown'}`
       
-      // Cache path for later use
+      // Cache path and drive context for later use
       if (file.id) {
         this.pathCache.set(file.id, path)
+        // My Drive folders are never in shared drives
+        this.driveContextCache.set(file.id, { isSharedDrive: false })
       }
       
       return {
@@ -247,23 +266,25 @@ export class UnifiedGoogleDriveService {
   }
 
   /**
-   * Get Shared Drives (Team Drives) with error handling
+   * Get Shared Drives (Team Drives) with optimized field selection
    */
   private async getSharedDrives(): Promise<FolderBrowserItem[]> {
     console.log('🏢 [GoogleDriveService] Getting Shared Drives...')
     
     try {
       const response = await this.drive.drives.list({
-        fields: 'drives(id,name)',
+        fields: this.driveFields,
         pageSize: this.pageSize
       })
 
       const sharedDrives = response.data.drives?.map(drive => {
         const path = `/Shared Drives/${drive.name || 'Unnamed'}`
         
-        // Cache path for later use
+        // Cache path and drive context for later use
         if (drive.id) {
           this.pathCache.set(drive.id, path)
+          // Shared drive roots are shared drives
+          this.driveContextCache.set(drive.id, { isSharedDrive: true, driveId: drive.id })
         }
         
         return {
@@ -284,7 +305,7 @@ export class UnifiedGoogleDriveService {
   }
 
   /**
-   * Get contents of a specific folder or shared drive
+   * Get contents of a specific folder or shared drive with optimized batch processing
    */
   private async getFolderContents(parentId: string): Promise<FolderBrowserItem[]> {
     console.log('📂 [GoogleDriveService] Getting folder contents for:', parentId)
@@ -300,57 +321,82 @@ export class UnifiedGoogleDriveService {
       path: '/Root'
     })
 
-    const isSharedDrive = await this.isSharedDriveRoot(parentId)
-    const queryOptions = this.getQueryOptionsForFolder(parentId, isSharedDrive)
+    // Use cached drive context or determine it efficiently
+    let driveContext = this.driveContextCache.get(parentId)
+    if (!driveContext) {
+      // Batch the drive context determination with folder listing
+      driveContext = await this.determineDriveContext(parentId)
+      this.driveContextCache.set(parentId, driveContext)
+    }
     
+    console.log('🔍 [GoogleDriveService] Drive context (cached):', {
+      parentId,
+      ...driveContext
+    })
+
+    const queryOptions = this.getQueryOptionsForSharedDriveContext(parentId, driveContext.isSharedDrive, driveContext.driveId)
+    
+    console.log('🚀 [GoogleDriveService] Executing optimized folder query...')
     const response = await this.drive.files.list(queryOptions)
 
-    // Process subfolders with path resolution
-    const subfolderPromises = response.data.files?.map(async (file) => {
-      const path = await this.getFolderPath(file.id || '')
-      return {
-        id: file.id || '',
-        name: file.name || '',
-        webViewLink: file.webViewLink || '',
-        path,
-        type: 'folder' as const
-      }
-    }) || []
+    console.log('📊 [GoogleDriveService] Raw API response:', {
+      filesFound: response.data.files?.length || 0,
+      files: response.data.files?.map(f => ({ id: f.id, name: f.name })) || []
+    })
 
-    const subfolders = await Promise.all(subfolderPromises)
-    folders.push(...subfolders)
+    // Batch process subfolders with optimized path construction
+    if (response.data.files && response.data.files.length > 0) {
+      const subfolders = await this.batchProcessFolderPaths(response.data.files, driveContext)
+      folders.push(...subfolders)
+    }
 
     console.log('📊 [GoogleDriveService] Folder contents found:', {
       parentId,
-      isSharedDrive,
-      subfolders: subfolders.length
+      driveContext,
+      subfolders: folders.length - 1 // Exclude back navigation
     })
 
     return folders
   }
 
   /**
-   * Get query options for different folder types
+   * Get query options optimized for shared drive context with better field selection
    */
-  private getQueryOptionsForFolder(parentId: string, isSharedDrive: boolean) {
+  private getQueryOptionsForSharedDriveContext(parentId: string, isInSharedDrive: boolean, driveId?: string) {
+    const baseQuery = this.buildFolderQuery(parentId)
+    
+    console.log('🔧 [GoogleDriveService] Building optimized shared drive context query:', {
+      parentId,
+      isInSharedDrive,
+      driveId,
+      baseQuery
+    })
+
     const baseOptions = {
-      q: this.buildFolderQuery(parentId),
-      fields: 'files(id,name,webViewLink)',
+      q: baseQuery,
+      fields: this.folderFields, // Use optimized field selection
       orderBy: 'name',
-      pageSize: this.pageSize
+      pageSize: this.pageSize,
+      // Always include shared drive support
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      supportsTeamDrives: true
     }
 
-    if (isSharedDrive) {
+    if (isInSharedDrive && driveId) {
+      console.log('🏢 [GoogleDriveService] Using shared drive scoped query with driveId:', driveId)
       return {
         ...baseOptions,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-        driveId: parentId,
+        driveId: driveId,
         corpora: 'drive' as const
       }
     }
 
-    return baseOptions
+    console.log('📁 [GoogleDriveService] Using cross-drive query')
+    return {
+      ...baseOptions,
+      corpora: 'allDrives' as const
+    }
   }
 
   /**
@@ -399,16 +445,22 @@ export class UnifiedGoogleDriveService {
   }
 
   /**
-   * Build folder path by traversing parent hierarchy
+   * Build folder path with simplified and reliable approach
    */
   private async buildFolderPath(folderId: string): Promise<string> {
     const pathSegments: string[] = []
     let currentId = folderId
+    let sharedDriveId: string | undefined
+    const visited = new Set<string>() // Prevent infinite loops
 
-    while (currentId && currentId !== 'root') {
+    console.log('🗂️ [GoogleDriveService] Building path for folder:', folderId)
+
+    while (currentId && currentId !== 'root' && !visited.has(currentId)) {
+      visited.add(currentId)
+
       const response = await this.drive.files.get({
         fileId: currentId,
-        fields: 'id,name,parents',
+        fields: 'id,name,parents,driveId',
         supportsAllDrives: true
       })
 
@@ -417,13 +469,44 @@ export class UnifiedGoogleDriveService {
         pathSegments.unshift(folder.name)
       }
 
+      // Track if we're in a shared drive
+      if (folder.driveId) {
+        sharedDriveId = folder.driveId
+      }
+
       // Move to parent folder
       currentId = folder.parents?.[0] || ''
       if (currentId === 'root') break
     }
 
-    const fullPath = pathSegments.length > 0 ? `/My Drive/${pathSegments.join('/')}` : '/My Drive'
-    console.log('📂 [GoogleDriveService] Resolved path:', fullPath)
+    // Construct the path based on drive type
+    let fullPath: string
+    
+    if (sharedDriveId) {
+      // For shared drive folders, get the drive name
+      try {
+        const driveResponse = await this.drive.drives.get({
+          driveId: sharedDriveId,
+          fields: 'id,name'
+        })
+        const driveName = driveResponse.data.name || 'Unknown'
+        fullPath = pathSegments.length > 0 
+          ? `/Shared Drives/${driveName}/${pathSegments.join('/')}`
+          : `/Shared Drives/${driveName}`
+      } catch (error) {
+        console.warn('⚠️ [GoogleDriveService] Could not resolve shared drive name:', error)
+        fullPath = pathSegments.length > 0 
+          ? `/Shared Drives/Unknown/${pathSegments.join('/')}`
+          : '/Shared Drives/Unknown'
+      }
+    } else {
+      // For My Drive folders
+      fullPath = pathSegments.length > 0 
+        ? `/My Drive/${pathSegments.join('/')}`
+        : '/My Drive'
+    }
+    
+    console.log('📂 [GoogleDriveService] Built path:', fullPath)
     return fullPath
   }
 
@@ -454,7 +537,7 @@ export class UnifiedGoogleDriveService {
 
     const response = await this.drive.files.create({
       requestBody: fileMetadata,
-      fields: 'id,name,webViewLink',
+      fields: 'id,name,webViewLink', // Minimal fields needed for response
       supportsAllDrives: true
     })
 
@@ -506,14 +589,14 @@ export class UnifiedGoogleDriveService {
   }
 
   /**
-   * Check for duplicate folders before creation
+   * Check for duplicate folders before creation with minimal API call
    */
   private async checkForDuplicateFolder(folderName: string, parentId?: string): Promise<void> {
     const query = this.buildFolderQuery(parentId, `name='${folderName.replace(/'/g, "\\'")}'`)
     
     const response = await this.drive.files.list({
       q: query,
-      fields: 'files(id,name)',
+      fields: 'files(id)', // Only need ID to check existence
       pageSize: 1
     })
 
@@ -523,20 +606,20 @@ export class UnifiedGoogleDriveService {
   }
 
   /**
-   * Find existing folder or create new one
+   * Find existing folder or create new one with optimized field selection
    */
   async findOrCreateFolder(folderName: string, parentId?: string): Promise<DriveFolder> {
     console.log('🔍 [GoogleDriveService] Finding or creating folder...')
     console.log('📋 Folder parameters:', { folderName, parentId })
     
     try {
-      // Search for existing folder
+      // Search for existing folder with optimized query
       const query = this.buildFolderQuery(parentId, `name='${folderName.replace(/'/g, "\\'")}'`)
       
       const searchResponse = await this.drive.files.list({
         q: query,
-        fields: 'files(id,name,webViewLink)',
-        pageSize: 1
+        fields: 'files(id,name,webViewLink)', // Minimal fields for search
+        pageSize: 1 // Only need to know if it exists
       })
 
       // Return existing folder if found
@@ -623,11 +706,12 @@ export class UnifiedGoogleDriveService {
     const formattedDate = new Date(shootDate).toISOString().split('T')[0]
     const shootFolderName = `[${formattedDate}] ${shootTitle}`
     
-    // Create client folder first
-    const clientFolder = await this.createClientFolder(clientName)
+    // Use the selected parent folder directly (user has already chosen the client folder)
+    const parentFolderId = this.settings?.parentFolderId
+    console.log('📂 [GoogleDriveService] Using selected parent folder:', parentFolderId || 'root')
     
-    // Then create shoot folder inside client folder
-    return this.findOrCreateFolder(shootFolderName, clientFolder.id)
+    // Create shoot folder directly in the selected folder
+    return this.findOrCreateFolder(shootFolderName, parentFolderId)
   }
 
   /**
@@ -766,6 +850,166 @@ export class UnifiedGoogleDriveService {
    */
   getSettings(): GoogleDriveSettings | undefined {
     return this.settings
+  }
+
+  /**
+   * Efficiently determine drive context with minimal API calls
+   */
+  private async determineDriveContext(folderId: string): Promise<{ isSharedDrive: boolean; driveId?: string }> {
+    try {
+      // Check if it's a known shared drive root first
+      const isSharedDriveRoot = await this.isSharedDriveRoot(folderId)
+      if (isSharedDriveRoot) {
+        return { isSharedDrive: true, driveId: folderId }
+      }
+
+      // Single API call to get both parents and driveId
+      const response = await this.drive.files.get({
+        fileId: folderId,
+        fields: 'parents,driveId',
+        supportsAllDrives: true
+      })
+      
+      const isSharedDrive = !!response.data.driveId
+      return { 
+        isSharedDrive, 
+        driveId: response.data.driveId || undefined 
+      }
+    } catch {
+      console.warn('⚠️ [GoogleDriveService] Could not determine drive context for:', folderId)
+      return { isSharedDrive: false }
+    }
+  }
+
+  /**
+   * Batch process folder paths with simplified approach
+   */
+  private async batchProcessFolderPaths(
+    files: Array<{ id?: string | null; name?: string | null; webViewLink?: string | null; parents?: string[] | null; driveId?: string | null }>,
+    parentContext: { isSharedDrive: boolean; driveId?: string }
+  ): Promise<FolderBrowserItem[]> {
+    const results: FolderBrowserItem[] = []
+    
+    // Get the parent folder ID to determine the current folder being browsed
+    const parentFolderId = files[0]?.parents?.[0]
+    
+    console.log('📦 [GoogleDriveService] Batch processing with context:', {
+      parentFolderId,
+      isSharedDrive: parentContext.isSharedDrive,
+      driveId: parentContext.driveId,
+      filesCount: files.length
+    })
+    
+    // Determine the base path for all files in this folder
+    let basePath: string
+    
+    if (parentContext.isSharedDrive && parentContext.driveId) {
+      // For shared drives, get the drive name directly
+      try {
+        const driveResponse = await this.drive.drives.get({
+          driveId: parentContext.driveId,
+          fields: 'id,name'
+        })
+        const driveName = driveResponse.data.name || 'Unknown'
+        
+        // If we're browsing the shared drive root, use just the drive path
+        if (parentFolderId === parentContext.driveId) {
+          basePath = `/Shared Drives/${driveName}`
+        } else {
+          // For nested folders, get the current folder's path
+          const currentFolderPath = await this.getFolderPath(parentFolderId!)
+          basePath = currentFolderPath
+        }
+        
+        console.log('🏢 [GoogleDriveService] Shared drive base path:', basePath)
+      } catch (error) {
+        console.warn('⚠️ [GoogleDriveService] Could not resolve shared drive name:', error)
+        basePath = '/Shared Drives/Unknown'
+      }
+    } else {
+      // For My Drive folders
+      if (!parentFolderId || parentFolderId === 'root') {
+        basePath = '/My Drive'
+      } else {
+        basePath = await this.getFolderPath(parentFolderId)
+      }
+      console.log('📁 [GoogleDriveService] My Drive base path:', basePath)
+    }
+    
+    // Process each file with the determined base path
+    for (const file of files) {
+      if (!file.id || !file.name) continue
+      
+      const path = `${basePath}/${file.name}`
+      
+      // Cache the path and drive context
+      this.pathCache.set(file.id, path)
+      if (file.driveId || parentContext.isSharedDrive) {
+        this.driveContextCache.set(file.id, {
+          isSharedDrive: !!file.driveId || parentContext.isSharedDrive,
+          driveId: file.driveId || parentContext.driveId
+        })
+      }
+      
+      results.push({
+        id: file.id,
+        name: file.name,
+        webViewLink: file.webViewLink || '',
+        path,
+        type: 'folder' as const
+      })
+    }
+    
+    console.log(`📦 [GoogleDriveService] Batch processed ${results.length} folder paths`)
+    return results
+  }
+
+  // ===========================================
+  // CACHE MANAGEMENT METHODS
+  // ===========================================
+
+  /**
+   * Clear all caches - useful for testing or when data becomes stale
+   */
+  clearCache(): void {
+    this.pathCache.clear()
+    this.driveContextCache.clear()
+    console.log('🧹 [GoogleDriveService] All caches cleared')
+  }
+
+  /**
+   * Get cache statistics for monitoring
+   */
+  getCacheStats(): { pathCacheSize: number; driveContextCacheSize: number } {
+    return {
+      pathCacheSize: this.pathCache.size,
+      driveContextCacheSize: this.driveContextCache.size
+    }
+  }
+
+  /**
+   * Warm up cache for a specific folder and its children (optional optimization)
+   */
+  async warmUpCache(folderId: string): Promise<void> {
+    try {
+      console.log('🔥 [GoogleDriveService] Warming up cache for folder:', folderId)
+      
+      // Pre-populate drive context
+      if (!this.driveContextCache.has(folderId)) {
+        const context = await this.determineDriveContext(folderId)
+        this.driveContextCache.set(folderId, context)
+      }
+      
+      // Pre-populate path if not cached
+      if (!this.pathCache.has(folderId)) {
+        const path = await this.getFolderPath(folderId)
+        this.pathCache.set(folderId, path)
+      }
+      
+      console.log('✅ [GoogleDriveService] Cache warmed up for folder:', folderId)
+    } catch (error) {
+      console.warn('⚠️ [GoogleDriveService] Failed to warm up cache:', error)
+    }
   }
 }
 

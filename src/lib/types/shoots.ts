@@ -90,4 +90,51 @@ export interface DriveFolder {
   name: string
   webViewLink: string
   shareLink?: string
+}
+
+// Unified Event Types for Enhanced Shoots Page
+export interface CalendarEventAttendee {
+  email: string
+  displayName?: string
+  responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted'
+}
+
+export interface UnifiedEvent {
+  type: 'shoot' | 'calendar'
+  id: string
+  title: string
+  startTime: string // ISO string
+  endTime: string // ISO string
+  duration: number // in minutes
+  location?: string
+  
+  // Shoot-specific fields
+  client?: string
+  shootStatus?: 'scheduled' | 'active' | 'completed' | 'cancelled'
+  postIdeasCount?: number
+  shootId?: number
+  
+  // Calendar-specific fields
+  description?: string
+  status?: 'confirmed' | 'tentative' | 'cancelled'
+  attendees?: CalendarEventAttendee[]
+  isRecurring?: boolean
+  conflictDetected?: boolean
+  syncStatus?: 'synced' | 'pending' | 'error'
+  isShootEvent?: boolean
+  lastModified?: string
+  
+  // Common fields
+  notes?: string
+}
+
+export type UnifiedEventFilter = 'shoots' | 'calendar' | 'all'
+
+export interface UnifiedEventsResponse {
+  success: boolean
+  events: UnifiedEvent[]
+  totalCount: number
+  filter: UnifiedEventFilter
+  shootsCount: number
+  calendarEventsCount: number
 } 

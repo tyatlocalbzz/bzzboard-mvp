@@ -17,13 +17,7 @@ export const IntegrationsTab = ({ user }: IntegrationsTabProps) => {
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold text-gray-900">Connected Services</h2>
-        <p className="text-sm text-gray-600">
-          Connect and configure external services to enhance your workflow
-        </p>
-      </div>
-      
+      <h2 className="text-lg font-semibold text-gray-900">Integrations</h2>
       <IntegrationsManager user={integrationsUser} />
     </div>
   )

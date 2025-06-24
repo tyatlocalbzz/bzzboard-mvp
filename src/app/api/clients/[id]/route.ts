@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
-import { getClientById, updateClient, deleteClient } from '@/lib/db/clients'
+import { getClientByIdAsClientData, updateClient, deleteClient } from '@/lib/db/clients'
+import { clientValidation } from '@/lib/validation/client-validation'
 
 export async function GET(
   request: NextRequest,
@@ -25,7 +26,7 @@ export async function GET(
     }
 
     console.log('🔍 [ClientAPI] Looking up client:', clientId)
-    const client = await getClientById(clientId)
+    const client = await getClientByIdAsClientData(clientId)
     
     if (!client) {
       console.log('❌ [ClientAPI] Client not found:', clientId)
@@ -35,17 +36,7 @@ export async function GET(
     console.log('✅ [ClientAPI] Client found:', client.name)
     return NextResponse.json({
       success: true,
-      client: {
-        id: client.id.toString(),
-        name: client.name,
-        type: 'client' as const,
-        primaryContactName: client.primaryContactName,
-        primaryContactEmail: client.primaryContactEmail,
-        primaryContactPhone: client.primaryContactPhone,
-        website: client.website,
-        socialMedia: client.socialMedia,
-        notes: client.notes
-      }
+      client
     })
 
   } catch (error) {
@@ -85,26 +76,20 @@ export async function PUT(
       notes 
     } = body
 
-    // Validate required fields
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Client name is required' },
-        { status: 400 }
-      )
-    }
+    // Validate using shared validation library
+    const validation = clientValidation.clientData({
+      name,
+      primaryContactName,
+      primaryContactEmail,
+      primaryContactPhone,
+      website
+    })
 
-    // Basic validation for email format if provided
-    if (primaryContactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryContactEmail)) {
+    if (!validation.valid) {
+      // Return the first error found
+      const firstError = Object.values(validation.errors)[0]
       return NextResponse.json(
-        { error: 'Invalid email format' },
-        { status: 400 }
-      )
-    }
-
-    // Basic validation for website URL if provided
-    if (website && website.trim() && !website.startsWith('http')) {
-      return NextResponse.json(
-        { error: 'Website must start with http:// or https://' },
+        { error: firstError },
         { status: 400 }
       )
     }

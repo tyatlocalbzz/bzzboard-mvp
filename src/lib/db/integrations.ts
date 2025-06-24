@@ -9,6 +9,7 @@ export interface IntegrationStatus {
   error?: string
   accessToken?: string
   refreshToken?: string
+  expiryDate?: string
   data?: Record<string, unknown> // For storing settings and other metadata
 }
 
@@ -35,6 +36,7 @@ export const getUserIntegrations = async (userEmail: string): Promise<UserIntegr
         error: integration.error || undefined,
         accessToken: integration.accessToken || undefined,
         refreshToken: integration.refreshToken || undefined,
+        expiryDate: integration.expiryDate?.toISOString(),
         data: integration.metadata ? (integration.metadata as Record<string, unknown>) : undefined
       }
 
@@ -69,7 +71,7 @@ export const upsertIntegration = async (
       .limit(1)
 
     // Separate integration status from additional data
-    const { connected, email, lastSync, error, accessToken, refreshToken, ...additionalData } = data
+    const { connected, email, lastSync, error, accessToken, refreshToken, expiryDate, ...additionalData } = data
 
     const integrationData = {
       userEmail,
@@ -78,6 +80,7 @@ export const upsertIntegration = async (
       connectedEmail: email || null,
       accessToken: accessToken || null,
       refreshToken: refreshToken || null,
+      expiryDate: expiryDate ? new Date(expiryDate) : null,
       error: error || null,
       lastSync: lastSync ? new Date(lastSync) : null,
       metadata: Object.keys(additionalData).length > 0 ? additionalData : null,
@@ -155,6 +158,7 @@ export const getIntegration = async (
       error: record.error || undefined,
       accessToken: record.accessToken || undefined,
       refreshToken: record.refreshToken || undefined,
+      expiryDate: record.expiryDate?.toISOString(),
       data: record.metadata ? (record.metadata as Record<string, unknown>) : undefined
     }
 

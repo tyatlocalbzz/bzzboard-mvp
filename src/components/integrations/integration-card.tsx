@@ -132,14 +132,20 @@ export const IntegrationCard = ({
     return date.toLocaleDateString()
   }
 
+  const actionButton = getActionButton()
+  const hasActions = actionButton || additionalActions
+
   return (
     <div className={cn(
       'bg-white border border-gray-200 rounded-lg p-4 transition-colors',
       disabled && 'opacity-60',
       className
     )}>
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3 flex-1">
+      {/* Mobile-first: Stack layout */}
+      <div className="flex flex-col space-y-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+        
+        {/* Content Section */}
+        <div className="flex items-start gap-3 flex-1 min-w-0">
           {/* Icon */}
           <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
             {typeof icon === 'string' ? (
@@ -162,7 +168,7 @@ export const IntegrationCard = ({
             <div className="flex items-center gap-2 mb-2">
               {getStatusBadge()}
               {connectedEmail && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 truncate">
                   {connectedEmail}
                 </span>
               )}
@@ -184,17 +190,13 @@ export const IntegrationCard = ({
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="flex-shrink-0 ml-3">
-          <div className="flex flex-col items-end gap-2">
-            {getActionButton()}
-            {additionalActions && (
-              <div className="flex items-center">
-                {additionalActions}
-              </div>
-            )}
-          </div>
+        {/* Action Buttons Section */}
+        {hasActions && (
+          <div className="flex flex-row gap-2 justify-start sm:flex-col sm:items-end sm:justify-start sm:gap-2 sm:ml-3 sm:flex-shrink-0">
+            {actionButton}
+            {additionalActions}
         </div>
+        )}
       </div>
     </div>
   )

@@ -1,0 +1,33 @@
+{
+  "summary": {
+    "totalTests": 47,
+    "passed": 25,
+    "failed": 22,
+    "skipped": 0,
+    "duration": 2367,
+    "successRate": "53.19"
+  },
+  "performance": {
+    "slowTests": [],
+    "averageTestDuration": "50.36",
+    "thresholds": {
+      "database": {
+        "read": 100,
+        "write": 200,
+        "complex": 500
+      },
+      "api": {
+        "simple": 200,
+        "complex": 1000,
+        "external": 2000
+      },
+      "services": {
+        "sync": 3000,
+        "upload": 5000,
+        "batch": 10000
+      }
+    }
+  },
+  "optimization": [],
+  "timestamp": "2025-06-23T20:36:04.765Z"
+}

@@ -13,6 +13,7 @@ import { ClientSelector } from '@/components/layout/client-selector'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ClientStorageSettingsForm } from '@/components/settings/client-storage-settings-form'
+import { MobileInput } from '@/components/ui/mobile-input'
 import { 
   User, 
   Globe, 
@@ -31,6 +32,7 @@ import { useClient } from '@/contexts/client-context'
 import { ClientData } from '@/lib/types/client'
 import { ClientStorageSettings } from '@/lib/types/settings'
 import { toast } from 'sonner'
+import { clientValidation, validateField } from '@/lib/validation/client-validation'
 
 export const ClientSettingsTab = () => {
   const { selectedClient } = useClient()
@@ -40,8 +42,8 @@ export const ClientSettingsTab = () => {
   const [storageSettings, setStorageSettings] = useState<ClientStorageSettings | null>(null)
   const [showStorageDialog, setShowStorageDialog] = useState(false)
   const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({})
 
-  // Load client data when selection changes
   useEffect(() => {
     if (selectedClient && selectedClient.type === 'client') {
       loadClientData(selectedClient.id)
@@ -51,7 +53,6 @@ export const ClientSettingsTab = () => {
     }
   }, [selectedClient])
 
-  // Check Google Drive connection status
   useEffect(() => {
     checkGoogleDriveStatus()
   }, [])
@@ -61,7 +62,7 @@ export const ClientSettingsTab = () => {
       const response = await fetch('/api/integrations/status', { credentials: 'include' })
       if (response.ok) {
         const data = await response.json()
-        setGoogleDriveConnected(data.integrations?.['google-drive']?.connected || false)
+        setGoogleDriveConnected(data.integrations?.googleDrive?.connected || false)
       }
     } catch (error) {
       console.error('Error checking Google Drive status:', error)
@@ -72,20 +73,13 @@ export const ClientSettingsTab = () => {
     try {
       setIsLoading(true)
       
-      console.log('🔍 [ClientSettings] Loading data for client:', clientId)
-      
-      // Load client details and storage settings in parallel
       const [clientResponse, storageResponse] = await Promise.all([
         fetch(`/api/clients/${clientId}`, { credentials: 'include' }),
         fetch(`/api/client-settings/${clientId}`, { credentials: 'include' })
       ])
 
-      console.log('📊 [ClientSettings] Client response status:', clientResponse.status)
-      console.log('📊 [ClientSettings] Storage response status:', storageResponse.status)
-
       if (clientResponse.ok) {
         const clientData = await clientResponse.json()
-        console.log('✅ [ClientSettings] Client data loaded:', clientData)
         setClientData(clientData.client)
       } else {
         const errorText = await clientResponse.text()
@@ -95,12 +89,8 @@ export const ClientSettingsTab = () => {
 
       if (storageResponse.ok) {
         const storageData = await storageResponse.json()
-        console.log('✅ [ClientSettings] Storage data loaded:', storageData)
         setStorageSettings(storageData.clientSettings)
       } else {
-        const errorText = await storageResponse.text()
-        console.log('⚠️ [ClientSettings] Storage settings not found:', storageResponse.status, errorText)
-        // No storage settings exist yet
         setStorageSettings(null)
       }
     } catch (error) {
@@ -111,12 +101,20 @@ export const ClientSettingsTab = () => {
     }
   }
 
+  // Phone number formatting utility
+  const formatPhoneNumber = (value: string): string => {
+    return clientValidation.phone.format(value)
+  }
+
   const handleFieldChange = (field: keyof ClientData, value: string) => {
     if (!clientData) return
     
+    // Apply phone formatting if it's the phone field
+    const processedValue = field === 'primaryContactPhone' ? formatPhoneNumber(value) : value
+    
     setClientData(prev => ({
       ...prev!,
-      [field]: value
+      [field]: processedValue
     }))
   }
 
@@ -132,22 +130,33 @@ export const ClientSettingsTab = () => {
     }))
   }
 
+  // Handle field blur to mark as touched
+  const handleFieldBlur = (fieldName: string) => {
+    setTouchedFields(prev => ({ ...prev, [fieldName]: true }))
+  }
+
+  // Get field validation state
+  const getFieldValidationState = (fieldName: string, value: string) => {
+    const touched = touchedFields[fieldName]
+    return validateField(fieldName, value, touched, false)
+  }
+
   const validateForm = (): string | null => {
-    if (!clientData?.name?.trim()) {
-      return 'Client name is required'
+    if (!clientData) return 'No client data available'
+    
+    const validation = clientValidation.clientData({
+      name: clientData.name,
+      primaryContactName: clientData.primaryContactName,
+      primaryContactEmail: clientData.primaryContactEmail,
+      primaryContactPhone: clientData.primaryContactPhone,
+      website: clientData.website
+    })
+    
+    if (!validation.valid) {
+      // Return the first error found
+      return Object.values(validation.errors)[0] as string
     }
-
-    if (clientData.primaryContactEmail && 
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientData.primaryContactEmail)) {
-      return 'Invalid email format'
-    }
-
-    if (clientData.website && 
-        clientData.website.trim() && 
-        !clientData.website.startsWith('http')) {
-      return 'Website must start with http:// or https://'
-    }
-
+    
     return null
   }
 
@@ -180,8 +189,7 @@ export const ClientSettingsTab = () => {
       })
 
       if (response.ok) {
-        toast.success('Client settings saved successfully!')
-        // Reload to get fresh data
+        toast.success('Client settings saved!')
         await loadClientData(clientData.id)
       } else {
         const errorData = await response.json()
@@ -215,18 +223,11 @@ export const ClientSettingsTab = () => {
     }
   }
 
-  // Show empty state if no client selected or "All Clients" selected
   if (!selectedClient || selectedClient.type === 'all') {
     return (
       <div className="space-y-6">
-        {/* Header with Client Selector */}
         <div className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
-            <p className="text-sm text-gray-600">
-              Select a client to configure their details and storage settings
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
           
           <div className="flex items-center gap-2">
             <Label className="text-sm font-medium text-gray-700">Select Client:</Label>
@@ -237,7 +238,7 @@ export const ClientSettingsTab = () => {
         <EmptyState
           icon={User}
           title="Select a client"
-          description="Choose a client from the dropdown above to configure their settings"
+          description="Choose a client to configure settings"
         />
       </div>
     )
@@ -246,14 +247,8 @@ export const ClientSettingsTab = () => {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        {/* Header with Client Selector */}
         <div className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
-            <p className="text-sm text-gray-600">
-              Configure client details and storage settings
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
           
           <div className="flex items-center gap-2">
             <Label className="text-sm font-medium text-gray-700">Client:</Label>
@@ -263,7 +258,7 @@ export const ClientSettingsTab = () => {
 
         <div className="flex items-center justify-center py-12">
           <LoadingSpinner size="lg" />
-          <span className="ml-3 text-gray-600">Loading client settings...</span>
+          <span className="ml-3 text-gray-600">Loading...</span>
         </div>
       </div>
     )
@@ -273,12 +268,7 @@ export const ClientSettingsTab = () => {
     return (
       <div className="space-y-6">
         <div className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
-            <p className="text-sm text-gray-600">
-              Configure client details and storage settings
-            </p>
-          </div>
+          <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
           
           <div className="flex items-center gap-2">
             <Label className="text-sm font-medium text-gray-700">Client:</Label>
@@ -296,14 +286,8 @@ export const ClientSettingsTab = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Client Selector */}
       <div className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
-          <p className="text-sm text-gray-600">
-            Configure {clientData.name}&apos;s details and storage settings
-          </p>
-        </div>
+        <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
         
         <div className="flex items-center gap-2">
           <Label className="text-sm font-medium text-gray-700">Client:</Label>
@@ -313,31 +297,28 @@ export const ClientSettingsTab = () => {
 
       <Separator />
 
-      {/* Client Information */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <User className="h-5 w-5 text-gray-500" />
           <h3 className="text-lg font-semibold text-gray-900">Client Information</h3>
         </div>
-        <p className="text-sm text-gray-600">
-          Basic information and contact details for {clientData.name}
-        </p>
 
         <div className="space-y-4">
-          {/* Client Name */}
           <div className="space-y-2">
             <Label htmlFor="clientName" className="text-sm font-medium">
               Client Name *
             </Label>
-            <Input
+            <MobileInput
               id="clientName"
               value={clientData.name || ''}
               onChange={(e) => handleFieldChange('name', e.target.value)}
+              onBlur={() => handleFieldBlur('name')}
               placeholder="Enter client name"
+              validationState={getFieldValidationState('name', clientData.name || '').state}
+              error={touchedFields.name && !clientData.name ? 'Client name is required' : undefined}
             />
           </div>
 
-          {/* Primary Contact Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-gray-500" />
@@ -347,13 +328,16 @@ export const ClientSettingsTab = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="contactName" className="text-sm">
-                  Contact Name
+                  Contact Name *
                 </Label>
-                <Input
+                <MobileInput
                   id="contactName"
                   value={clientData.primaryContactName || ''}
                   onChange={(e) => handleFieldChange('primaryContactName', e.target.value)}
+                  onBlur={() => handleFieldBlur('primaryContactName')}
                   placeholder="John Doe"
+                  validationState={getFieldValidationState('primaryContactName', clientData.primaryContactName || '').state}
+                  error={touchedFields.primaryContactName && !clientData.primaryContactName ? 'Contact name is required' : undefined}
                 />
               </div>
               
@@ -361,52 +345,62 @@ export const ClientSettingsTab = () => {
                 <Label htmlFor="contactPhone" className="text-sm">
                   Phone
                 </Label>
-                <Input
+                <MobileInput
                   id="contactPhone"
+                  type="tel"
                   value={clientData.primaryContactPhone || ''}
                   onChange={(e) => handleFieldChange('primaryContactPhone', e.target.value)}
-                  placeholder="+1 (555) 123-4567"
+                  onBlur={() => handleFieldBlur('primaryContactPhone')}
+                  placeholder="(555) 123-4567"
+                  validationState={getFieldValidationState('primaryContactPhone', clientData.primaryContactPhone || '').state}
+                  error={touchedFields.primaryContactPhone && clientData.primaryContactPhone && !clientValidation.phone.validate(clientData.primaryContactPhone).valid ? 'Please enter a valid phone number' : undefined}
+                  autoComplete="tel"
+                  inputMode="tel"
+                  maxLength={14}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="contactEmail" className="text-sm">
-                Email
+                Email *
               </Label>
-              <Input
+              <MobileInput
                 id="contactEmail"
                 type="email"
                 value={clientData.primaryContactEmail || ''}
                 onChange={(e) => handleFieldChange('primaryContactEmail', e.target.value)}
+                onBlur={() => handleFieldBlur('primaryContactEmail')}
                 placeholder="john@example.com"
+                validationState={getFieldValidationState('primaryContactEmail', clientData.primaryContactEmail || '').state}
+                error={touchedFields.primaryContactEmail && (!clientData.primaryContactEmail || !clientValidation.email(clientData.primaryContactEmail).valid) ? 'Please enter a valid email address' : undefined}
               />
             </div>
           </div>
 
-          {/* Website */}
           <div className="space-y-2">
             <Label htmlFor="website" className="text-sm font-medium flex items-center gap-2">
               <Globe className="h-4 w-4 text-gray-500" />
               Website
             </Label>
-            <Input
+            <MobileInput
               id="website"
               value={clientData.website || ''}
               onChange={(e) => handleFieldChange('website', e.target.value)}
-              placeholder="https://example.com"
+              onBlur={() => handleFieldBlur('website')}
+              placeholder="example.com"
+              validationState={getFieldValidationState('website', clientData.website || '').state}
+              error={touchedFields.website && clientData.website && !clientValidation.website(clientData.website).valid ? 'Please enter a valid website URL' : undefined}
             />
           </div>
 
-          {/* Social Media Handles */}
           <div className="space-y-4">
             <Label className="text-sm font-medium flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-gray-500" />
-              Social Media Handles
+              Social Media
             </Label>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Instagram */}
               <div className="space-y-2">
                 <Label className="text-xs flex items-center gap-1">
                   <Instagram className="h-3 w-3 text-pink-600" />
@@ -419,7 +413,6 @@ export const ClientSettingsTab = () => {
                 />
               </div>
 
-              {/* Facebook */}
               <div className="space-y-2">
                 <Label className="text-xs flex items-center gap-1">
                   <Facebook className="h-3 w-3 text-blue-600" />
@@ -432,7 +425,6 @@ export const ClientSettingsTab = () => {
                 />
               </div>
 
-              {/* LinkedIn */}
               <div className="space-y-2">
                 <Label className="text-xs flex items-center gap-1">
                   <Linkedin className="h-3 w-3 text-blue-700" />
@@ -445,7 +437,6 @@ export const ClientSettingsTab = () => {
                 />
               </div>
 
-              {/* Twitter */}
               <div className="space-y-2">
                 <Label className="text-xs flex items-center gap-1">
                   <Twitter className="h-3 w-3 text-blue-500" />
@@ -458,7 +449,6 @@ export const ClientSettingsTab = () => {
                 />
               </div>
 
-              {/* TikTok */}
               <div className="space-y-2">
                 <Label className="text-xs flex items-center gap-1">
                   <div className="h-3 w-3 bg-black rounded-sm flex items-center justify-center">
@@ -473,7 +463,6 @@ export const ClientSettingsTab = () => {
                 />
               </div>
 
-              {/* YouTube */}
               <div className="space-y-2">
                 <Label className="text-xs flex items-center gap-1">
                   <Youtube className="h-3 w-3 text-red-600" />
@@ -488,7 +477,6 @@ export const ClientSettingsTab = () => {
             </div>
           </div>
 
-          {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes" className="text-sm font-medium">
               Notes
@@ -497,7 +485,7 @@ export const ClientSettingsTab = () => {
               id="notes"
               value={clientData.notes || ''}
               onChange={(e) => handleFieldChange('notes', e.target.value)}
-              placeholder="Additional notes about this client..."
+              placeholder="Additional notes..."
               rows={3}
             />
           </div>
@@ -506,15 +494,11 @@ export const ClientSettingsTab = () => {
 
       <Separator />
 
-      {/* Storage Settings */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <HardDrive className="h-5 w-5 text-gray-500" />
           <h3 className="text-lg font-semibold text-gray-900">Storage Settings</h3>
         </div>
-        <p className="text-sm text-gray-600">
-          Configure where {clientData.name}&apos;s content will be stored
-        </p>
 
         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
           <div className="flex-1">
@@ -561,10 +545,35 @@ export const ClientSettingsTab = () => {
                       activeProjects: clientData.activeProjects || 0
                     }}
                     currentSettings={storageSettings}
-                    onSave={(newSettings: ClientStorageSettings) => {
-                      setStorageSettings(newSettings)
-                      setShowStorageDialog(false)
-                      toast.success('Storage settings saved successfully!')
+                    onSave={async (newSettings: ClientStorageSettings) => {
+                      try {
+                        console.log('💾 [ClientSettingsTab] Saving storage settings:', newSettings)
+                        
+                        // Save to database via API
+                        const response = await fetch(`/api/client-settings/${clientData.id}`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify(newSettings)
+                        })
+
+                        if (!response.ok) {
+                          const errorData = await response.json()
+                          throw new Error(errorData.error || 'Failed to save settings')
+                        }
+
+                        const result = await response.json()
+                        console.log('✅ [ClientSettingsTab] Storage settings saved successfully:', result)
+                        
+                        // Update local state with saved settings
+                        setStorageSettings(result.clientSettings)
+                        setShowStorageDialog(false)
+                        toast.success('Storage settings saved successfully!')
+                      } catch (error) {
+                        console.error('❌ [ClientSettingsTab] Error saving storage settings:', error)
+                        toast.error(error instanceof Error ? error.message : 'Failed to save storage settings')
+                      }
                     }}
                     onCancel={() => setShowStorageDialog(false)}
                   />
@@ -577,18 +586,14 @@ export const ClientSettingsTab = () => {
 
       <Separator />
 
-      {/* Save Button */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900">Save Changes</h3>
-        <LoadingButton
-          onClick={handleSave}
-          loading={isSaving}
-          className="w-full h-12"
-        >
-          <Save className="h-4 w-4 mr-2" />
-          Save Client Settings
-        </LoadingButton>
-      </div>
+      <LoadingButton
+        onClick={handleSave}
+        loading={isSaving}
+        className="w-full h-12"
+      >
+        <Save className="h-4 w-4 mr-2" />
+        Save Changes
+      </LoadingButton>
     </div>
   )
 } 

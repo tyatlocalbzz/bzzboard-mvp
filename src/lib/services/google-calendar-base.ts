@@ -74,12 +74,14 @@ export class GoogleCalendarBase {
       this.oauth2Client.setCredentials({
         access_token: integration.accessToken,
         refresh_token: integration.refreshToken,
+        expiry_date: integration.expiryDate ? new Date(integration.expiryDate).getTime() : undefined
       })
 
-      // Check if token needs refresh (remove this check for now as method is protected)
-      // if (this.oauth2Client.isTokenExpiring()) {
-      //   await this.refreshAccessToken(userEmail)
-      // }
+      // Check if token needs refresh
+      if (this.isTokenExpired(integration)) {
+        console.log('🔄 [Calendar] Token expired, refreshing for:', userEmail)
+        await this.refreshAccessToken(userEmail)
+      }
     } catch (error) {
       if (error instanceof CalendarError) {
         throw error
@@ -91,6 +93,20 @@ export class GoogleCalendarBase {
         error
       )
     }
+  }
+
+  /**
+   * Check if token is expired or will expire soon
+   * DRY: Centralized token expiry check
+   */
+  private isTokenExpired(integration: { expiryDate?: string | null }): boolean {
+    if (!integration.expiryDate) return false
+    
+    const expiryTime = new Date(integration.expiryDate).getTime()
+    const now = Date.now()
+    const bufferTime = 5 * 60 * 1000 // 5 minutes buffer
+    
+    return expiryTime <= (now + bufferTime)
   }
 
   /**
@@ -106,6 +122,7 @@ export class GoogleCalendarBase {
       await upsertIntegration(userEmail, 'google-calendar', {
         accessToken: credentials.access_token || '',
         refreshToken: credentials.refresh_token || undefined,
+        expiryDate: credentials.expiry_date ? new Date(credentials.expiry_date).toISOString() : undefined,
         lastSync: new Date().toISOString()
       })
 
@@ -197,10 +214,11 @@ export class GoogleCalendarBase {
   /**
    * Retry logic with exponential backoff
    * DRY: Centralized retry mechanism for API calls
+   * Following Google Calendar API best practices for rate limiting
    */
   protected async retryWithBackoff<T>(
     operation: () => Promise<T>,
-    maxRetries: number = 3,
+    maxRetries: number = 5, // Increased for rate limit scenarios
     baseDelay: number = 1000
   ): Promise<T> {
     let lastError: unknown
@@ -210,10 +228,21 @@ export class GoogleCalendarBase {
         return await operation()
       } catch (error: unknown) {
         lastError = error
-        const apiError = error as { code?: number }
+        const apiError = error as { code?: number; message?: string }
 
-        // Don't retry on certain errors
-        if (apiError.code === 401 || apiError.code === 403 || apiError.code === 404) {
+        // Don't retry on permanent errors
+        if (apiError.code === 401 || apiError.code === 404 || apiError.code === 400) {
+          throw error
+        }
+
+        // Handle rate limiting (403 and 429) - these should be retried
+        const isRateLimit = (apiError.code === 403 && apiError.message?.includes('Rate Limit')) ||
+                           (apiError.code === 403 && apiError.message?.includes('rateLimitExceeded')) ||
+                           (apiError.code === 403 && apiError.message?.includes('userRateLimitExceeded')) ||
+                           apiError.code === 429
+
+        // Don't retry 403 errors that aren't rate limits (permissions, etc.)
+        if (apiError.code === 403 && !isRateLimit) {
           throw error
         }
 
@@ -222,11 +251,14 @@ export class GoogleCalendarBase {
           break
         }
 
-        // Calculate delay with exponential backoff
-        const delay = baseDelay * Math.pow(2, attempt)
-        console.log(`⏳ [Calendar] Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`)
+        // Calculate delay with exponential backoff + jitter (Google best practice)
+        const exponentialDelay = baseDelay * Math.pow(2, attempt)
+        const jitter = Math.random() * 0.1 * exponentialDelay // Add 10% jitter
+        const totalDelay = Math.min(exponentialDelay + jitter, 60000) // Cap at 1 minute
         
-        await new Promise(resolve => setTimeout(resolve, delay))
+        console.log(`⏳ [Calendar] Rate limited, retrying in ${Math.round(totalDelay)}ms (attempt ${attempt + 1}/${maxRetries})`)
+        
+        await new Promise(resolve => setTimeout(resolve, totalDelay))
       }
     }
 

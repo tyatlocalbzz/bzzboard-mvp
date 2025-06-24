@@ -1,6 +1,7 @@
 import { db } from './index'
 import { clients, shoots, postIdeas } from './schema'
 import { eq, desc, sql } from 'drizzle-orm'
+import { ClientData } from '@/lib/types/client'
 
 // Types for database operations
 export type NewClient = typeof clients.$inferInsert
@@ -143,4 +144,53 @@ export const deleteClient = async (id: number): Promise<{ success: boolean; mess
     success: result.length > 0,
     message: result.length > 0 ? 'Client deleted successfully' : 'Client not found'
   }
+}
+
+/**
+ * Convert database ClientSelect to frontend ClientData
+ * Handles ID type conversion (number -> string)
+ */
+export const toClientData = (dbClient: ClientSelect, activeProjects?: number): ClientData => ({
+  id: dbClient.id.toString(),
+  name: dbClient.name,
+  type: 'client' as const,
+  activeProjects: activeProjects || 0,
+  primaryContactName: dbClient.primaryContactName || undefined,
+  primaryContactEmail: dbClient.primaryContactEmail || undefined,
+  primaryContactPhone: dbClient.primaryContactPhone || undefined,
+  website: dbClient.website || undefined,
+  socialMedia: dbClient.socialMedia as ClientData['socialMedia'] || {},
+  notes: dbClient.notes || undefined
+})
+
+/**
+ * Convert ClientWithStats to ClientData
+ */
+export const clientWithStatsToClientData = (dbClient: ClientWithStats): ClientData => 
+  toClientData(dbClient, dbClient.activeProjects)
+
+/**
+ * Get all clients as ClientData array (for frontend consumption)
+ */
+export const getAllClientsAsClientData = async (): Promise<ClientData[]> => {
+  const clientsWithStats = await getAllClients()
+  return clientsWithStats.map(clientWithStatsToClientData)
+}
+
+/**
+ * Get single client as ClientData (for frontend consumption)
+ */
+export const getClientByIdAsClientData = async (id: number): Promise<ClientData | null> => {
+  const client = await getClientById(id)
+  if (!client) return null
+  
+  // Get active projects count for this client
+  const activeProjectsResult = await db
+    .select({ count: sql<number>`cast(count(distinct ${shoots.id}) as int)` })
+    .from(shoots)
+    .where(eq(shoots.clientId, id))
+  
+  const activeProjects = activeProjectsResult[0]?.count || 0
+  
+  return toClientData(client, activeProjects)
 } 

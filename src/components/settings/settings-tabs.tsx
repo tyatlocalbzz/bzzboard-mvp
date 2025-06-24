@@ -18,20 +18,17 @@ const tabs = [
   {
     id: 'account' as TabType,
     label: 'Account',
-    icon: User,
-    description: 'Profile and security settings'
+    icon: User
   },
   {
     id: 'clients' as TabType,
     label: 'Clients',
-    icon: Settings,
-    description: 'Per-client storage settings'
+    icon: Settings
   },
   {
     id: 'integrations' as TabType,
     label: 'Integrations',
-    icon: Zap,
-    description: 'Connected services'
+    icon: Zap
   }
 ]
 
@@ -53,46 +50,35 @@ export const SettingsTabs = ({ user }: SettingsTabsProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Tab Navigation */}
-      <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2 p-1 bg-gray-100 rounded-lg">
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.id
-            
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex flex-col items-center gap-1 p-3 rounded-md transition-all duration-200",
-                  "min-h-[60px] tap-target",
-                  isActive
-                    ? "bg-white text-blue-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                )}
-              >
-                <Icon className={cn(
-                  "h-5 w-5",
-                  isActive ? "text-blue-600" : "text-gray-500"
-                )} />
-                <span className="text-xs font-medium leading-none">
-                  {tab.label}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-        
-        {/* Tab Description */}
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
-            {tabs.find(tab => tab.id === activeTab)?.description}
-          </p>
-        </div>
+      <div className="grid grid-cols-3 gap-2 p-1 bg-gray-100 rounded-lg">
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.id
+          
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex flex-col items-center gap-1 p-3 rounded-md transition-all duration-200",
+                "min-h-[60px] tap-target",
+                isActive
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              )}
+            >
+              <Icon className={cn(
+                "h-5 w-5",
+                isActive ? "text-blue-600" : "text-gray-500"
+              )} />
+              <span className="text-xs font-medium leading-none">
+                {tab.label}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Tab Content */}
       <div className="min-h-[400px]">
         {renderTabContent()}
       </div>

@@ -1,36 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { HardDrive, Folder, Check } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { StorageProviderSelector } from '@/components/ui/storage-provider-selector'
+import { FolderSelector } from '@/components/ui/folder-selector'
+import { FolderBrowserDialog, FolderBrowserItem } from '@/components/ui/folder-browser-dialog'
+import { HardDrive } from 'lucide-react'
+import { WizardStepProps } from '@/lib/types/wizard'
 import { ClientStorageSettings } from '@/lib/types/settings'
+import { toast } from 'sonner'
 
-interface WizardData {
-  name: string
-  primaryContactName: string
-  primaryContactEmail: string
-  primaryContactPhone?: string
-  website?: string
-  socialMedia: {
-    instagram?: string
-    facebook?: string
-    linkedin?: string
-    twitter?: string
-    tiktok?: string
-    youtube?: string
-  }
-  notes?: string
-  storageSettings?: Partial<ClientStorageSettings>
-}
-
-interface StorageSetupStepProps {
-  data: WizardData
-  onUpdate: (data: Partial<WizardData>) => void
-}
-
-export const StorageSetupStep = ({ data, onUpdate }: StorageSetupStepProps) => {
+export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false)
   const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+
+  // Initialize storage settings if not present
+  const storageSettings = data.storageSettings || {}
 
   useEffect(() => {
     checkGoogleDriveStatus()
@@ -40,131 +25,200 @@ export const StorageSetupStep = ({ data, onUpdate }: StorageSetupStepProps) => {
     try {
       const response = await fetch('/api/integrations/status')
       if (response.ok) {
-        const statusData = await response.json()
-        setGoogleDriveConnected(statusData.integrations?.['google-drive']?.connected || false)
+        const data = await response.json()
+        setGoogleDriveConnected(data.integrations?.googleDrive?.connected || false)
       }
     } catch (error) {
       console.error('Error checking Google Drive status:', error)
-    } finally {
-      setIsLoading(false)
     }
   }
 
-  const handleStorageSettingsUpdate = (settings: Partial<ClientStorageSettings>) => {
+  const handleStorageSettingChange = (key: keyof ClientStorageSettings, value: unknown) => {
     onUpdate({
       storageSettings: {
-        ...data.storageSettings,
-        ...settings
+        ...storageSettings,
+        [key]: value
       }
     })
   }
 
+  const handleBrowseFolders = async (parentId?: string): Promise<FolderBrowserItem[]> => {
+    try {
+      const response = await fetch(`/api/integrations/google-drive/browse?parentId=${parentId || 'root'}`)
+
+      if (response.ok) {
+        const data = await response.json()
+        return data.folders || []
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('Error response:', errorData)
+        
+        if (response.status === 401) {
+          toast.error('Google Drive authentication expired. Please reconnect in the Integrations tab.')
+        } else if (response.status === 400) {
+          toast.error('Google Drive not properly connected. Please check your integration settings.')
+        } else {
+          toast.error(`Failed to load folders: ${errorData.error || 'Unknown error'}`)
+        }
+        
+        return []
+      }
+    } catch (error) {
+      console.error('Error loading folders:', error)
+      toast.error('Failed to load folders. Please check your Google Drive connection.')
+      return []
+    }
+  }
+
+  const handleCreateFolder = async (folderName: string, parentId?: string): Promise<void> => {
+    const response = await fetch('/api/integrations/google-drive/browse', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        folderName: folderName.trim(),
+        parentId: parentId
+      })
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to create folder')
+    }
+  }
+
+  const handleClientRootFolderSelect = (folder: FolderBrowserItem) => {
+    // Update client root folder settings
+    handleStorageSettingChange('clientRootFolderId', folder.id === 'root' ? undefined : folder.id)
+    handleStorageSettingChange('clientRootFolderName', folder.id === 'root' ? undefined : folder.name)
+    handleStorageSettingChange('clientRootFolderPath', folder.path)
+    
+    // Clear content folder selection when root changes
+    handleStorageSettingChange('contentFolderId', undefined)
+    handleStorageSettingChange('contentFolderName', undefined)
+    handleStorageSettingChange('contentFolderPath', undefined)
+  }
+
+  const handleContentFolderSelect = (folder: FolderBrowserItem) => {
+    handleStorageSettingChange('contentFolderId', folder.id === 'root' ? undefined : folder.id)
+    handleStorageSettingChange('contentFolderName', folder.id === 'root' ? undefined : folder.name)
+    handleStorageSettingChange('contentFolderPath', folder.path)
+  }
+
+
+
   return (
     <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto">
-          <HardDrive className="h-6 w-6 text-purple-600" />
+      {/* Header */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <HardDrive className="h-5 w-5 text-blue-600" />
+          <h3 className="text-lg font-semibold">Storage Setup</h3>
         </div>
-        <h3 className="text-lg font-semibold text-gray-900">Storage Setup</h3>
-        <p className="text-sm text-gray-600">Configure where content will be stored</p>
+        <p className="text-sm text-gray-600">
+          Configure where this client&apos;s content will be stored (optional)
+        </p>
       </div>
 
-      {isLoading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="text-sm text-gray-500 mt-2">Checking integrations...</p>
-        </div>
-      ) : (
+      {/* Storage Provider Selection */}
+      <StorageProviderSelector
+        value={storageSettings.storageProvider || 'google-drive'}
+        onValueChange={(value) => handleStorageSettingChange('storageProvider', value)}
+        googleDriveConnected={googleDriveConnected}
+      />
+
+      {/* Google Drive Folder Selection */}
+      {storageSettings.storageProvider === 'google-drive' && (
         <div className="space-y-4">
-          {/* Google Drive Status */}
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <HardDrive className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <h4 className="font-medium text-gray-900">Google Drive</h4>
-                  <p className="text-sm text-gray-500">
-                    {googleDriveConnected ? 'Connected and ready' : 'Not connected'}
-                  </p>
-                </div>
-              </div>
-              {googleDriveConnected ? (
-                <div className="flex items-center gap-1 text-green-600">
-                  <Check className="h-4 w-4" />
-                  <span className="text-sm font-medium">Connected</span>
-                </div>
-              ) : (
-                <Button variant="outline" size="sm" disabled>
-                  Connect Later
-                </Button>
-              )}
-            </div>
-          </div>
+          {/* Client Root Folder */}
+          <FolderSelector
+            label="Client Root Folder"
+            folderName={storageSettings.clientRootFolderName}
+            folderPath={storageSettings.clientRootFolderPath}
+            folderId={storageSettings.clientRootFolderId}
+            isConnected={googleDriveConnected}
+            notConnectedMessage="Connect Google Drive in Settings → Integrations to select folders"
+            onBrowse={() => setShowFolderBrowser(true)}
+            helpText="Main folder for all client content and organization"
+          />
 
-          {/* Storage Configuration */}
-          {googleDriveConnected ? (
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Default Storage Setup</h4>
-                <p className="text-sm text-blue-800 mb-3">
-                  We&apos;ll create a folder structure for {data.name} in your Google Drive:
-                </p>
-                <div className="bg-white rounded border p-3 font-mono text-xs">
-                  <div className="text-gray-600">
-                    📁 My Drive/<br/>
-                    └── 📁 {data.name}<br/>
-                    &nbsp;&nbsp;&nbsp;&nbsp;└── 📁 [Date] Shoot Name<br/>
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── 📁 Post Idea 1<br/>
-                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 📁 Post Idea 2
-                  </div>
-                </div>
-              </div>
-              
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => handleStorageSettingsUpdate({
-                  storageProvider: 'google-drive',
-                  customNaming: false
-                })}
-              >
-                <Folder className="h-4 w-4 mr-2" />
-                Use Default Setup
-              </Button>
-            </div>
-          ) : (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h4 className="font-medium text-yellow-900 mb-2">Google Drive Not Connected</h4>
-              <p className="text-sm text-yellow-800 mb-3">
-                You can connect Google Drive later in Settings → Integrations to enable automatic file organization.
-              </p>
-              <p className="text-xs text-yellow-700">
-                For now, we&apos;ll use the default storage setup.
-              </p>
-            </div>
+          {/* Content Subfolder - Only show if client root is selected */}
+          {storageSettings.clientRootFolderId && (
+            <FolderSelector
+              label="Content Subfolder"
+              folderName={storageSettings.contentFolderName}
+              folderPath={storageSettings.contentFolderPath}
+              folderId={storageSettings.contentFolderId}
+              isConnected={googleDriveConnected}
+              notConnectedMessage="Select client root folder first"
+              onBrowse={() => setShowFolderBrowser(true)}
+              helpText="Subfolder within client root for shoot content"
+            />
           )}
-
-          {/* Info */}
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <div className="w-5 h-5 bg-purple-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span className="text-white text-xs font-bold">i</span>
-              </div>
-              <div>
-                <h4 className="text-sm font-medium text-purple-900 mb-1">
-                  Storage can be configured later
-                </h4>
-                <p className="text-xs text-purple-800">
-                  You can always change storage settings, connect integrations, and customize 
-                  folder organization from the client settings page.
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       )}
+
+      {/* Folder Structure Preview */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Folder Structure Preview</Label>
+        <div className="p-4 bg-gray-50 rounded-lg text-sm font-mono">
+          <div className="text-gray-700 space-y-1">
+            <div>📁 {storageSettings.clientRootFolderPath || '/My Drive'}</div>
+            {storageSettings.contentFolderPath && (
+              <div className="ml-4">└── 📁 Content</div>
+            )}
+            <div className={storageSettings.contentFolderPath ? "ml-8" : "ml-4"}>
+              ├── 📁 [2024-01-15] Product Launch
+            </div>
+            <div className={storageSettings.contentFolderPath ? "ml-12" : "ml-8"}>
+              ├── 📁 Hero Shot
+            </div>
+            <div className={storageSettings.contentFolderPath ? "ml-12" : "ml-8"}>
+              └── 📁 Behind Scenes
+            </div>
+            <div className={storageSettings.contentFolderPath ? "ml-8" : "ml-4"}>
+              ├── 📁 Contracts (future)
+            </div>
+            <div className={storageSettings.contentFolderPath ? "ml-8" : "ml-4"}>
+              ├── 📁 Assets (future)
+            </div>
+            <div className={storageSettings.contentFolderPath ? "ml-8" : "ml-4"}>
+              └── 📁 Archive (future)
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-gray-500">
+          Shoot folders will be created in the selected location. Future expansion will include additional organization folders.
+        </p>
+      </div>
+
+      {/* Folder Browser Dialog */}
+      <FolderBrowserDialog
+        open={showFolderBrowser}
+        onOpenChange={setShowFolderBrowser}
+        title="Select Folder"
+        description="Choose a folder for client content storage"
+        onFolderSelect={(folder) => {
+          // Determine which folder we're selecting based on current context
+          if (!storageSettings.clientRootFolderId) {
+            handleClientRootFolderSelect(folder)
+          } else {
+            handleContentFolderSelect(folder)
+          }
+        }}
+        onBrowseFolders={handleBrowseFolders}
+        onCreateFolder={handleCreateFolder}
+        initialParentId={
+          storageSettings.clientRootFolderId && !storageSettings.contentFolderId
+            ? storageSettings.clientRootFolderId
+            : storageSettings.contentFolderId || storageSettings.clientRootFolderId
+        }
+        initialPath={
+          storageSettings.contentFolderPath || storageSettings.clientRootFolderPath
+        }
+      />
     </div>
   )
 } 

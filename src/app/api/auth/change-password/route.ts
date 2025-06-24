@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { verifyUserPassword, updateUserPassword } from '@/lib/db/users'
-import { z } from 'zod'
-
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(8, 'New password must be at least 8 characters long'),
-})
+import { clientValidation } from '@/lib/validation/client-validation'
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +11,25 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { currentPassword, newPassword } = changePasswordSchema.parse(body)
+    
+    // Validate using shared validation library
+    const validation = clientValidation.passwordChange({
+      currentPassword: body.currentPassword,
+      newPassword: body.newPassword,
+      confirmPassword: body.newPassword // For API, we assume they match if provided
+    })
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        { 
+          error: 'Invalid input', 
+          details: validation.errors 
+        },
+        { status: 400 }
+      )
+    }
+
+    const { currentPassword, newPassword } = body
 
     // Verify current password
     const isCurrentPasswordValid = await verifyUserPassword(user.email!, currentPassword)
@@ -31,13 +44,6 @@ export async function POST(req: NextRequest) {
     
   } catch (error) {
     console.error('Change password error:', error)
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: error.errors },
-        { status: 400 }
-      )
-    }
     
     return NextResponse.json(
       { error: 'Failed to change password' },

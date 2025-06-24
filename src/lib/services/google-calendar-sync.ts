@@ -14,9 +14,7 @@ import { getIntegration } from '@/lib/db/integrations'
 import { 
   GoogleCalendarSettings, 
   DEFAULT_GOOGLE_CALENDAR_SETTINGS, 
-  getSyncEndDate, 
-  isShootEvent, 
-  isWithinWorkingHours 
+  getSyncEndDate
 } from '@/lib/types/calendar'
 
 export interface SyncResult {
@@ -85,10 +83,52 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
     } catch (error) {
       console.error('❌ [CalendarSync] Sync failed:', error)
       
-      if (error instanceof CalendarError && error.code === 'SYNC_TOKEN_EXPIRED') {
-        // Retry with full sync if sync token expired
-        console.log('🔄 [CalendarSync] Sync token expired, retrying with full sync')
-        return await this.syncCalendar(userEmail, calendarId, true)
+      // Handle specific error cases
+      if (error instanceof CalendarError) {
+        if (error.code === 'SYNC_TOKEN_EXPIRED') {
+          // Retry with full sync if sync token expired
+          console.log('🔄 [CalendarSync] Sync token expired, retrying with full sync')
+          return await this.syncCalendar(userEmail, calendarId, true)
+        }
+        
+        if (error.code === 'UNAUTHORIZED' || error.statusCode === 401) {
+          // Try to refresh token and retry once
+          console.log('🔄 [CalendarSync] Authentication failed, attempting token refresh')
+          try {
+            await this.refreshAccessToken(userEmail)
+            console.log('✅ [CalendarSync] Token refreshed, retrying sync')
+            return await this.syncCalendar(userEmail, calendarId, forceFullSync)
+          } catch (refreshError) {
+            console.error('❌ [CalendarSync] Token refresh failed:', refreshError)
+            return {
+              success: false,
+              syncedEvents: 0,
+              deletedEvents: 0,
+              conflicts: 0,
+              error: 'Calendar authentication expired. Please reconnect your Google Calendar.'
+            }
+          }
+        }
+      }
+
+      // Handle Google API errors with invalid_grant
+      const apiError = error as { message?: string; code?: number }
+      if (apiError.message?.includes('invalid_grant') || apiError.code === 400) {
+        console.log('🔄 [CalendarSync] Invalid grant error, attempting token refresh')
+        try {
+          await this.refreshAccessToken(userEmail)
+          console.log('✅ [CalendarSync] Token refreshed after invalid_grant, retrying sync')
+          return await this.syncCalendar(userEmail, calendarId, forceFullSync)
+        } catch (refreshError) {
+          console.error('❌ [CalendarSync] Token refresh failed after invalid_grant:', refreshError)
+          return {
+            success: false,
+            syncedEvents: 0,
+            deletedEvents: 0,
+            conflicts: 0,
+            error: 'Calendar authentication expired. Please reconnect your Google Calendar.'
+          }
+        }
       }
 
       return {
@@ -132,10 +172,10 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
 
     console.log('🔧 [CalendarSync] Using settings:', settings)
 
-    // Determine sync time range based on user settings
+    // Determine sync time range (fixed to 2 weeks)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const syncEndDate = getSyncEndDate(settings.syncTimeRange)
+    const syncEndDate = getSyncEndDate()
     
     console.log(`📅 [CalendarSync] Syncing events from ${today.toISOString()} to ${syncEndDate.toISOString()}`)
     
@@ -167,16 +207,17 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
 
           if (googleEvent.status === 'cancelled') {
             // Handle deleted events
-            await deleteCachedEvent(userEmail, googleEvent.id, calendarId)
+            console.log(`🗑️ [CalendarSync] Processing deleted event: ${googleEvent.summary} (${googleEvent.id})`)
+            await this.handleExternallyDeletedEvent(userEmail, googleEvent.id, calendarId)
             deletedEvents++
           } else {
             // Handle updated/new events - only process events with valid data
             if (googleEvent.summary && googleEvent.start && googleEvent.end) {
               // Apply filtering based on user settings
-              const shouldIncludeEvent = this.shouldIncludeEvent(googleEvent, settings)
+              const shouldIncludeEvent = this.shouldIncludeEvent()
               
               if (shouldIncludeEvent) {
-                const eventData = this.convertGoogleEventToCache(googleEvent, userEmail, calendarId, settings)
+                const eventData = this.convertGoogleEventToCache(googleEvent, userEmail, calendarId)
                 await upsertCachedEvent(eventData)
                 syncedEvents++
               } else {
@@ -253,34 +294,10 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
   }
 
   /**
-   * Check if an event should be included based on user settings
-   * DRY: Centralized filtering logic
+   * Check if an event should be included (simplified - include all events)
    */
-  private shouldIncludeEvent(googleEvent: calendar_v3.Schema$Event, settings: GoogleCalendarSettings): boolean {
-    // Skip all-day events if user preference is set
-    if (settings.excludeAllDayEvents && googleEvent.start?.date) {
-      return false
-    }
-
-    // Apply working hours filter if enabled
-    if (settings.eventTypeFilter === 'business-hours-only' && settings.workingHours.enabled) {
-      if (googleEvent.start?.dateTime && googleEvent.end?.dateTime) {
-        const startTime = new Date(googleEvent.start.dateTime)
-        const endTime = new Date(googleEvent.end.dateTime)
-        
-        if (!isWithinWorkingHours(startTime, endTime, settings.workingHours)) {
-          return false
-        }
-      }
-    }
-
-    // Apply shoots-only filter if enabled
-    if (settings.eventTypeFilter === 'shoots-only') {
-      if (!googleEvent.summary || !isShootEvent(googleEvent.summary, settings.shootKeywords)) {
-        return false
-      }
-    }
-
+  private shouldIncludeEvent(): boolean {
+    // Simplified: include all events from selected calendars
     return true
   }
 
@@ -289,7 +306,7 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
    * DRY: Centralized conversion logic
    * Note: This method should only be called after validating googleEvent.id exists
    */
-  private convertGoogleEventToCache(googleEvent: calendar_v3.Schema$Event, userEmail: string, calendarId: string, settings?: GoogleCalendarSettings) {
+  private convertGoogleEventToCache(googleEvent: calendar_v3.Schema$Event, userEmail: string, calendarId: string) {
     const baseEvent = this.convertGoogleEvent(googleEvent)
     
     // Following Google Calendar API best practices: validate required fields
@@ -297,16 +314,8 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
       throw new CalendarError('Cannot convert event without ID', 'INVALID_EVENT')
     }
     
-    // Auto-detect shoot events if settings are provided and enabled
+    // Simplified: no auto-detection of shoot events
     const shootId: number | null = null
-    if (settings?.autoTagShootEvents && baseEvent.title) {
-      const isShoot = isShootEvent(baseEvent.title, settings.shootKeywords)
-      if (isShoot) {
-        console.log('🎯 [CalendarSync] Detected shoot event:', baseEvent.title)
-        // Note: In a full implementation, you'd link to an actual shoot record
-        // For now, we'll just mark it as a shoot event with a placeholder
-      }
-    }
 
     return {
       userEmail,
@@ -373,7 +382,7 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
 
   /**
    * Update an existing calendar event
-   * DRY: Centralized event update
+   * DRY: Centralized event update with 404 handling
    */
   async updateEvent(
     userEmail: string,
@@ -385,7 +394,7 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
       this.validateConfig()
       await this.initializeAuth(userEmail)
 
-      // Get current event
+      // Get current event - this will throw 404 if event doesn't exist
       const currentEvent = await this.calendar.events.get({
         calendarId,
         eventId
@@ -413,6 +422,18 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
       console.log('✅ [CalendarSync] Event updated:', eventId)
 
     } catch (error) {
+      // Handle case where event was deleted from Google Calendar
+      const apiError = error as { code?: number }
+      if (apiError.code === 404) {
+        console.log('ℹ️ [CalendarSync] Calendar event not found during update - may have been deleted externally:', eventId)
+        
+        // Remove from local cache since it doesn't exist in Google Calendar
+        await deleteCachedEvent(userEmail, eventId, calendarId)
+        
+        // Don't throw error - this is a recoverable situation
+        return
+      }
+      
       this.handleCalendarError(error, 'update event')
     }
   }
@@ -483,6 +504,112 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
         shootTime: { start: startTime, end: endTime },
         conflictingEvents: []
       }
+    }
+  }
+
+  /**
+   * Delete a calendar event when shoot is deleted
+   * DRY: Centralized calendar event deletion
+   */
+  async deleteCalendarEvent(
+    userEmail: string,
+    eventId: string,
+    calendarId: string = 'primary'
+  ): Promise<boolean> {
+    try {
+      this.validateConfig()
+      await this.initializeAuth(userEmail)
+
+      await this.retryWithBackoff(async () => {
+        return await this.calendar.events.delete({
+          calendarId,
+          eventId,
+          sendUpdates: 'all' // Notify attendees of cancellation
+        })
+      })
+
+      // Remove from local cache
+      await deleteCachedEvent(userEmail, eventId, calendarId)
+
+      console.log('✅ [CalendarSync] Calendar event deleted:', eventId)
+      return true
+
+    } catch (error) {
+      // Don't throw error if event doesn't exist (already deleted)
+      const apiError = error as { code?: number }
+      if (apiError.code === 404) {
+        console.log('ℹ️ [CalendarSync] Calendar event already deleted:', eventId)
+        return true
+      }
+      
+      console.error('❌ [CalendarSync] Failed to delete calendar event:', error)
+      return false
+    }
+  }
+
+  /**
+   * Handle externally deleted calendar event
+   * Called when we detect a calendar event was deleted outside our app
+   */
+  async handleExternallyDeletedEvent(
+    userEmail: string,
+    eventId: string,
+    calendarId: string = 'primary'
+  ): Promise<void> {
+    try {
+      console.log(`🔍 [CalendarSync] Handling externally deleted event: ${eventId}`)
+      
+      // Remove from local cache
+      await deleteCachedEvent(userEmail, eventId, calendarId)
+      
+      // Find and update associated shoot
+      const { getShootByCalendarEventId, clearCalendarSync } = await import('@/lib/db/shoots')
+      const shoot = await getShootByCalendarEventId(eventId)
+      
+      if (shoot) {
+        console.log(`📸 [CalendarSync] Found associated shoot: ${shoot.title} (ID: ${shoot.id})`)
+        await clearCalendarSync(shoot.id)
+        console.log(`✅ [CalendarSync] Cleared calendar sync data for shoot: ${shoot.id}`)
+      } else {
+        console.log(`ℹ️ [CalendarSync] No associated shoot found for deleted event: ${eventId}`)
+      }
+      
+    } catch (error) {
+      console.error('❌ [CalendarSync] Error handling externally deleted event:', error)
+      // Don't throw - this is cleanup, not critical
+    }
+  }
+
+  /**
+   * Verify if a calendar event still exists in Google Calendar
+   * Used to detect externally deleted events
+   */
+  async verifyEventExists(
+    userEmail: string,
+    eventId: string,
+    calendarId: string = 'primary'
+  ): Promise<boolean> {
+    try {
+      this.validateConfig()
+      await this.initializeAuth(userEmail)
+
+      // Try to get the event - this will throw 404 if it doesn't exist
+      await this.calendar.events.get({
+        calendarId,
+        eventId
+      })
+
+      return true
+    } catch (error) {
+      const apiError = error as { code?: number }
+      if (apiError.code === 404) {
+        // Event doesn't exist
+        return false
+      }
+      
+      // Other errors (auth, network, etc.) - assume event exists to be safe
+      console.error(`❌ [CalendarSync] Error verifying event ${eventId}:`, error)
+      return true
     }
   }
 } 

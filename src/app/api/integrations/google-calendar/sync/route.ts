@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
+import { clearEventCache } from '@/lib/db/calendar'
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,11 +10,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { forceFullSync = false } = await req.json()
-    
-    console.log(`🔄 [Calendar API] Manual sync requested by ${user.email}`)
+    const body = await req.json()
+    const { forceFullSync = false, clearCache = false } = body
 
-    // Use the DRY calendar sync service
+    // Clear calendar cache if requested (for testing/cleanup)
+    if (clearCache) {
+      console.log(`🧹 [Calendar API] Clearing calendar cache for ${user.email}`)
+      await clearEventCache(user.email)
+      return NextResponse.json({
+        success: true,
+        message: 'Calendar cache cleared successfully'
+      })
+    }
+
+    // Regular sync
+    console.log(`🔄 [Calendar API] Manual sync requested by ${user.email}`)
     const calendarSync = new GoogleCalendarSync()
     const result = await calendarSync.syncCalendar(user.email, 'primary', forceFullSync)
 

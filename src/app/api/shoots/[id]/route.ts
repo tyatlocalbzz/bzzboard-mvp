@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { getShootById, updateShootStatus, deleteShoot, getPostIdeasForShoot } from '@/lib/db/shoots'
+import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
 
 export async function GET(
   request: NextRequest,
@@ -59,7 +60,11 @@ export async function GET(
       status: shoot.status,
       startedAt: shoot.startedAt?.toISOString(),
       notes: shoot.notes,
-      postIdeasCount: shoot.postIdeasCount
+      postIdeasCount: shoot.postIdeasCount,
+      // Include Google Calendar fields for frontend
+      googleCalendarEventId: shoot.googleCalendarEventId,
+      googleCalendarSyncStatus: shoot.googleCalendarSyncStatus,
+      googleCalendarError: shoot.googleCalendarError
     }
 
     return NextResponse.json({
@@ -158,20 +163,47 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invalid shoot ID' }, { status: 400 })
     }
 
-    // Delete the shoot
-    const success = await deleteShoot(shootId)
+    // Get shoot details first to check for Google Calendar integration
+    const shoot = await getShootById(shootId)
+    if (!shoot) {
+      return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+    }
+
+    let calendarEventDeleted = false
+
+    // Delete from Google Calendar if event exists
+    if (shoot.googleCalendarEventId && session.user?.email) {
+      try {
+        const calendarSync = new GoogleCalendarSync()
+        calendarEventDeleted = await calendarSync.deleteCalendarEvent(
+          session.user.email,
+          shoot.googleCalendarEventId
+        )
+        console.log('📅 [API] Calendar event deletion result:', calendarEventDeleted)
+      } catch (calendarError) {
+        console.error('⚠️ [API] Failed to delete calendar event:', calendarError)
+        // Don't fail the entire operation if calendar deletion fails
+      }
+    }
+
+    // Soft delete the shoot (pass user ID for audit trail)
+    const userId = session.user?.id ? parseInt(session.user.id) : undefined
+    const success = await deleteShoot(shootId, userId)
     
     if (!success) {
-      return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Failed to delete shoot' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Shoot deleted successfully'
+      message: 'Shoot deleted successfully',
+      calendarEventRemoved: calendarEventDeleted,
+      // Include recovery info
+      recoveryNote: 'This shoot can be restored from the admin panel within 30 days'
     })
 
   } catch (error) {
-    console.error('Delete shoot error:', error)
+    console.error('❌ [API] Delete shoot error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

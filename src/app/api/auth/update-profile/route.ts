@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { updateUser } from '@/lib/db/users'
-import { z } from 'zod'
-
-const updateProfileSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Valid email is required'),
-})
+import { clientValidation } from '@/lib/validation/client-validation'
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +11,24 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { name, email } = updateProfileSchema.parse(body)
+    
+    // Validate using shared validation library
+    const validation = clientValidation.userProfile({
+      name: body.name,
+      email: body.email
+    })
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        { 
+          error: 'Invalid input', 
+          details: validation.errors 
+        },
+        { status: 400 }
+      )
+    }
+
+    const { name, email } = body
 
     // Update user in database
     await updateUser(user.email!, { name, email })
@@ -25,13 +37,6 @@ export async function POST(req: NextRequest) {
     
   } catch (error) {
     console.error('Update profile error:', error)
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: error.errors },
-        { status: 400 }
-      )
-    }
     
     return NextResponse.json(
       { error: 'Failed to update profile' },

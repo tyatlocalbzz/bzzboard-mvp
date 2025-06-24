@@ -54,39 +54,10 @@ export default function ActiveShootPage() {
         } else {
           console.error('❌ Invalid data structure received:', data)
           
-          // Create fallback data to unblock the UI
-          const fallbackData: ActiveShootData = {
-            shoot: {
-              id: parseInt(shootId),
-              title: "Active Shoot",
-              client: "Demo Client",
-              scheduledAt: "2024-01-15T10:00:00Z",
-              duration: 120,
-              location: "Studio",
-              status: "active",
-              startedAt: "2024-01-15T10:00:00Z"
-            },
-            postIdeas: [
-              {
-                id: 1,
-                title: "Demo Post Idea",
-                platforms: ["Instagram"],
-                contentType: "photo" as const,
-                shots: [
-                  {
-                    id: 1,
-                    text: "Demo shot",
-                    completed: false,
-                    postIdeaId: 1
-                  }
-                ]
-              }
-            ]
-          }
-          
-          setActiveData(fallbackData)
-          console.log('🔄 Using fallback data:', fallbackData)
-          toast.error('Using demo data - API returned invalid structure')
+          // Show error instead of fallback data
+          console.error('❌ Invalid data structure - redirecting to shoot details')
+          toast.error('Failed to load active shoot data')
+          router.push(`/shoots/${shootId}`)
         }
       } catch (error) {
         console.error('❌ Error loading data:', error)
@@ -95,24 +66,10 @@ export default function ActiveShootPage() {
           stack: error instanceof Error ? error.stack : 'No stack trace'
         })
         
-        // Create fallback data even on error
-        const fallbackData: ActiveShootData = {
-          shoot: {
-            id: parseInt(shootId),
-            title: "Active Shoot (Error Recovery)",
-            client: "Demo Client",
-            scheduledAt: "2024-01-15T10:00:00Z",
-            duration: 120,
-            location: "Studio",
-            status: "active",
-            startedAt: "2024-01-15T10:00:00Z"
-          },
-          postIdeas: []
-        }
-        
-        setActiveData(fallbackData)
-        console.log('🔄 Using fallback data after error:', fallbackData)
-        toast.error('Failed to load shoot data - using demo data')
+        // Show error and redirect instead of fallback data
+        console.error('❌ Error loading active shoot - redirecting to shoot details')
+        toast.error('Failed to load active shoot data')
+        router.push(`/shoots/${shootId}`)
       } finally {
         setIsInitialLoading(false)
         console.log('🏁 Loading completed, isInitialLoading set to false')
@@ -120,7 +77,7 @@ export default function ActiveShootPage() {
     }
 
     loadData()
-  }, [shootId]) // Removed executeDataFetch dependency
+  }, [shootId, router]) // Added router dependency
 
   // Calculate progress
   const { totalPosts, completedPosts, activePostIdeas, completedPostIdeas } = useMemo(() => {

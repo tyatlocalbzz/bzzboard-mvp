@@ -175,24 +175,17 @@ export class GoogleDriveService {
       const shootFolderName = `[${formattedDate}] ${shootTitle}`
       console.log('📅 Formatted shoot folder name:', shootFolderName)
 
-      // Create client folder using enhanced method with settings
-      console.log('🔍 Step 1: Creating client folder with settings...')
-      const clientFolder = await this.createClientFolder(clientName)
-      console.log('✅ Client folder created/found:', { 
-        id: clientFolder.id, 
-        name: clientFolder.name, 
-        webViewLink: clientFolder.webViewLink 
-      })
+      // Use the selected parent folder directly (user has already chosen the client folder)
+      const parentFolderId = this.parentFolderId
+      console.log('📂 [GoogleDriveService] Using selected parent folder:', parentFolderId || 'root')
       
-      // Then create shoot folder inside client folder
-      console.log('🔍 Step 2: Creating shoot folder inside client folder...')
-      console.log('📂 Parent folder ID:', clientFolder.id)
-      const shootFolder = await this.findOrCreateFolder(shootFolderName, clientFolder.id)
+      // Create shoot folder directly in the selected folder
+      const shootFolder = await this.findOrCreateFolder(shootFolderName, parentFolderId)
       console.log('✅ Shoot folder created/found:', { 
         id: shootFolder.id, 
         name: shootFolder.name, 
         webViewLink: shootFolder.webViewLink,
-        parentId: clientFolder.id
+        parentId: parentFolderId || 'root'
       })
       
       console.log('🎉 Shoot folder structure created successfully!')

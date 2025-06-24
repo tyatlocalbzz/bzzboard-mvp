@@ -16,11 +16,25 @@ export interface ClientStorageSettings {
   clientId: number
   clientName: string
   storageProvider: 'google-drive' | 'dropbox' | 'onedrive' | 'local'
+  
+  // Legacy single folder structure (maintained for backward compatibility)
   storageFolderId?: string
   storageFolderName?: string
   storageFolderPath?: string
-  customNaming: boolean
+  
+  // New two-tier folder structure
+  clientRootFolderId?: string
+  clientRootFolderName?: string
+  clientRootFolderPath?: string
+  contentFolderId?: string
+  contentFolderName?: string
+  contentFolderPath?: string
+  
+  // Custom naming settings
+  customNaming?: boolean
   namingTemplate?: string
+  
+  // Additional metadata
   metadata?: Record<string, unknown>
 }
 

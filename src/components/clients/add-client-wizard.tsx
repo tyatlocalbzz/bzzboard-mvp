@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, ReactNode } from 'react'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
@@ -10,7 +10,8 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useClient } from '@/contexts/client-context'
 import { ClientData } from '@/lib/types/client'
-import { ClientStorageSettings } from '@/lib/types/settings'
+import { WizardData, createEmptyWizardData, hasUnsavedChanges } from '@/lib/types/wizard'
+import { clientValidation } from '@/lib/validation/client-validation'
 import { BasicInfoStep } from './wizard-steps/basic-info-step'
 import { SocialMediaStep } from './wizard-steps/social-media-step'
 import { StorageSetupStep } from './wizard-steps/storage-setup-step'
@@ -21,29 +22,6 @@ interface AddClientWizardProps {
   onSuccess?: (client: ClientData) => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
-}
-
-interface WizardData {
-  // Step 1: Basic Info (Required)
-  name: string
-  primaryContactName: string
-  primaryContactEmail: string
-  primaryContactPhone?: string
-  
-  // Step 2: Social Media (Optional)
-  website?: string
-  socialMedia: {
-    instagram?: string
-    facebook?: string
-    linkedin?: string
-    twitter?: string
-    tiktok?: string
-    youtube?: string
-  }
-  notes?: string
-  
-  // Step 3: Storage Setup (Optional)
-  storageSettings?: Partial<ClientStorageSettings>
 }
 
 const STEPS = [
@@ -60,6 +38,7 @@ export const AddClientWizard = ({
 }: AddClientWizardProps) => {
   const [internalOpen, setInternalOpen] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showValidation, setShowValidation] = useState(false)
   
   // Use controlled state if provided, otherwise use internal state
   const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen
@@ -74,13 +53,7 @@ export const AddClientWizard = ({
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set())
   const [skippedSteps, setSkippedSteps] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(false)
-  const [wizardData, setWizardData] = useState<WizardData>({
-    name: '',
-    primaryContactName: '',
-    primaryContactEmail: '',
-    socialMedia: {},
-    storageSettings: {}
-  })
+  const [wizardData, setWizardData] = useState<WizardData>(createEmptyWizardData())
 
   const router = useRouter()
   const { setSelectedClient } = useClient()
@@ -89,22 +62,9 @@ export const AddClientWizard = ({
     setWizardData(prev => ({ ...prev, ...stepData }))
   }
 
-  // Check if user has entered any meaningful data
-  const hasUnsavedChanges = () => {
-    return !!(
-      wizardData.name.trim() || 
-      wizardData.primaryContactName.trim() || 
-      wizardData.primaryContactEmail.trim() ||
-      wizardData.primaryContactPhone?.trim() ||
-      wizardData.website?.trim() ||
-      wizardData.notes?.trim() ||
-      Object.values(wizardData.socialMedia).some(value => value?.trim())
-    )
-  }
-
   // Handle sheet close attempts
   const handleCloseAttempt = () => {
-    if (hasUnsavedChanges()) {
+    if (hasUnsavedChanges(wizardData)) {
       setShowConfirmDialog(true)
     } else {
       handleConfirmedClose()
@@ -117,13 +77,8 @@ export const AddClientWizard = ({
     setCurrentStep(1)
     setCompletedSteps(new Set())
     setSkippedSteps(new Set())
-    setWizardData({
-      name: '',
-      primaryContactName: '',
-      primaryContactEmail: '',
-      socialMedia: {},
-      storageSettings: {}
-    })
+    setShowValidation(false)
+    setWizardData(createEmptyWizardData())
     setShowConfirmDialog(false)
     setIsOpen(false)
   }
@@ -149,7 +104,14 @@ export const AddClientWizard = ({
   const isStepValid = (step: number): boolean => {
     switch (step) {
       case 1:
-        return !!(wizardData.name && wizardData.primaryContactName && wizardData.primaryContactEmail)
+        const validation = clientValidation.clientData({
+          name: wizardData.name,
+          primaryContactName: wizardData.primaryContactName,
+          primaryContactEmail: wizardData.primaryContactEmail,
+          primaryContactPhone: wizardData.primaryContactPhone,
+          website: wizardData.website
+        })
+        return validation.valid
       case 2:
         return true // Always valid since it's optional
       case 3:
@@ -160,10 +122,20 @@ export const AddClientWizard = ({
   }
 
   const handleNext = () => {
+    // Trigger validation for step 1
+    if (currentStep === 1) {
+      setShowValidation(true)
+      // Check if step is valid after triggering validation
+      if (!isStepValid(currentStep)) {
+        return // Don't proceed if validation fails
+      }
+    }
+    
     if (isStepValid(currentStep)) {
       markStepCompleted(currentStep)
       if (currentStep < STEPS.length) {
         setCurrentStep(currentStep + 1)
+        setShowValidation(false) // Reset validation for next step
       }
     }
   }
@@ -244,13 +216,8 @@ export const AddClientWizard = ({
       setCurrentStep(1)
       setCompletedSteps(new Set())
       setSkippedSteps(new Set())
-      setWizardData({
-        name: '',
-        primaryContactName: '',
-        primaryContactEmail: '',
-        socialMedia: {},
-        storageSettings: {}
-      })
+      setShowValidation(false)
+      setWizardData(createEmptyWizardData())
       
       // Close wizard
       setIsOpen(false)
@@ -279,6 +246,7 @@ export const AddClientWizard = ({
             onValidChange={() => {
               // Update validation state if needed
             }}
+            showValidation={showValidation}
           />
         )
       case 2:
@@ -327,7 +295,7 @@ export const AddClientWizard = ({
         </SheetTrigger>
         <SheetContent 
           side="bottom" 
-          className="h-[90vh] max-h-[700px]"
+          className="h-[90vh] max-h-[700px] flex flex-col"
           onInteractOutside={(e) => {
             // Prevent closing by clicking outside
             e.preventDefault()
@@ -338,61 +306,36 @@ export const AddClientWizard = ({
             handleCloseAttempt()
           }}
         >
-        <SheetHeader>
+        <SheetHeader className="px-6 pt-6">
           <SheetTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
             Add New Client
           </SheetTitle>
-          <SheetDescription>
-            Let&apos;s set up your new client with all the essential information
-          </SheetDescription>
         </SheetHeader>
         
-        <div className="flex flex-col h-full px-4 pb-4">
-          {/* Progress Bar */}
-          <div className="space-y-2 mb-6">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium">
-                Step {currentStep} of {STEPS.length}: {currentStepData?.title}
-              </span>
-              <span className="text-gray-500">
-                {getProgressPercentage()}% complete
-              </span>
-            </div>
-            <Progress value={getProgressPercentage()} className="h-2" />
-            
-            {/* Step indicators */}
-            <div className="flex justify-between text-xs">
-              {STEPS.map((step) => (
-                <div
-                  key={step.id}
-                  className={`flex items-center gap-1 ${
-                    completedSteps.has(step.id) ? 'text-green-600' :
-                    skippedSteps.has(step.id) ? 'text-gray-400' :
-                    currentStep === step.id ? 'text-blue-600' :
-                    'text-gray-400'
-                  }`}
-                >
-                  <div className={`w-2 h-2 rounded-full ${
-                    completedSteps.has(step.id) ? 'bg-green-600' :
-                    skippedSteps.has(step.id) ? 'bg-gray-400' :
-                    currentStep === step.id ? 'bg-blue-600' :
-                    'bg-gray-300'
-                  }`} />
-                  <span>{step.title}</span>
-                  {!step.required && <span className="text-gray-400">(optional)</span>}
-                </div>
-              ))}
-            </div>
+        {/* Progress Bar */}
+        <div className="px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center justify-between text-sm mb-3">
+            <span className="font-medium text-gray-900">
+              Step {currentStep} of {STEPS.length}: {currentStepData?.title}
+            </span>
+            <span className="text-gray-500 text-xs">
+              {getProgressPercentage()}% complete
+            </span>
           </div>
+          <Progress value={getProgressPercentage()} className="h-1.5" />
+        </div>
 
-          {/* Step Content */}
-          <div className="flex-1 overflow-y-auto">
+        {/* Step Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto px-6 min-h-0">
+          <div className="pb-4">
             {getCurrentStepComponent()}
           </div>
+        </div>
 
-          {/* Navigation */}
-          <div className="flex gap-3 pt-6 border-t mt-4">
+        {/* Navigation - Fixed at bottom */}
+        <div className="flex-shrink-0 px-6 pb-6 pt-4 border-t bg-white">
+          <div className="flex gap-3">
             {/* Back Button */}
             {currentStep > 1 && (
               <Button

@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useAsync } from "@/lib/hooks/use-async"
+import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { toast } from "sonner"
 import { useAllPlatformsWithStatus } from '@/lib/hooks/use-client-platforms'
 import { CheckCircle } from 'lucide-react'
@@ -63,11 +64,21 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
   const [platforms, setPlatforms] = useState<string[]>(postIdea?.platforms || [])
   const [shotList, setShotList] = useState<string[]>(postIdea?.shotList || [''])
   const [isOpen, setIsOpen] = useState(false)
+  const [contentType, setContentType] = useState<'photo' | 'video' | 'reel' | 'story'>(postIdea?.contentType || 'photo')
   
   const { loading: addLoading, execute: executeAdd } = useAsync(addPostIdea)
   const { loading: editLoading, execute: executeEdit } = useAsync(editPostIdea)
   
   const loading = mode === 'add' ? addLoading : editLoading
+
+  // Field validation hooks
+  const titleField = useFieldValidation({
+    fieldName: 'name',
+    initialValue: postIdea?.title || '',
+    validateOnChange: true,
+    validateOnBlur: true,
+    showValidation: isOpen
+  })
 
   const togglePlatform = (platform: string) => {
     setPlatforms(prev => 
@@ -91,31 +102,42 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
     }
   }
 
-  const handleSubmit = async (formData: FormData) => {
-    const title = formData.get('title') as string
-    const contentType = formData.get('contentType') as 'photo' | 'video' | 'reel' | 'story'
-    const caption = formData.get('caption') as string
-    const notes = formData.get('notes') as string
-
-    if (!title.trim()) {
-      toast.error('Please enter a title')
-      return
+  const validateForm = (): string | null => {
+    if (!titleField.value.trim()) {
+      return 'Please enter a title'
     }
 
     if (platforms.length === 0) {
-      toast.error('Please select at least one platform')
+      return 'Please select at least one platform'
+    }
+
+    return null
+  }
+
+  const handleSubmit = async () => {
+    // Validate title field
+    const titleValidation = titleField.validate()
+    
+    if (!titleValidation.valid) {
+      toast.error('Please fix the validation errors before submitting')
+      return
+    }
+
+    const validationError = validateForm()
+    if (validationError) {
+      toast.error(validationError)
       return
     }
 
     const filteredShotList = shotList.filter(shot => shot.trim() !== '')
 
     const postIdeaData: PostIdeaData = {
-      title: title.trim(),
+      title: titleField.value.trim(),
       platforms,
       contentType,
-      caption: caption.trim() || undefined,
+      caption: undefined, // Caption is optional and not validated
       shotList: filteredShotList,
-      notes: notes.trim() || undefined
+      notes: undefined // Notes are optional and not validated
     }
 
     let result
@@ -136,8 +158,10 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
     setIsOpen(open)
     if (!open) {
       // Reset form when closing
+      titleField.setValue(postIdea?.title || '')
       setPlatforms(postIdea?.platforms || [])
       setShotList(postIdea?.shotList || [''])
+      setContentType(postIdea?.contentType || 'photo')
     }
   }
 
@@ -153,7 +177,11 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
               id="title"
               name="title"
               placeholder="Enter post title..."
-              defaultValue={postIdea?.title}
+              value={titleField.value}
+              onChange={titleField.handleChange}
+              onBlur={titleField.handleBlur}
+              error={titleField.validationResult.error}
+              validationState={titleField.validationResult.state}
               required
             />
           </div>
@@ -194,6 +222,9 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
                 ))}
               </div>
             )}
+            {isOpen && platforms.length === 0 && (
+              <p className="text-sm text-red-600">Please select at least one platform</p>
+            )}
             <p className="text-xs text-gray-500">
               Platforms with ✓ have social media handles configured in client settings
             </p>
@@ -201,16 +232,16 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
 
           {/* Content Type */}
           <div className="space-y-2">
-            <Label htmlFor="contentType">Content Type</Label>
-            <Select name="contentType" defaultValue={postIdea?.contentType || 'photo'}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select content type" />
+            <Label>Content Type</Label>
+            <Select value={contentType} onValueChange={(value: 'photo' | 'video' | 'reel' | 'story') => setContentType(value)}>
+              <SelectTrigger className="h-12 text-base tap-target">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="photo">Photo</SelectItem>
-                <SelectItem value="video">Video</SelectItem>
-                <SelectItem value="reel">Reel</SelectItem>
-                <SelectItem value="story">Story</SelectItem>
+                <SelectItem value="photo">📸 Photo</SelectItem>
+                <SelectItem value="video">🎥 Video</SelectItem>
+                <SelectItem value="reel">📱 Reel</SelectItem>
+                <SelectItem value="story">📖 Story</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -221,9 +252,10 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
             <Textarea
               id="caption"
               name="caption"
-              placeholder="Enter caption..."
+              placeholder="Write your caption..."
               defaultValue={postIdea?.caption}
               rows={3}
+              className="text-base tap-target resize-none"
             />
           </div>
 
@@ -247,6 +279,7 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
                     value={shot}
                     onChange={(e) => updateShotItem(index, e.target.value)}
                     className="flex-1"
+                    showValidationIcon={false} // No validation needed for individual shots
                   />
                   {shotList.length > 1 && (
                     <button
@@ -271,6 +304,7 @@ export const PostIdeaForm = ({ trigger, shootId, postIdea, onSuccess, mode }: Po
               placeholder="Additional notes..."
               defaultValue={postIdea?.notes}
               rows={2}
+              className="text-base tap-target resize-none"
             />
           </div>
         </div>

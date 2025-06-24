@@ -285,33 +285,31 @@ export const shootsApi = {
       parsedDate: new Date(shootDate).toISOString()
     })
 
-    // Mock folder creation - replace with real Google Drive API call
-    console.log('⏱️  [shootsApi.createDriveFolder] Simulating folder creation delay...')
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    
-    const formattedDate = new Date(shootDate).toISOString().split('T')[0]
-    const folderName = `[${formattedDate}] ${shootTitle}`
-    console.log('📅 [shootsApi.createDriveFolder] Formatted folder name:', folderName)
+    // Real Google Drive folder creation - this will be implemented when Google Drive is connected
+    const response = await fetch('/api/shoots/create-drive-folder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        clientName,
+        shootTitle,
+        shootDate
+      })
+    })
 
-    const mockFolder = {
-      id: `mock_folder_${Date.now()}`,
-      name: folderName,
-      webViewLink: `https://drive.google.com/drive/folders/mock_folder_${Date.now()}`,
-      shareLink: `https://drive.google.com/drive/folders/mock_folder_${Date.now()}?usp=sharing`
+    if (!response.ok) {
+      throw new Error('Failed to create Google Drive folder')
     }
 
-    console.log('📂 [shootsApi.createDriveFolder] Mock folder structure created:', mockFolder)
-    console.log('🎯 [shootsApi.createDriveFolder] Expected folder hierarchy:')
-    console.log(`   📁 ${clientName}/`)
-    console.log(`   └── 📁 ${folderName}/`)
-    console.log(`       ├── 📁 [Post Idea 1]/`)
-    console.log(`       │   └── 📁 raw-files/`)
-    console.log(`       ├── 📁 [Post Idea 2]/`)
-    console.log(`       │   └── 📁 raw-files/`)
-    console.log(`       └── 📁 misc-files/`)
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to create Google Drive folder')
+    }
 
     console.log('✅ [shootsApi.createDriveFolder] Folder creation completed!')
-    return mockFolder
+    return data.folder
   },
 
   async shareDriveFolder(folderId: string): Promise<string> {

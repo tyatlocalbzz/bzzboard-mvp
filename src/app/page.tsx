@@ -34,75 +34,11 @@ interface PostIdea {
 export default function Dashboard() {
   const { selectedClient } = useClient()
 
-  // Mock shoots data - memoized to prevent recreation on every render
-  const allShoots = useMemo<DashboardShoot[]>(() => [
-    {
-      id: 1,
-      title: "Acme Corp Q1 Content",
-      client: "Acme Corporation",
-      date: "2024-01-15",
-      time: "14:00",
-      location: "Downtown Studio",
-      status: "scheduled"
-    },
-    {
-      id: 2,
-      title: "TechStart Social Media",
-      client: "TechStart Inc",
-      date: "2024-01-15", // Today's shoot
-      time: "16:00",
-      location: "Client Office",
-      status: "scheduled"
-    },
-    {
-      id: 3,
-      title: "StyleCo Fashion Shoot",
-      client: "StyleCo",
-      date: "2024-01-16",
-      time: "10:00",
-      location: "Photo Studio",
-      status: "scheduled"
-    }
-  ], [])
+  // Real shoots data will be loaded from API
+  const allShoots = useMemo<DashboardShoot[]>(() => [], [])
 
-  // Mock post ideas data - memoized to prevent recreation on every render
-  const allPostIdeas = useMemo<PostIdea[]>(() => [
-    {
-      id: 1,
-      title: "Product Launch Announcement",
-      client: "Acme Corporation",
-      status: "planned",
-      platforms: ["Instagram", "LinkedIn"]
-    },
-    {
-      id: 2,
-      title: "Behind the Scenes Content",
-      client: "TechStart Inc",
-      status: "shot",
-      platforms: ["Instagram", "Facebook"]
-    },
-    {
-      id: 3,
-      title: "Customer Testimonial Video",
-      client: "StyleCo",
-      status: "uploaded",
-      platforms: ["LinkedIn", "YouTube"]
-    },
-    {
-      id: 4,
-      title: "Office Culture Showcase",
-      client: "TechStart Inc",
-      status: "planned",
-      platforms: ["LinkedIn", "Instagram"]
-    },
-    {
-      id: 5,
-      title: "Spring Collection Preview",
-      client: "StyleCo",
-      status: "shot",
-      platforms: ["Instagram", "TikTok"]
-    }
-  ], [])
+  // Real post ideas data will be loaded from API
+  const allPostIdeas = useMemo<PostIdea[]>(() => [], [])
 
   // Filter data based on selected client - same pattern as shoots page
   const filteredShoots = useMemo(() => {
@@ -119,10 +55,9 @@ export default function Dashboard() {
     return allPostIdeas.filter(idea => idea.client === selectedClient.name)
   }, [selectedClient, allPostIdeas])
 
-  // Get today's shoots (for display) - use a stable date to prevent hydration issues
+  // Get today's shoots (for display)
   const todaysShoots = useMemo(() => {
-    // Use a fixed date for demonstration - in real app this would be from API
-    const today = "2024-01-15"
+    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
     return filteredShoots.filter(shoot => shoot.date === today)
   }, [filteredShoots])
 

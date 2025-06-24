@@ -99,19 +99,29 @@ export const GoogleDriveIntegration = ({
 
   const handleDisconnect = async () => {
     try {
+      console.log('🔌 [GoogleDriveIntegration] Starting disconnect process...')
+      
       const response = await fetch('/api/integrations/google-drive/disconnect', {
         method: 'POST',
       })
 
+      console.log('🔌 [GoogleDriveIntegration] Disconnect response status:', response.status)
+
       if (response.ok) {
+        const data = await response.json()
+        console.log('✅ [GoogleDriveIntegration] Disconnect successful:', data.message)
         toast.success('Google Drive disconnected successfully')
+        
+        // Trigger status refresh
+        console.log('🔄 [GoogleDriveIntegration] Triggering status refresh...')
         onStatusChange()
       } else {
         const data = await response.json()
+        console.error('❌ [GoogleDriveIntegration] Disconnect failed:', data)
         throw new Error(data.error || 'Failed to disconnect')
       }
     } catch (error) {
-      console.error('Google Drive disconnect error:', error)
+      console.error('❌ [GoogleDriveIntegration] Disconnect error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to disconnect Google Drive')
     }
   }
@@ -160,27 +170,8 @@ export const GoogleDriveIntegration = ({
       }
     } catch (error) {
       console.error('Error browsing folders:', error)
-      // Return mock data for now
-      return [
-        {
-          id: 'folder1',
-          name: 'Business Content',
-          webViewLink: '',
-          path: '/My Drive/Business Content'
-        },
-        {
-          id: 'folder2', 
-          name: 'Client Work',
-          webViewLink: '',
-          path: '/My Drive/Client Work'
-        },
-        {
-          id: 'folder3',
-          name: 'Photography',
-          webViewLink: '',
-          path: '/My Drive/Photography'
-        }
-      ]
+      toast.error('Failed to browse folders. Please check your Google Drive connection.')
+      return []
     }
   }
 
@@ -193,29 +184,29 @@ export const GoogleDriveIntegration = ({
 
   return (
     <>
-      <IntegrationCard
-        name="Google Drive"
-        description="Automatically organize and store your content files in the cloud"
-        icon={<HardDrive className="h-5 w-5 text-blue-600" />}
-        status={getIntegrationStatus()}
-        connectedEmail={status.email}
-        lastSync={status.lastSync}
-        error={status.error}
-        onConnect={handleConnect}
-        onDisconnect={handleDisconnect}
-        onRetry={handleRetry}
+        <IntegrationCard
+          name="Google Drive"
+          description="Automatically organize and store your content files in the cloud"
+          icon={<HardDrive className="h-5 w-5 text-blue-600" />}
+          status={getIntegrationStatus()}
+          connectedEmail={status.email}
+          lastSync={status.lastSync}
+          error={status.error}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          onRetry={handleRetry}
         additionalActions={
           status.connected ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettingsDialog(true)}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowSettingsDialog(true)}
               className="flex items-center gap-1 h-8"
-              disabled={isLoadingSettings}
-            >
+                    disabled={isLoadingSettings}
+                  >
               <Settings className="h-3 w-3" />
-              Configure
-            </Button>
+                    Configure
+                  </Button>
           ) : undefined
         }
       />
@@ -239,9 +230,9 @@ export const GoogleDriveIntegration = ({
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                 <FolderOpen className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Create and manage folders</p>
+                  <p className="text-sm font-medium text-gray-900">Browse and view your folders</p>
                   <p className="text-xs text-gray-600">
-                    Organize your content with automatic folder structure
+                    Access existing folders to choose where to organize your content
                   </p>
                 </div>
               </div>
@@ -249,9 +240,9 @@ export const GoogleDriveIntegration = ({
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                 <Zap className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Upload and store files</p>
+                  <p className="text-sm font-medium text-gray-900">Create folders and upload files</p>
                   <p className="text-xs text-gray-600">
-                    Automatically save your shoot content and editing notes
+                    Automatically organize content with folder structure and file uploads
                   </p>
                 </div>
               </div>
@@ -261,7 +252,7 @@ export const GoogleDriveIntegration = ({
                 <div>
                   <p className="text-sm font-medium text-gray-900">Read file metadata</p>
                   <p className="text-xs text-gray-600">
-                    Track upload status and sync information
+                    Track upload status and sync information for your content
                   </p>
                 </div>
               </div>
@@ -271,7 +262,7 @@ export const GoogleDriveIntegration = ({
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-800">
                 <Shield className="h-3 w-3 inline mr-1" />
-                Your files remain private and secure. Buzzboard only accesses files it creates.
+                Buzzboard can browse your folders but only manages files it creates. Your existing files remain untouched.
               </p>
             </div>
 

@@ -28,11 +28,9 @@ interface AccountSettingsProps {
 export const AccountSettings = ({ user }: AccountSettingsProps) => {
   return (
     <div className="space-y-6">
-      {/* User Profile Summary */}
       <div className="space-y-3">
         <h2 className="text-lg font-semibold text-gray-900">Profile</h2>
         
-        {/* User Info */}
         <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
           <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
             {user.name?.charAt(0).toUpperCase()}
@@ -55,7 +53,6 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
           </div>
         </div>
         
-        {/* Account Stats */}
         <div className="grid grid-cols-2 gap-3">
           <StatsCard
             title="Member Since"
@@ -81,21 +78,16 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
         </div>
       </div>
 
-      {/* First Login Welcome */}
       {user.isFirstLogin && (
         <>
           <Separator />
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-gray-900">Welcome to Buzzboard!</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Set Password</h2>
             <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="text-blue-800 font-medium mb-2 text-sm">Complete Your Setup</div>
-              <div className="text-blue-700 text-xs mb-3">
-                Please set your password to secure your account and get started.
-              </div>
               <ChangePasswordForm>
                 <Button className="w-full h-12 tap-target">
                   <Key className="h-4 w-4 mr-2" />
-                  Set Your Password
+                  Set Password
                 </Button>
               </ChangePasswordForm>
             </div>
@@ -105,15 +97,13 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
 
       <Separator />
 
-      {/* Profile Settings */}
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">Profile Settings</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
         <div className="space-y-2">
           <EditProfileForm user={{ name: user.name, email: user.email }}>
             <MenuItemButton
               icon={Edit}
               title="Edit Profile"
-              description="Update your name and email"
             />
           </EditProfileForm>
 
@@ -121,23 +111,20 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
             <MenuItemButton
               icon={Key}
               title="Change Password"
-              description="Update your account password"
             />
           </ChangePasswordForm>
         </div>
       </div>
 
-      {/* Administration - Only show for admins */}
       {user.role === 'admin' && (
         <>
           <Separator />
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-gray-900">Administration</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Admin</h2>
             <Link href="/admin/users">
               <MenuItemButton
                 icon={Users}
                 title="User Management"
-                description="Manage team members and permissions"
               />
             </Link>
           </div>
@@ -146,14 +133,12 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
 
       <Separator />
 
-      {/* General Settings */}
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">General</h2>
+        <h2 className="text-lg font-semibold text-gray-900">More</h2>
         <div className="space-y-2">
           <MenuItemButton
             icon={Bell}
             title="Notifications"
-            description="Coming soon"
             disabled
             className="opacity-50 cursor-not-allowed"
           />
@@ -161,7 +146,6 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
           <MenuItemButton
             icon={HelpCircle}
             title="Help & Support"
-            description="Coming soon"
             disabled
             className="opacity-50 cursor-not-allowed"
           />
@@ -170,9 +154,7 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
 
       <Separator />
 
-      {/* Sign Out */}
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">Session</h2>
         <SignOutButton 
           variant="outline" 
           className="w-full h-12 text-red-600 border-red-200 hover:bg-red-50 tap-target"

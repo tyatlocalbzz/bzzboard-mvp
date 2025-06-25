@@ -29,13 +29,16 @@ export default function ShootDetailsPage() {
   const [showAssignPostsDialog, setShowAssignPostsDialog] = useState(false)
   const [showCreatePostForm, setShowCreatePostForm] = useState(false)
 
+  // Memoize onError callback to prevent infinite loops
+  const handleError = useCallback((error: string) => {
+    console.error('Failed to load shoot data:', error)
+    router.push('/shoots')
+  }, [router])
+
   // Use custom hooks for data and actions
   const { shoot, postIdeas, isLoading, refresh } = useShootData({ 
     shootId,
-    onError: (error) => {
-      console.error('Failed to load shoot data:', error)
-      router.push('/shoots')
-    }
+    onError: handleError
   })
 
   // Helper function to find client override from shoot's client name

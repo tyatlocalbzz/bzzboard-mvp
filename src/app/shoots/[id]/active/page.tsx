@@ -28,24 +28,30 @@ export default function ActiveShootPage() {
   const [showCompleted, setShowCompleted] = useState(false)
   const [showEndDialog, setShowEndDialog] = useState(false)
 
+  // Memoize onError callback to prevent infinite loops
+  const handleError = useCallback((error: string) => {
+    console.error('Failed to load active shoot data:', error)
+    toast.error('Failed to load active shoot data')
+    router.push(`/shoots/${shootId}`)
+  }, [router, shootId])
+
   // Use the custom hook for data management
   const { shoot, postIdeas, isLoading, refresh } = useShootData({
     shootId,
-    onError: (error) => {
-      console.error('Failed to load active shoot data:', error)
-      toast.error('Failed to load active shoot data')
-      router.push(`/shoots/${shootId}`)
-    }
+    onError: handleError
   })
+
+  // Memoize onSuccess callback to prevent infinite loops
+  const handleSuccess = useCallback(() => {
+    endActiveShoot()
+    toast.success('Shoot ended successfully!')
+    router.push(`/shoots/${shootId}`)
+  }, [endActiveShoot, router, shootId])
 
   // Use shoot actions hook for ending the shoot
   const { completeShoot, isLoading: endLoading } = useShootActions({
     shoot: shoot!,
-    onSuccess: () => {
-      endActiveShoot()
-      toast.success('Shoot ended successfully!')
-      router.push(`/shoots/${shootId}`)
-    }
+    onSuccess: handleSuccess
   })
 
   // Calculate progress from post ideas

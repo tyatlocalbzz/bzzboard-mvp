@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 
 interface ApiDataOptions<T> {
@@ -44,16 +44,24 @@ export const useApiData = <T>({
     hasOnSuccess: !!onSuccess
   })
 
-  // Memoize callbacks to prevent infinite loops when passed as inline functions
-  const memoizedOnError = useCallback((error: string) => {
-    console.log('❌ [useApiData] Calling onError callback:', error)
-    onError?.(error)
-  }, [onError])
+  // Use refs to store current callback values to prevent infinite loops
+  const onErrorRef = useRef(onError)
+  const onSuccessRef = useRef(onSuccess)
+  
+  // Update refs when callbacks change
+  onErrorRef.current = onError
+  onSuccessRef.current = onSuccess
 
-  const memoizedOnSuccess = useCallback((data: T) => {
+  // Stable callback references that use current ref values
+  const callOnError = useCallback((error: string) => {
+    console.log('❌ [useApiData] Calling onError callback:', error)
+    onErrorRef.current?.(error)
+  }, [])
+  
+  const callOnSuccess = useCallback((data: T) => {
     console.log('✅ [useApiData] Calling onSuccess callback with data:', data)
-    onSuccess?.(data)
-  }, [onSuccess])
+    onSuccessRef.current?.(data)
+  }, [])
 
   const fetchData = useCallback(async (forceRefresh = false): Promise<T> => {
     // Add cache-busting parameter for force refresh
@@ -98,18 +106,19 @@ export const useApiData = <T>({
       
       console.log('✅ [useApiData] Setting data:', result)
       setData(result)
-      memoizedOnSuccess(result)
+      callOnSuccess(result)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load data'
       console.error('❌ [useApiData] Error in loadData:', errorMessage)
       setError(errorMessage)
-      memoizedOnError(errorMessage)
+      callOnError(errorMessage)
       toast.error(errorMessage)
     } finally {
       console.log('🏁 [useApiData] Setting isLoading to false')
       setIsLoading(false)
     }
-  }, [fetchData, memoizedOnError, memoizedOnSuccess, endpoint])
+  }, [fetchData, endpoint])
+  // Note: memoizedOnError and memoizedOnSuccess intentionally omitted to prevent infinite loops
 
   const refresh = useCallback(async () => {
     console.log('🔄 [useApiData] refresh called for:', endpoint)
@@ -137,7 +146,7 @@ export const useApiData = <T>({
     if (autoFetch) {
       console.log('🚀 [useApiData] Calling loadData from useEffect')
       
-      // Call loadData directly to avoid dependency cycle
+      // Inline the fetch logic to avoid dependency cycles with fetchData
       const executeLoad = async () => {
         console.log('🔄 [useApiData] executeLoad called:', {
           endpoint,
@@ -148,16 +157,36 @@ export const useApiData = <T>({
           setIsLoading(true)
           setError(null)
           
-          const result = await fetchData(false)
+          // Inline fetch logic to avoid fetchData dependency
+          console.log('🌐 [useApiData] Fetching from:', endpoint)
+          const response = await fetch(endpoint)
+          console.log('🌐 [useApiData] Response status:', response.status, response.statusText)
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch data: ${response.statusText}`)
+          }
+          
+          const apiResult = await response.json()
+          console.log('🌐 [useApiData] Raw API response:', apiResult)
+          
+          if (!apiResult.success) {
+            throw new Error(apiResult.error || 'Failed to fetch data')
+          }
+          
+          console.log('🌐 [useApiData] API data before transform:', apiResult.data)
+          
+          // Apply transformation if provided
+          const result = transform ? transform(apiResult) : apiResult.data
+          console.log('🌐 [useApiData] Final transformed data:', result)
           
           console.log('✅ [useApiData] Setting data:', result)
           setData(result)
-          memoizedOnSuccess(result)
+          callOnSuccess(result)
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : 'Failed to load data'
           console.error('❌ [useApiData] Error in executeLoad:', errorMessage)
           setError(errorMessage)
-          memoizedOnError(errorMessage)
+          callOnError(errorMessage)
           toast.error(errorMessage)
         } finally {
           console.log('🏁 [useApiData] Setting isLoading to false')
@@ -170,7 +199,8 @@ export const useApiData = <T>({
       console.log('⏸️ [useApiData] Skipping loadData (autoFetch is false)')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFetch, fetchData, memoizedOnError, memoizedOnSuccess, ...dependencies])
+  }, [autoFetch, endpoint, ...dependencies])
+  // Note: fetchData and transform removed from dependencies to prevent infinite loops
 
   console.log('🔗 [useApiData] Returning state:', {
     endpoint,

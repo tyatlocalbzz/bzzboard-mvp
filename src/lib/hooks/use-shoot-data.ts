@@ -46,18 +46,43 @@ export const useShootData = ({
 }: UseShootDataOptions): UseShootDataReturn => {
   const endpoint = `/api/shoots/${shootId}`
   
-  // Transform function to separate shoot and post ideas data - use useCallback for functions
+  // Stable transform function to prevent infinite loops
   const transform = useCallback((data: unknown) => {
-    const result = data as { shoot: Shoot; postIdeas?: unknown[] }
+    console.log('🔄 [useShootData] Transform called with data:', data)
     
-    if (!loadPostIdeas) {
-      return {
-        shoot: result.shoot,
-        postIdeas: []
-      }
+    // Handle standardized API response: { success: true, data: { shoot, postIdeas } }
+    const response = data as { 
+      success?: boolean; 
+      data?: { shoot: Shoot; postIdeas?: unknown[] };
+      shoot?: Shoot; 
+      postIdeas?: unknown[] 
     }
     
-    // Transform post ideas to match extended format
+    // Extract the actual data - handle both formats for compatibility
+    let result: { shoot: Shoot; postIdeas?: unknown[] }
+    
+    if (response.success && response.data) {
+      // Standardized format: { success: true, data: { shoot, postIdeas } }
+      result = response.data
+      console.log('🔄 [useShootData] Using standardized format from response.data')
+    } else if (response.shoot) {
+      // Legacy format: { shoot, postIdeas }
+      result = { shoot: response.shoot, postIdeas: response.postIdeas }
+      console.log('🔄 [useShootData] Using legacy format from response root')
+    } else {
+      console.error('❌ [useShootData] Unexpected API response format:', response)
+      throw new Error('Invalid API response format')
+    }
+    
+    console.log('🔄 [useShootData] Extracted result:', result)
+    
+    if (!result.shoot) {
+      console.error('❌ [useShootData] No shoot data found in response')
+      throw new Error('No shoot data found')
+    }
+    
+    // Always transform post ideas, but return empty array if not needed
+    // This makes the transform function stable (no dependencies)
     const transformedPostIdeas = (result.postIdeas || []).map((item: unknown) => {
       const postIdea = item as { 
         id: number; 
@@ -77,22 +102,21 @@ export const useShootData = ({
       }
     })
     
-    return {
+    const finalResult = {
       shoot: result.shoot,
+      // Filter post ideas based on loadPostIdeas flag in the return, not in transform
       postIdeas: transformedPostIdeas
     }
-  }, [loadPostIdeas])
-
-  // Memoize onError callback to prevent infinite loops
-  const memoizedOnError = useCallback((error: string) => {
-    onError?.(error)
-  }, [onError])
+    
+    console.log('✅ [useShootData] Transform completed:', finalResult)
+    return finalResult
+  }, []) // Empty dependencies to make transform stable
 
   const { data, isLoading, error, refresh, updateData } = useApiData<ShootDataResponse>({
     endpoint,
     dependencies: [shootId, loadPostIdeas],
     transform,
-    onError: memoizedOnError
+    onError: onError // Pass onError directly - useApiData will handle memoization
   })
 
   // Memoize convenience update functions to prevent recreation
@@ -114,7 +138,7 @@ export const useShootData = ({
 
   return {
     shoot: data?.shoot || null,
-    postIdeas: data?.postIdeas || [],
+    postIdeas: loadPostIdeas ? (data?.postIdeas || []) : [],
     isLoading,
     error,
     refresh,

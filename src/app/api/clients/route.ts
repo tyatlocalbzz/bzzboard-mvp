@@ -1,43 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { getAllClientsAsClientData, createClient } from '@/lib/db/clients'
 import { clientValidation } from '@/lib/validation/client-validation'
+import { ApiErrors, ApiSuccess, getValidatedBody } from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
 
 export async function GET() {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!user?.email) return ApiErrors.unauthorized()
 
-    // Get all clients as ClientData format (with string IDs)
+    console.log('📖 [ClientsAPI] Loading clients for user:', user.email)
     const clients = await getAllClientsAsClientData()
-
-    return NextResponse.json({ 
-      success: true,
-      clients 
+    
+    console.log('📊 [ClientsAPI] Found clients:', {
+      count: clients.length,
+      clients: clients.map(c => ({ id: c.id, name: c.name, type: c.type }))
     })
     
+    return ApiSuccess.ok({ clients })
   } catch (error) {
-    console.error('Get clients error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [ClientsAPI] Get clients error:', error)
+    return ApiErrors.internalError()
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!user?.email) return ApiErrors.unauthorized()
 
-    // Parse request body
-    const body = await request.json()
+    const body = await getValidatedBody<{
+      name: string
+      primaryContactName: string
+      primaryContactEmail: string
+      primaryContactPhone?: string
+      website?: string
+      socialMedia?: Record<string, string>
+      notes?: string
+    }>(request, (data) => clientValidation.clientData(data as {
+      name?: string
+      primaryContactName?: string
+      primaryContactEmail?: string
+      primaryContactPhone?: string
+      website?: string
+    }))
+
     const { 
       name, 
       primaryContactName, 
@@ -48,25 +55,6 @@ export async function POST(request: NextRequest) {
       notes 
     } = body
 
-    // Validate using shared validation library
-    const validation = clientValidation.clientData({
-      name,
-      primaryContactName,
-      primaryContactEmail,
-      primaryContactPhone,
-      website
-    })
-
-    if (!validation.valid) {
-      // Return the first error found
-      const firstError = Object.values(validation.errors)[0]
-      return NextResponse.json(
-        { error: firstError },
-        { status: 400 }
-      )
-    }
-
-    // Create the client
     const newClient = await createClient({
       name,
       primaryContactName,
@@ -77,27 +65,22 @@ export async function POST(request: NextRequest) {
       notes
     })
 
-    return NextResponse.json({
-      success: true,
-      message: 'Client created successfully',
-      client: {
-        id: newClient.id.toString(),
-        name: newClient.name,
-        type: 'client' as const,
-        primaryContactName: newClient.primaryContactName,
-        primaryContactEmail: newClient.primaryContactEmail,
-        primaryContactPhone: newClient.primaryContactPhone,
-        website: newClient.website,
-        socialMedia: newClient.socialMedia,
-        notes: newClient.notes
-      }
-    })
+    const clientData = {
+      id: newClient.id.toString(),
+      name: newClient.name,
+      type: 'client' as const,
+      primaryContactName: newClient.primaryContactName,
+      primaryContactEmail: newClient.primaryContactEmail,
+      primaryContactPhone: newClient.primaryContactPhone,
+      website: newClient.website,
+      socialMedia: newClient.socialMedia,
+      notes: newClient.notes
+    }
 
+    console.log('✅ [ClientsAPI] Client created successfully:', clientData.name)
+    return ApiSuccess.created({ client: clientData }, 'Client created successfully')
   } catch (error) {
     console.error('Create client error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError()
   }
 } 

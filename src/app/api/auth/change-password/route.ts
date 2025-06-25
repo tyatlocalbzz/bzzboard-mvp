@@ -1,53 +1,63 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { verifyUserPassword, updateUserPassword } from '@/lib/db/users'
 import { clientValidation } from '@/lib/validation/client-validation'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  validateAuthInput 
+} from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface ChangePasswordBody {
+  currentPassword: string
+  newPassword: string
+  confirmPassword?: string
+}
 
 export async function POST(req: NextRequest) {
   try {
+    // Authentication check
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    const body = await req.json()
+    const body: ChangePasswordBody = await req.json()
     
-    // Validate using shared validation library
-    const validation = clientValidation.passwordChange({
-      currentPassword: body.currentPassword,
-      newPassword: body.newPassword,
-      confirmPassword: body.newPassword // For API, we assume they match if provided
-    })
+    // Enhanced validation with auth-specific patterns
+    const validation = validateAuthInput(body, (data) => 
+      clientValidation.passwordChange({
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+        confirmPassword: data.newPassword // For API, we assume they match if provided
+      })
+    )
 
-    if (!validation.valid) {
-      return NextResponse.json(
-        { 
-          error: 'Invalid input', 
-          details: validation.errors 
-        },
-        { status: 400 }
-      )
+    if (!validation.isValid) {
+      return ApiErrors.validationError(validation.errors!)
     }
 
     const { currentPassword, newPassword } = body
 
-    // Verify current password
-    const isCurrentPasswordValid = await verifyUserPassword(user.email!, currentPassword)
+    // Security: Verify current password before allowing change
+    const isCurrentPasswordValid = await verifyUserPassword(user.email, currentPassword)
     if (!isCurrentPasswordValid) {
-      return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 })
+      console.warn(`❌ [Auth] Failed password change attempt for user: ${user.email}`)
+      return ApiErrors.passwordIncorrect()
     }
 
-    // Update password
-    await updateUserPassword(user.email!, newPassword)
+    // Update password with new secure hash
+    await updateUserPassword(user.email, newPassword)
 
-    return NextResponse.json({ message: 'Password changed successfully' }, { status: 200 })
+    // Log successful password change for security audit
+    console.log(`✅ [Auth] Password successfully changed for user: ${user.email}`)
+
+    return ApiSuccess.authSuccess('Password changed successfully')
     
   } catch (error) {
-    console.error('Change password error:', error)
+    console.error('❌ [Auth] Change password error:', error)
     
-    return NextResponse.json(
-      { error: 'Failed to change password' },
-      { status: 500 }
-    )
+    // Don't leak sensitive error details in auth operations
+    return ApiErrors.internalError('Failed to change password')
   }
 } 

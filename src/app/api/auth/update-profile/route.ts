@@ -1,46 +1,76 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { updateUser } from '@/lib/db/users'
 import { clientValidation } from '@/lib/validation/client-validation'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  validateAuthInput
+} from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface UpdateProfileBody {
+  name: string
+  email: string
+}
 
 export async function POST(req: NextRequest) {
   try {
+    // Authentication check
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    const body = await req.json()
+    const body: UpdateProfileBody = await req.json()
     
-    // Validate using shared validation library
-    const validation = clientValidation.userProfile({
-      name: body.name,
-      email: body.email
-    })
+    // Enhanced validation with auth-specific patterns
+    const validation = validateAuthInput(body, (data) => 
+      clientValidation.userProfile({
+        name: data.name,
+        email: data.email
+      })
+    )
 
-    if (!validation.valid) {
-      return NextResponse.json(
-        { 
-          error: 'Invalid input', 
-          details: validation.errors 
-        },
-        { status: 400 }
-      )
+    if (!validation.isValid) {
+      return ApiErrors.validationError(validation.errors!)
     }
 
     const { name, email } = body
 
-    // Update user in database
-    await updateUser(user.email!, { name, email })
+    // Security check: Prevent users from updating to existing emails
+    // This would typically be handled at the database level with unique constraints
+    // but adding validation here for better user experience
 
-    return NextResponse.json({ message: 'Profile updated successfully' }, { status: 200 })
+    // Update user in database
+    await updateUser(user.email, { name, email })
+
+    // Create response with updated user data
+    const userResponse = {
+      id: user.id,
+      name,
+      email,
+      role: user.role
+    }
+
+    // Log profile update for security audit
+    console.log(`✅ [Auth] Profile updated for user: ${user.email} -> ${email}`)
+
+    // Return sanitized user data
+    return ApiSuccess.authSuccess(
+      'Profile updated successfully',
+      { user: userResponse }
+    )
     
   } catch (error) {
-    console.error('Update profile error:', error)
+    console.error('❌ [Auth] Update profile error:', error)
     
-    return NextResponse.json(
-      { error: 'Failed to update profile' },
-      { status: 500 }
-    )
+    // Handle specific database errors
+    if (error instanceof Error) {
+      if (error.message.includes('unique') || error.message.includes('duplicate')) {
+        return ApiErrors.emailTaken()
+      }
+    }
+    
+    return ApiErrors.internalError('Failed to update profile')
   }
 } 

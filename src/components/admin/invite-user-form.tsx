@@ -4,8 +4,8 @@ import { ReactNode, useState } from 'react'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { MobileInput } from '@/components/ui/mobile-input'
 import { Label } from '@/components/ui/label'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useAuthMutations } from '@/lib/hooks/use-auth-mutations'
 import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { clientValidation } from '@/lib/validation/client-validation'
 import { UserPlus, Mail, User } from 'lucide-react'
@@ -16,8 +16,7 @@ interface InviteUserFormProps {
 
 export const InviteUserForm = ({ children }: InviteUserFormProps) => {
   const [isOpen, setIsOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+  const { inviteUser } = useAuthMutations()
 
   // Field validation hooks
   const nameField = useFieldValidation({
@@ -49,52 +48,27 @@ export const InviteUserForm = ({ children }: InviteUserFormProps) => {
   }
 
   const handleSubmit = async () => {
-    setIsLoading(true)
+    // Validate all fields
+    const nameValidation = nameField.validate()
+    const emailValidation = emailField.validate()
     
-    try {
-      // Validate all fields
-      const nameValidation = nameField.validate()
-      const emailValidation = emailField.validate()
-      
-      if (!nameValidation.valid || !emailValidation.valid) {
-        toast.error('Please fix the validation errors before submitting')
-        return
-      }
-
-      const validationError = validateForm()
-      if (validationError) {
-        toast.error(validationError)
-        return
-      }
-
-      const response = await fetch('/api/users/invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email: emailField.value, 
-          name: nameField.value 
-        }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to invite user')
-      }
-
-      // Success
-      toast.success(`Invitation sent to ${emailField.value}`)
-      setIsOpen(false)
-      router.refresh() // Refresh the page to show the new user
-      
-    } catch (error) {
-      console.error('Invite error:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to invite user')
-    } finally {
-      setIsLoading(false)
+    if (!nameValidation.valid || !emailValidation.valid) {
+      toast.error('Please fix the validation errors before submitting')
+      return
     }
+
+    const validationError = validateForm()
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+
+    await inviteUser.mutate({
+      email: emailField.value,
+      name: nameField.value
+    })
+    
+    setIsOpen(false)
   }
 
   const handleOpenChange = (open: boolean) => {
@@ -165,7 +139,7 @@ export const InviteUserForm = ({ children }: InviteUserFormProps) => {
       isOpen={isOpen}
       onOpenChange={handleOpenChange}
       onSubmit={handleSubmit}
-      loading={isLoading}
+      loading={inviteUser.isLoading}
       submitText="Send Invitation"
       loadingText="Sending..."
     />

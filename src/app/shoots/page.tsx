@@ -124,6 +124,9 @@ export default function ShootsPage() {
 
   // Sort events chronologically (what's happening next)
   const sortedEvents = useMemo(() => {
+    if (!allEvents || !Array.isArray(allEvents)) {
+      return []
+    }
     return [...allEvents].sort((a, b) => {
       return new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
     })

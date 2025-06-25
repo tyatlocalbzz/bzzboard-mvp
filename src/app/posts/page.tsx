@@ -266,14 +266,13 @@ export default function PostsPage() {
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog
-        isOpen={!!deletingPost}
+        open={!!deletingPost}
         onOpenChange={(open) => !open && handleDeleteCancel()}
         onConfirm={handleDeleteConfirm}
-        onCancel={handleDeleteCancel}
         title="Delete Post"
         description="Are you sure you want to delete this post idea? This action cannot be undone."
         itemName={deletingPost?.title || ''}
-        isDeleting={isDeleting}
+        isLoading={isDeleting}
       />
     </MobileLayout>
   )

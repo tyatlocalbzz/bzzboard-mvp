@@ -1,19 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { getAllShoots, getShootsByClient, createShoot, updateShoot, type ShootWithClient } from '@/lib/db/shoots'
 import { getClientByName } from '@/lib/db/clients'
 import { getCachedEvents, linkEventToShoot } from '@/lib/db/calendar'
 import { getIntegration } from '@/lib/db/integrations'
 import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
 import { type CalendarEventCache } from '@/lib/db/schema'
-import type { UnifiedEvent, UnifiedEventFilter, UnifiedEventsResponse } from '@/lib/types/shoots'
+import type { UnifiedEvent, UnifiedEventFilter } from '@/lib/types/shoots'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface CreateShootBody {
+  title: string
+  clientName: string
+  date: string
+  time: string
+  duration: string
+  location: string
+  notes?: string
+  forceCreate?: boolean
+  forceCalendarCreate?: boolean
+}
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!user) return ApiErrors.unauthorized()
 
     const { searchParams } = new URL(req.url)
     const clientName = searchParams.get('client')
@@ -39,7 +50,6 @@ export async function GET(req: NextRequest) {
     // Fetch calendar events if needed
     if (filter === 'calendar' || filter === 'all') {
       try {
-        // Get date range for calendar events
         const today = new Date()
         today.setHours(0, 0, 0, 0)
         
@@ -52,7 +62,7 @@ export async function GET(req: NextRequest) {
 
         const events = await getCachedEvents(user.email!, 'primary')
         
-        // Filter events by date range and exclude shoot events if filter is 'calendar'
+        // Filter events by date range
         calendarEvents = events.filter(event => {
           const eventStart = new Date(event.startTime)
           const inDateRange = eventStart >= start && eventStart <= end
@@ -65,7 +75,7 @@ export async function GET(req: NextRequest) {
           return inDateRange
         })
       } catch (error) {
-        console.error('Error fetching calendar events:', error)
+        console.error('❌ [Shoots API] Error fetching calendar events:', error)
         // Continue without calendar events if there's an error
       }
     }
@@ -100,7 +110,7 @@ export async function GET(req: NextRequest) {
       attendees: event.attendees || [],
       isRecurring: event.isRecurring,
       conflictDetected: event.conflictDetected,
-      conflictDetails: event.conflictDetails || undefined, // Include conflict details
+      conflictDetails: event.conflictDetails || undefined,
       syncStatus: event.syncStatus,
       isShootEvent: !!event.shootId,
       shootId: event.shootId || undefined,
@@ -111,8 +121,7 @@ export async function GET(req: NextRequest) {
     const allEvents = [...shootEvents, ...calendarUnifiedEvents]
     allEvents.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
 
-    const response: UnifiedEventsResponse = {
-      success: true,
+    const responseData = {
       events: allEvents,
       totalCount: allEvents.length,
       filter,
@@ -120,50 +129,35 @@ export async function GET(req: NextRequest) {
       calendarEventsCount: calendarUnifiedEvents.length
     }
 
-    return NextResponse.json(response)
+    return ApiSuccess.ok(responseData)
 
   } catch (error) {
-    console.error('Error fetching unified events:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch events' },
-      { status: 500 }
-    )
+    console.error('❌ [Shoots API] Error fetching unified events:', error)
+    return ApiErrors.internalError('Failed to fetch events')
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!user?.email) return ApiErrors.unauthorized()
 
-    const body = await req.json()
+    const body: CreateShootBody = await req.json()
     const { title, clientName, date, time, duration, location, notes, forceCreate, forceCalendarCreate } = body
 
+    // Validation
     if (!title || !clientName || !date || !time || !duration || !location) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Missing required fields: title, clientName, date, time, duration, and location are required')
     }
 
     // Get client by name
     const client = await getClientByName(clientName)
-    if (!client) {
-      return NextResponse.json(
-        { error: 'Client not found' },
-        { status: 404 }
-      )
-    }
+    if (!client) return ApiErrors.notFound('Client')
 
-    // Combine date and time
+    // Validate and combine date and time
     const scheduledAt = new Date(`${date}T${time}`)
     if (isNaN(scheduledAt.getTime())) {
-      return NextResponse.json(
-        { error: 'Invalid date or time format' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Invalid date or time format')
     }
 
     // Calculate end time
@@ -174,31 +168,18 @@ export async function POST(req: NextRequest) {
     
     if (calendarIntegration?.connected && !forceCreate) {
       try {
-        console.log('🔍 [ShootCreation] Checking for conflicts before creating shoot:', title)
+        console.log('🔍 [Shoots API] Checking for conflicts before creating shoot:', title)
         
-        // Initialize calendar sync service
         const calendarSync = new GoogleCalendarSync()
-        
-        // Check for conflicts first
         const conflictInfo = await calendarSync.checkConflictsForShoot(
           user.email,
           scheduledAt,
           endTime
         )
 
-        console.log('🔍 [ShootCreation] Conflict check results:', {
-          conflictCount: conflictInfo.conflictingEvents.length,
-          conflicts: conflictInfo.conflictingEvents.map(e => ({
-            title: e.title,
-            start: e.startTime.toISOString(),
-            end: e.endTime.toISOString()
-          }))
-        })
-
         if (conflictInfo.conflictingEvents.length > 0) {
-          console.log('⚠️ [ShootCreation] Calendar conflicts detected - NOT creating shoot yet')
+          console.log('⚠️ [Shoots API] Calendar conflicts detected - NOT creating shoot yet')
           
-          // Format conflict details for better user experience
           const conflictDetails = conflictInfo.conflictingEvents.map(event => ({
             title: event.title,
             startTime: event.startTime.toISOString(),
@@ -206,8 +187,7 @@ export async function POST(req: NextRequest) {
           }))
           
           // Return conflict information WITHOUT creating the shoot
-          return NextResponse.json({
-            success: false,
+          return ApiSuccess.ok({
             hasConflicts: true,
             conflicts: conflictDetails,
             message: `Cannot schedule shoot - conflicts detected with ${conflictDetails.length} existing event${conflictDetails.length > 1 ? 's' : ''}`,
@@ -223,15 +203,14 @@ export async function POST(req: NextRequest) {
           })
         }
       } catch (error) {
-        console.error('❌ [ShootCreation] Error checking conflicts:', error)
+        console.error('❌ [Shoots API] Error checking conflicts:', error)
         // Continue with shoot creation if conflict check fails
       }
     }
 
     // No conflicts detected or forceCreate is true - proceed with shoot creation
-    console.log('✅ [ShootCreation] No conflicts detected or force creating - proceeding with shoot creation')
+    console.log('✅ [Shoots API] No conflicts detected or force creating - proceeding with shoot creation')
 
-    // Initialize calendar event variables
     let googleCalendarEventId: string | null = null
     let calendarSyncStatus: 'pending' | 'synced' | 'error' = 'pending'
     let calendarError: string | null = null
@@ -239,42 +218,37 @@ export async function POST(req: NextRequest) {
     // Create calendar event if integration is connected
     if (calendarIntegration?.connected) {
       try {
-        console.log('🗓️ [ShootCreation] Creating Google Calendar event for shoot:', title)
+        console.log('🗓️ [Shoots API] Creating Google Calendar event for shoot:', title)
         
-        // Initialize calendar sync service
         const calendarSync = new GoogleCalendarSync()
 
         if (forceCreate && !forceCalendarCreate) {
-          console.log('🚀 [ShootCreation] Force creating shoot - calendar event will NOT be created due to conflicts')
+          console.log('🚀 [Shoots API] Force creating shoot - calendar event will NOT be created due to conflicts')
           calendarSyncStatus = 'error'
           calendarError = 'Calendar event not created due to scheduling conflicts'
         } else {
-          // No conflicts, create calendar event
           const calendarEvent = {
             title: `📸 ${title}`,
             description: `Content shoot for ${client.name}\n\n${notes || ''}`.trim(),
             startTime: scheduledAt,
             endTime: endTime,
             location: location,
-            attendees: [] // Could be enhanced to include client email
+            attendees: []
           }
 
           googleCalendarEventId = await calendarSync.createEvent(user.email, calendarEvent)
           calendarSyncStatus = 'synced'
           
-          console.log('✅ [ShootCreation] Google Calendar event created:', googleCalendarEventId)
+          console.log('✅ [Shoots API] Google Calendar event created:', googleCalendarEventId)
         }
 
       } catch (error) {
-        console.error('❌ [ShootCreation] Failed to create calendar event:', error)
+        console.error('❌ [Shoots API] Failed to create calendar event:', error)
         calendarError = error instanceof Error ? error.message : 'Failed to create calendar event'
         calendarSyncStatus = 'error'
-        
-        // Don't fail shoot creation if calendar fails
-        console.log('⚠️ [ShootCreation] Continuing with shoot creation despite calendar error')
       }
     } else {
-      console.log('📅 [ShootCreation] Google Calendar not connected, skipping calendar event creation')
+      console.log('📅 [Shoots API] Google Calendar not connected, skipping calendar event creation')
     }
 
     // Create shoot in database
@@ -300,25 +274,14 @@ export async function POST(req: NextRequest) {
       if (googleCalendarEventId) {
         try {
           await linkEventToShoot(googleCalendarEventId, shoot.id, user.email)
-          console.log('🔗 [ShootCreation] Linked calendar event to shoot')
+          console.log('🔗 [Shoots API] Linked calendar event to shoot')
         } catch (linkError) {
-          console.error('❌ [ShootCreation] Failed to link calendar event to shoot:', linkError)
+          console.error('❌ [Shoots API] Failed to link calendar event to shoot:', linkError)
         }
       }
     }
 
-    const response: {
-      success: boolean
-      shoot: ShootWithClient & {
-        googleCalendarEventId?: string | null
-        googleCalendarSyncStatus?: 'pending' | 'synced' | 'error'
-        googleCalendarError?: string | null
-      }
-      message?: string
-      warning?: string
-      info?: string
-    } = {
-      success: true,
+    const responseData = {
       shoot: {
         ...shoot,
         client: {
@@ -332,31 +295,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Add success message about calendar integration
+    // Determine success message based on calendar integration
+    let message = 'Shoot created successfully'
+
     if (googleCalendarEventId) {
       if (forceCreate && forceCalendarCreate) {
-        response.message = 'Shoot created and added to Google Calendar (despite conflicts)'
-        response.warning = 'Calendar event created with scheduling conflicts - please review your calendar'
+        message = 'Shoot created and added to Google Calendar (despite conflicts)'
       } else {
-        response.message = 'Shoot created and added to your Google Calendar'
+        message = 'Shoot created and added to Google Calendar'
       }
-    } else if (calendarIntegration?.connected && calendarError) {
-      if (forceCreate && !forceCalendarCreate) {
-        response.warning = 'Shoot created but not added to Google Calendar due to scheduling conflicts'
-      } else {
-        response.warning = 'Shoot created but failed to add to Google Calendar'
-      }
-    } else if (!calendarIntegration?.connected) {
-      response.info = 'Shoot created. Connect Google Calendar to automatically add shoots to your calendar.'
+    } else if (calendarError) {
+      message = 'Shoot created but calendar sync failed'
     }
 
-    return NextResponse.json(response)
+    return ApiSuccess.created(responseData, message)
 
   } catch (error) {
-    console.error('Error creating shoot:', error)
-    return NextResponse.json(
-      { error: 'Failed to create shoot' },
-      { status: 500 }
-    )
+    console.error('❌ [Shoots API] Error creating shoot:', error)
+    return ApiErrors.internalError('Failed to create shoot')
   }
 } 

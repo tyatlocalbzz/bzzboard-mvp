@@ -1,19 +1,17 @@
-import { NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { google } from 'googleapis'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
 
 export async function POST() {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
     // Check if Google OAuth credentials are configured
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-      return NextResponse.json({ 
-        error: 'Google OAuth not configured. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your environment variables.' 
-      }, { status: 500 })
+      return ApiErrors.internalError('Google OAuth not configured. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your environment variables.')
     }
 
     const oauth2Client = new google.auth.OAuth2(
@@ -33,16 +31,10 @@ export async function POST() {
       prompt: 'consent' // Force consent screen to get refresh token
     })
 
-    return NextResponse.json({ 
-      success: true,
-      authUrl 
-    })
+    return ApiSuccess.ok({ authUrl })
     
   } catch (error) {
-    console.error('Google Calendar connect error:', error)
-    return NextResponse.json(
-      { error: 'Failed to initiate Google Calendar connection' },
-      { status: 500 }
-    )
+    console.error('❌ [Integrations] Google Calendar connect error:', error)
+    return ApiErrors.internalError('Failed to initiate Google Calendar connection')
   }
 } 

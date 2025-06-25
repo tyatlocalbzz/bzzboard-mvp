@@ -1,6 +1,24 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getPostIdeaById, updatePostIdea } from '@/lib/db/post-ideas'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  getValidatedParams,
+  getValidatedBody,
+  validateId
+} from '@/lib/api/api-helpers'
+
+interface AddShotBody {
+  text: string
+  notes?: string
+}
+
+interface UpdateShotBody {
+  shotId: number
+  text: string
+  notes?: string
+}
 
 export async function POST(
   request: NextRequest,
@@ -8,27 +26,24 @@ export async function POST(
 ) {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    const { id } = await params
-    const postIdeaId = parseInt(id)
-    if (isNaN(postIdeaId)) {
-      return NextResponse.json({ error: 'Invalid post idea ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const postIdeaId = validateId(id, 'Post idea')
 
-    const body = await request.json()
+    const body = await getValidatedBody<AddShotBody>(request)
     const { text, notes } = body
 
     if (!text?.trim()) {
-      return NextResponse.json({ error: 'Shot text is required' }, { status: 400 })
+      return ApiErrors.badRequest('Shot text is required')
     }
 
     // Get current post idea
     const postIdea = await getPostIdeaById(postIdeaId)
     if (!postIdea) {
-      return NextResponse.json({ error: 'Post idea not found' }, { status: 404 })
+      return ApiErrors.notFound('Post idea')
     }
 
     // Add new shot to the shot list
@@ -41,7 +56,7 @@ export async function POST(
     })
 
     if (!updatedPostIdea) {
-      return NextResponse.json({ error: 'Failed to add shot' }, { status: 500 })
+      return ApiErrors.internalError('Failed to add shot')
     }
 
     // Return the new shot with an ID (index-based)
@@ -54,19 +69,14 @@ export async function POST(
       postIdeaId: postIdeaId
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Shot added successfully',
+    return ApiSuccess.ok({
       shot: newShot,
       shotList: newShotList
-    })
+    }, 'Shot added successfully')
 
   } catch (error) {
-    console.error('Add shot error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Posts API] Add shot error:', error)
+    return ApiErrors.internalError('Failed to add shot')
   }
 }
 
@@ -76,37 +86,34 @@ export async function PATCH(
 ) {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    const { id } = await params
-    const postIdeaId = parseInt(id)
-    if (isNaN(postIdeaId)) {
-      return NextResponse.json({ error: 'Invalid post idea ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const postIdeaId = validateId(id, 'Post idea')
 
-    const body = await request.json()
+    const body = await getValidatedBody<UpdateShotBody>(request)
     const { shotId, text, notes } = body
 
     if (shotId === undefined || shotId < 0) {
-      return NextResponse.json({ error: 'Valid shot ID is required' }, { status: 400 })
+      return ApiErrors.badRequest('Valid shot ID is required')
     }
 
     if (!text?.trim()) {
-      return NextResponse.json({ error: 'Shot text is required' }, { status: 400 })
+      return ApiErrors.badRequest('Shot text is required')
     }
 
     // Get current post idea
     const postIdea = await getPostIdeaById(postIdeaId)
     if (!postIdea) {
-      return NextResponse.json({ error: 'Post idea not found' }, { status: 404 })
+      return ApiErrors.notFound('Post idea')
     }
 
     // Update shot in the shot list
     const currentShotList = postIdea.shotList || []
     if (shotId >= currentShotList.length) {
-      return NextResponse.json({ error: 'Shot not found' }, { status: 404 })
+      return ApiErrors.notFound('Shot')
     }
 
     const updatedShotList = [...currentShotList]
@@ -118,7 +125,7 @@ export async function PATCH(
     })
 
     if (!updatedPostIdea) {
-      return NextResponse.json({ error: 'Failed to update shot' }, { status: 500 })
+      return ApiErrors.internalError('Failed to update shot')
     }
 
     // Return the updated shot
@@ -130,18 +137,13 @@ export async function PATCH(
       postIdeaId: postIdeaId
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Shot updated successfully',
+    return ApiSuccess.ok({
       shot: updatedShot,
       shotList: updatedShotList
-    })
+    }, 'Shot updated successfully')
 
   } catch (error) {
-    console.error('Update shot error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Posts API] Update shot error:', error)
+    return ApiErrors.internalError('Failed to update shot')
   }
 } 

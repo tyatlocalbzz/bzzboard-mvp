@@ -1,31 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth/session'
-import { getShootById, updateShootStatus, updateShoot, deleteShoot, getPostIdeasForShoot } from '@/lib/db/shoots'
+import { NextRequest } from 'next/server'
+import { updateShootStatus, updateShoot, deleteShoot, getPostIdeasForShoot } from '@/lib/db/shoots'
 import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
+import { ApiErrors, ApiSuccess, getValidatedParams, getValidatedBody, validateId } from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { getShootById } from '@/lib/db/shoots'
+
+interface ShootUpdateBody {
+  status?: 'scheduled' | 'active' | 'completed' | 'cancelled'
+  action?: 'start' | 'complete'
+  title?: string
+  duration?: number
+  location?: string
+  notes?: string
+  scheduledAt?: string
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await getCurrentUserForAPI()
+    if (!user) return ApiErrors.unauthorized()
 
-    // Await params in Next.js 15
-    const { id } = await params
-    const shootId = parseInt(id)
-    if (isNaN(shootId)) {
-      return NextResponse.json({ error: 'Invalid shoot ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const shootId = validateId(id, 'shoot')
 
     // Get shoot details
     const shoot = await getShootById(shootId)
-    if (!shoot) {
-      return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-    }
+    if (!shoot) return ApiErrors.notFound('Shoot')
 
     // Get post ideas for this shoot
     const postIdeasData = await getPostIdeasForShoot(shootId)
@@ -37,8 +40,8 @@ export async function GET(
       platforms: postIdea.platforms,
       contentType: postIdea.contentType,
       caption: postIdea.caption,
-      status: postIdea.status || 'planned', // Include status field
-      shotList: postIdea.shotList || [], // Include shotList for frontend
+      status: postIdea.status || 'planned',
+      shotList: postIdea.shotList || [],
       notes: postIdea.notes,
       completed: postIdea.completed || false,
       shots: (postIdea.shotList || []).map((shotText: string, index: number) => ({
@@ -61,24 +64,19 @@ export async function GET(
       startedAt: shoot.startedAt?.toISOString(),
       notes: shoot.notes,
       postIdeasCount: shoot.postIdeasCount,
-      // Include Google Calendar fields for frontend
       googleCalendarEventId: shoot.googleCalendarEventId,
       googleCalendarSyncStatus: shoot.googleCalendarSyncStatus,
       googleCalendarError: shoot.googleCalendarError
     }
 
-    return NextResponse.json({
-      success: true,
+    return ApiSuccess.ok({
       shoot: transformedShoot,
       postIdeas
     })
 
   } catch (error) {
-    console.error('Get shoot error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Shoots API] Get shoot error:', error)
+    return ApiErrors.internalError()
   }
 }
 
@@ -87,26 +85,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await getCurrentUserForAPI()
+    if (!user) return ApiErrors.unauthorized()
 
-    // Await params in Next.js 15
-    const { id } = await params
-    const shootId = parseInt(id)
-    if (isNaN(shootId)) {
-      return NextResponse.json({ error: 'Invalid shoot ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const shootId = validateId(id, 'shoot')
 
-    // Parse request body
-    const body = await request.json()
+    const body = await getValidatedBody<ShootUpdateBody>(request)
     const { status, action, title, duration, location, notes, scheduledAt } = body
 
     // Handle status updates
     if (status) {
-      // Prepare timestamps based on status
       const timestamps: { startedAt?: Date; completedAt?: Date } = {}
       
       if (status === 'active' && action === 'start') {
@@ -115,16 +104,10 @@ export async function PATCH(
         timestamps.completedAt = new Date()
       }
 
-      // Update shoot status
       const updatedShoot = await updateShootStatus(shootId, status, timestamps)
-      
-      if (!updatedShoot) {
-        return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-      }
+      if (!updatedShoot) return ApiErrors.notFound('Shoot')
 
-      return NextResponse.json({
-        success: true,
-        message: `Shoot status changed to ${status}`,
+      return ApiSuccess.ok({
         shoot: {
           id: updatedShoot.id,
           title: updatedShoot.title,
@@ -132,11 +115,11 @@ export async function PATCH(
           startedAt: updatedShoot.startedAt?.toISOString(),
           completedAt: updatedShoot.completedAt?.toISOString()
         }
-      })
+      }, `Shoot status changed to ${status}`)
     }
 
     // Handle shoot details updates
-    if (title || duration || location || notes || scheduledAt) {
+    if (title || duration || location !== undefined || notes !== undefined || scheduledAt) {
       const updateData: {
         title?: string
         duration?: number
@@ -146,20 +129,15 @@ export async function PATCH(
       } = {}
       
       if (title) updateData.title = title
-      if (duration) updateData.duration = parseInt(duration)
+      if (duration) updateData.duration = duration
       if (location !== undefined) updateData.location = location
       if (notes !== undefined) updateData.notes = notes
       if (scheduledAt) updateData.scheduledAt = new Date(scheduledAt)
 
       const updatedShoot = await updateShoot(shootId, updateData)
-      
-      if (!updatedShoot) {
-        return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-      }
+      if (!updatedShoot) return ApiErrors.notFound('Shoot')
 
-      return NextResponse.json({
-        success: true,
-        message: 'Shoot updated successfully',
+      return ApiSuccess.ok({
         shoot: {
           id: updatedShoot.id,
           title: updatedShoot.title,
@@ -169,17 +147,14 @@ export async function PATCH(
           scheduledAt: updatedShoot.scheduledAt.toISOString(),
           status: updatedShoot.status
         }
-      })
+      }, 'Shoot updated successfully')
     }
 
-    return NextResponse.json({ error: 'No valid update fields provided' }, { status: 400 })
+    return ApiErrors.badRequest('No valid update fields provided')
 
   } catch (error) {
-    console.error('Update shoot error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Shoots API] Update shoot error:', error)
+    return ApiErrors.internalError()
   }
 }
 
@@ -188,62 +163,36 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await getCurrentUserForAPI()
+    if (!user) return ApiErrors.unauthorized()
 
-    // Await params in Next.js 15
-    const { id } = await params
-    const shootId = parseInt(id)
-    if (isNaN(shootId)) {
-      return NextResponse.json({ error: 'Invalid shoot ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const shootId = validateId(id, 'shoot')
 
-    // Get shoot details first to check for Google Calendar integration
+    // Check if shoot exists before deletion
     const shoot = await getShootById(shootId)
-    if (!shoot) {
-      return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-    }
+    if (!shoot) return ApiErrors.notFound('Shoot')
 
-    let calendarEventDeleted = false
-
-    // Delete from Google Calendar if event exists
-    if (shoot.googleCalendarEventId && session.user?.email) {
+    // Handle Google Calendar cleanup if needed
+    if (shoot.googleCalendarEventId) {
       try {
         const calendarSync = new GoogleCalendarSync()
-        calendarEventDeleted = await calendarSync.deleteCalendarEvent(
-          session.user.email,
-          shoot.googleCalendarEventId
-        )
-        console.log('📅 [API] Calendar event deletion result:', calendarEventDeleted)
+        await calendarSync.deleteCalendarEvent(user.email!, shoot.googleCalendarEventId)
+        console.log('✅ [Shoots API] Calendar event cleaned up during shoot deletion')
       } catch (calendarError) {
-        console.error('⚠️ [API] Failed to delete calendar event:', calendarError)
-        // Don't fail the entire operation if calendar deletion fails
+        console.warn('⚠️ [Shoots API] Failed to cleanup calendar event:', calendarError)
+        // Continue with shoot deletion even if calendar cleanup fails
       }
     }
 
-    // Soft delete the shoot (pass user ID for audit trail)
-    const userId = session.user?.id ? parseInt(session.user.id) : undefined
-    const success = await deleteShoot(shootId, userId)
-    
-    if (!success) {
-      return NextResponse.json({ error: 'Failed to delete shoot' }, { status: 500 })
-    }
+    // Delete the shoot
+    const deleted = await deleteShoot(shootId)
+    if (!deleted) return ApiErrors.internalError('Failed to delete shoot')
 
-    return NextResponse.json({
-      success: true,
-      message: 'Shoot deleted successfully',
-      calendarEventRemoved: calendarEventDeleted,
-      recoveryNote: 'This shoot has been moved to trash and can be recovered from the admin panel.'
-    })
+    return ApiSuccess.ok(null, 'Shoot deleted successfully')
 
   } catch (error) {
-    console.error('Delete shoot error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Shoots API] Delete shoot error:', error)
+    return ApiErrors.internalError()
   }
 } 

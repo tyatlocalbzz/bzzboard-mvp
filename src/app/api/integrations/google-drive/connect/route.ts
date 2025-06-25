@@ -1,21 +1,19 @@
-import { NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
 import { google } from 'googleapis'
 
 export async function POST() {
   try {
     const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     console.log('🔗 [GoogleDriveConnect] Starting connection for user:', user.email)
 
     // Check if Google OAuth credentials are configured
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-      return NextResponse.json({ 
-        error: 'Google OAuth not configured. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your environment variables.' 
-      }, { status: 500 })
+      return ApiErrors.internalError('Google OAuth not configured. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your environment variables.')
     }
 
     const oauth2Client = new google.auth.OAuth2(
@@ -48,16 +46,10 @@ export async function POST() {
     console.log('🌐 [GoogleDriveConnect] Generated auth URL with scopes')
     console.log('🔗 [GoogleDriveConnect] Auth URL (partial):', authUrl.substring(0, 100) + '...')
 
-    return NextResponse.json({ 
-      success: true,
-      authUrl 
-    })
+    return ApiSuccess.ok({ authUrl })
     
   } catch (error) {
     console.error('❌ [GoogleDriveConnect] Connection error:', error)
-    return NextResponse.json(
-      { error: 'Failed to initiate Google Drive connection' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to initiate Google Drive connection')
   }
 } 

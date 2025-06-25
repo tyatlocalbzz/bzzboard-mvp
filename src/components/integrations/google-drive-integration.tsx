@@ -46,8 +46,13 @@ export const GoogleDriveIntegration = ({
       
       if (response.ok) {
         const data = await response.json()
-        console.log('📖 [GoogleDriveIntegration] Settings loaded:', data.settings)
-        setCurrentSettings(data.settings)
+        console.log('📖 [GoogleDriveIntegration] Settings loaded:', data)
+        
+        if (data.success && data.data?.settings) {
+          setCurrentSettings(data.data.settings)
+        } else {
+          console.error('Invalid settings response format:', data)
+        }
       } else {
         console.error('Failed to load settings:', response.statusText)
       }
@@ -84,11 +89,11 @@ export const GoogleDriveIntegration = ({
 
       const data = await response.json()
 
-      if (response.ok && data.authUrl) {
+      if (response.ok && data.success && data.data?.authUrl) {
         // Redirect to Google OAuth
-        window.location.href = data.authUrl
+        window.location.href = data.data.authUrl
       } else {
-        throw new Error(data.error || 'Failed to initiate connection')
+        throw new Error(data.error || data.message || 'Failed to initiate connection')
       }
     } catch (error) {
       console.error('Google Drive connection error:', error)
@@ -109,16 +114,21 @@ export const GoogleDriveIntegration = ({
 
       if (response.ok) {
         const data = await response.json()
-        console.log('✅ [GoogleDriveIntegration] Disconnect successful:', data.message)
-        toast.success('Google Drive disconnected successfully')
+        console.log('✅ [GoogleDriveIntegration] Disconnect successful:', data)
         
-        // Trigger status refresh
-        console.log('🔄 [GoogleDriveIntegration] Triggering status refresh...')
-        onStatusChange()
+        if (data.success) {
+          toast.success('Google Drive disconnected successfully')
+          
+          // Trigger status refresh
+          console.log('🔄 [GoogleDriveIntegration] Triggering status refresh...')
+          onStatusChange()
+        } else {
+          throw new Error(data.error || data.message || 'Failed to disconnect')
+        }
       } else {
         const data = await response.json()
         console.error('❌ [GoogleDriveIntegration] Disconnect failed:', data)
-        throw new Error(data.error || 'Failed to disconnect')
+        throw new Error(data.error || data.message || 'Failed to disconnect')
       }
     } catch (error) {
       console.error('❌ [GoogleDriveIntegration] Disconnect error:', error)
@@ -144,10 +154,12 @@ export const GoogleDriveIntegration = ({
         body: JSON.stringify(newSettings)
       })
 
-      if (response.ok) {
+      const data = await response.json()
+
+      if (response.ok && data.success) {
         toast.success('Google Drive settings saved successfully!')
       } else {
-        throw new Error('Failed to save settings')
+        throw new Error(data.error || data.message || 'Failed to save settings')
       }
     } catch (error) {
       console.error('Error saving Google Drive settings:', error)
@@ -155,7 +167,7 @@ export const GoogleDriveIntegration = ({
     }
   }
 
-  // Mock folder browsing function (replace with real API call)
+  // Folder browsing function with proper API response handling
   const handleBrowseFolders = async (parentId?: string): Promise<FolderBrowserItem[]> => {
     console.log('📂 [GoogleDriveIntegration] Browsing folders:', { parentId })
     
@@ -164,7 +176,13 @@ export const GoogleDriveIntegration = ({
       
       if (response.ok) {
         const data = await response.json()
-        return data.folders || []
+        
+        if (data.success && data.data?.folders) {
+          return data.data.folders
+        } else {
+          console.error('Invalid browse response format:', data)
+          return []
+        }
       } else {
         throw new Error('Failed to browse folders')
       }

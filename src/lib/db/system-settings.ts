@@ -387,4 +387,29 @@ export const updateDefaultTimezone = async (timezone: string): Promise<SystemSet
     'string', 
     'Default timezone for the application'
   )
+}
+
+/**
+ * Ensure default system settings exist
+ * Creates default settings if they don't exist
+ */
+export const ensureDefaultSettings = async (): Promise<void> => {
+  try {
+    // Check if default_timezone exists, if not create it
+    const existingTimezone = await getSystemSetting('default_timezone')
+    if (!existingTimezone) {
+      console.log('🔧 [SystemSettings] Creating default timezone setting')
+      await upsertSystemSetting(
+        'default_timezone',
+        'America/New_York',
+        'string',
+        'Default timezone for the application'
+      )
+    }
+    
+    // Add other default settings here as needed
+    console.log('🔧 [SystemSettings] Default settings ensured')
+  } catch (error) {
+    console.error('❌ [SystemSettings] Error ensuring default settings:', error)
+  }
 } 

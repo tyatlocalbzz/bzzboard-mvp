@@ -1,23 +1,45 @@
 'use client'
 
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, useEffect } from 'react'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { MobileInput } from '@/components/ui/mobile-input'
 import { Label } from '@/components/ui/label'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useAuthMutations } from '@/lib/hooks/use-auth-mutations'
 import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { clientValidation } from '@/lib/validation/client-validation'
 import { Lock } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface ChangePasswordFormProps {
   children: ReactNode
+  isFirstLogin?: boolean // Add prop to indicate if this is first login
 }
 
-export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
+export const ChangePasswordForm = ({ children, isFirstLogin = false }: ChangePasswordFormProps) => {
   const [isOpen, setIsOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [userIsFirstLogin, setUserIsFirstLogin] = useState(isFirstLogin)
+  const { changePassword, setFirstPassword } = useAuthMutations()
   const router = useRouter()
+
+  // Check first login status when component mounts
+  useEffect(() => {
+    const checkFirstLogin = async () => {
+      if (!isFirstLogin) {
+        try {
+          const response = await fetch('/api/auth/check-first-login')
+          if (response.ok) {
+            const data = await response.json()
+            setUserIsFirstLogin(data.isFirstLogin)
+          }
+        } catch (error) {
+          console.error('Error checking first login status:', error)
+        }
+      }
+    }
+
+    checkFirstLogin()
+  }, [isFirstLogin])
 
   // Field validation hooks
   const currentPasswordField = useFieldValidation({
@@ -61,25 +83,46 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
   }
 
   const validateForm = (): string | null => {
-    const validation = clientValidation.passwordChange({
-      currentPassword: currentPasswordField.value,
-      newPassword: newPasswordField.value,
-      confirmPassword: confirmPasswordField.value
-    })
-    
-    if (!validation.valid) {
-      // Return the first error found
-      return Object.values(validation.errors)[0] as string
+    if (userIsFirstLogin) {
+      // For first login, only validate new password and confirmation
+      const newPasswordValidation = clientValidation.password(newPasswordField.value)
+      if (!newPasswordValidation.valid) return newPasswordValidation.error!
+
+      const confirmPasswordValidation = clientValidation.confirmPassword(
+        newPasswordField.value,
+        confirmPasswordField.value
+      )
+      if (!confirmPasswordValidation.valid) return confirmPasswordValidation.error!
+
+      return null
+    } else {
+      // For regular password change, validate all fields
+      const validation = clientValidation.passwordChange({
+        currentPassword: currentPasswordField.value,
+        newPassword: newPasswordField.value,
+        confirmPassword: confirmPasswordField.value
+      })
+      
+      if (!validation.valid) {
+        return Object.values(validation.errors)[0] as string
+      }
+      
+      return null
     }
-    
-    return null
   }
 
   const handleSubmit = async () => {
-    setIsLoading(true)
-    
-    try {
-      // Validate all fields
+    if (userIsFirstLogin) {
+      // For first login, only validate new password fields
+      const newPasswordValidation = newPasswordField.validate()
+      const confirmPasswordValidation = getConfirmPasswordValidation()
+      
+      if (!newPasswordValidation.valid || !confirmPasswordValidation.valid) {
+        toast.error('Please fix the validation errors before submitting')
+        return
+      }
+    } else {
+      // For regular password change, validate all fields
       const currentPasswordValidation = currentPasswordField.validate()
       const newPasswordValidation = newPasswordField.validate()
       const confirmPasswordValidation = getConfirmPasswordValidation()
@@ -88,40 +131,32 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
         toast.error('Please fix the validation errors before submitting')
         return
       }
+    }
 
-      const validationError = validateForm()
-      if (validationError) {
-        toast.error(validationError)
-        return
+    const validationError = validateForm()
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+
+    try {
+      if (userIsFirstLogin) {
+        await setFirstPassword.mutate({
+          newPassword: newPasswordField.value
+        })
+        // After successful first password set, redirect to dashboard
+        toast.success('Password set successfully! Welcome to BzzBoard!')
+        router.push('/')
+      } else {
+        await changePassword.mutate({
+          currentPassword: currentPasswordField.value,
+          newPassword: newPasswordField.value
+        })
       }
-
-      const response = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          currentPassword: currentPasswordField.value, 
-          newPassword: newPasswordField.value 
-        }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to change password')
-      }
-
-      // Success
-      toast.success('Password changed successfully')
-      setIsOpen(false)
-      router.refresh()
       
+      setIsOpen(false)
     } catch (error) {
-      console.error('Change password error:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to change password')
-    } finally {
-      setIsLoading(false)
+      console.error('Password change error:', error)
     }
   }
 
@@ -139,28 +174,30 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
 
   const formContent = (
     <>
-      <div className="space-y-2">
-        <Label htmlFor="currentPassword" className="text-sm font-medium">
-          Current Password *
-        </Label>
-        <MobileInput
-          id="currentPassword"
-          name="currentPassword"
-          type="password"
-          value={currentPasswordField.value}
-          onChange={currentPasswordField.handleChange}
-          onBlur={currentPasswordField.handleBlur}
-          placeholder="Enter current password"
-          error={currentPasswordField.validationResult.error}
-          validationState={currentPasswordField.validationResult.state}
-          autoComplete="current-password"
-          required
-        />
-      </div>
+      {!userIsFirstLogin && (
+        <div className="space-y-2">
+          <Label htmlFor="currentPassword" className="text-sm font-medium">
+            Current Password *
+          </Label>
+          <MobileInput
+            id="currentPassword"
+            name="currentPassword"
+            type="password"
+            value={currentPasswordField.value}
+            onChange={currentPasswordField.handleChange}
+            onBlur={currentPasswordField.handleBlur}
+            placeholder="Enter current password"
+            error={currentPasswordField.validationResult.error}
+            validationState={currentPasswordField.validationResult.state}
+            autoComplete="current-password"
+            required
+          />
+        </div>
+      )}
       
       <div className="space-y-2">
         <Label htmlFor="newPassword" className="text-sm font-medium">
-          New Password *
+          {userIsFirstLogin ? 'New Password *' : 'New Password *'}
         </Label>
         <MobileInput
           id="newPassword"
@@ -169,7 +206,7 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
           value={newPasswordField.value}
           onChange={newPasswordField.handleChange}
           onBlur={newPasswordField.handleBlur}
-          placeholder="Enter new password"
+          placeholder={userIsFirstLogin ? "Create your password" : "Enter new password"}
           error={newPasswordField.validationResult.error}
           validationState={newPasswordField.validationResult.state}
           autoComplete="new-password"
@@ -181,7 +218,7 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
 
       <div className="space-y-2">
         <Label htmlFor="confirmPassword" className="text-sm font-medium">
-          Confirm New Password *
+          {userIsFirstLogin ? 'Confirm Password *' : 'Confirm New Password *'}
         </Label>
         <MobileInput
           id="confirmPassword"
@@ -190,7 +227,7 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
           value={confirmPasswordField.value}
           onChange={confirmPasswordField.handleChange}
           onBlur={confirmPasswordField.handleBlur}
-          placeholder="Confirm new password"
+          placeholder={userIsFirstLogin ? "Confirm your password" : "Confirm new password"}
           error={confirmPasswordValidation.error}
           validationState={confirmPasswordValidation.state}
           autoComplete="new-password"
@@ -201,19 +238,27 @@ export const ChangePasswordForm = ({ children }: ChangePasswordFormProps) => {
     </>
   )
 
+  const isLoading = userIsFirstLogin ? setFirstPassword.isLoading : changePassword.isLoading
+  const submitText = userIsFirstLogin ? "Set Password" : "Change Password"
+  const loadingText = userIsFirstLogin ? "Setting..." : "Changing..."
+  const title = userIsFirstLogin ? "Set Your Password" : "Change Password"
+  const description = userIsFirstLogin 
+    ? "Create a secure password for your BzzBoard account"
+    : "Update your password to keep your account secure"
+
   return (
     <FormSheet
       trigger={children}
       formContent={formContent}
-      title="Change Password"
-      description="Update your password to keep your account secure"
+      title={title}
+      description={description}
       icon={Lock}
       isOpen={isOpen}
       onOpenChange={handleOpenChange}
       onSubmit={handleSubmit}
       loading={isLoading}
-      submitText="Change Password"
-      loadingText="Changing..."
+      submitText={submitText}
+      loadingText={loadingText}
     />
   )
 } 

@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ClientStorageSettingsForm } from '@/components/settings/client-storage-settings-form'
 import { MobileInput } from '@/components/ui/mobile-input'
+import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog'
 import { 
   User, 
   Globe, 
@@ -26,7 +27,8 @@ import {
   Facebook,
   Linkedin,
   Twitter,
-  Youtube
+  Youtube,
+  Trash2
 } from 'lucide-react'
 import { useClient } from '@/contexts/client-context'
 import { ClientData } from '@/lib/types/client'
@@ -35,11 +37,21 @@ import { toast } from 'sonner'
 import { clientValidation, validateField } from '@/lib/validation/client-validation'
 import { useAdminEnabledPlatforms } from '@/lib/hooks/use-client-platforms'
 
+interface ClientDependencies {
+  shoots: number
+  postIdeas: number
+  clientSettings: number
+  uploadedFiles: number
+}
+
 export const ClientSettingsTab = () => {
-  const { selectedClient } = useClient()
+  const { selectedClient, setSelectedClient } = useClient()
   const adminEnabledPlatforms = useAdminEnabledPlatforms()
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleteDependencies, setDeleteDependencies] = useState<ClientDependencies | undefined>()
   const [clientData, setClientData] = useState<ClientData | null>(null)
   const [storageSettings, setStorageSettings] = useState<ClientStorageSettings | null>(null)
   const [showStorageDialog, setShowStorageDialog] = useState(false)
@@ -64,7 +76,14 @@ export const ClientSettingsTab = () => {
       const response = await fetch('/api/integrations/status', { credentials: 'include' })
       if (response.ok) {
         const data = await response.json()
-        setGoogleDriveConnected(data.integrations?.googleDrive?.connected || false)
+        
+        // Handle standardized API format: { success: true, data: { integrations: {...} } }
+        if (data.success && data.data?.integrations?.googleDrive) {
+          setGoogleDriveConnected(data.data.integrations.googleDrive.connected || false)
+        } else {
+          // Fallback for legacy format
+          setGoogleDriveConnected(data.integrations?.googleDrive?.connected || false)
+        }
       }
     } catch (error) {
       console.error('Error checking Google Drive status:', error)
@@ -82,7 +101,15 @@ export const ClientSettingsTab = () => {
 
       if (clientResponse.ok) {
         const clientData = await clientResponse.json()
-        setClientData(clientData.client)
+        console.log('📖 [ClientSettings] Client API response:', clientData)
+        
+        // Handle new standardized API format: { success: true, data: { client: {...} } }
+        if (clientData.success && clientData.data?.client) {
+          setClientData(clientData.data.client)
+        } else {
+          console.error('❌ [ClientSettings] Unexpected client API response format:', clientData)
+          toast.error('Unexpected response format from client API')
+        }
       } else {
         const errorText = await clientResponse.text()
         console.error('❌ [ClientSettings] Client API error:', clientResponse.status, errorText)
@@ -91,7 +118,14 @@ export const ClientSettingsTab = () => {
 
       if (storageResponse.ok) {
         const storageData = await storageResponse.json()
-        setStorageSettings(storageData.clientSettings)
+        console.log('📖 [ClientSettings] Storage API response:', storageData)
+        
+        // Handle new standardized API format: { success: true, data: { clientSettings: {...} } }
+        if (storageData.success && storageData.data?.clientSettings) {
+          setStorageSettings(storageData.data.clientSettings)
+        } else {
+          setStorageSettings(null)
+        }
       } else {
         setStorageSettings(null)
       }
@@ -174,11 +208,12 @@ export const ClientSettingsTab = () => {
     try {
       setIsSaving(true)
 
-      const response = await fetch(`/api/clients/${clientData.id}`, { credentials: 'include',
+      const response = await fetch(`/api/clients/${clientData.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           name: clientData.name,
           primaryContactName: clientData.primaryContactName,
@@ -190,18 +225,87 @@ export const ClientSettingsTab = () => {
         })
       })
 
-      if (response.ok) {
-        toast.success('Client settings saved!')
-        await loadClientData(clientData.id)
-      } else {
+      if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || 'Failed to save client')
       }
+
+      const result = await response.json()
+      
+      // Handle standardized API format: { success: true, data: { client: {...} }, message: "..." }
+      if (result.success) {
+        toast.success(result.message || 'Client settings saved!')
+        await loadClientData(clientData.id)
+      } else {
+        throw new Error(result.error || result.message || 'Failed to save client')
+      }
+
     } catch (error) {
       console.error('Error saving client:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to save client settings')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleDeleteClient = async (cascade: boolean = false) => {
+    if (!clientData) return
+
+    try {
+      setIsDeleting(true)
+
+      const url = cascade 
+        ? `/api/clients/${clientData.id}?cascade=true`
+        : `/api/clients/${clientData.id}`
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('❌ [handleDeleteClient] API error response:', errorData)
+        
+        // Handle standardized API error format
+        const errorMessage = errorData.error || errorData.message || 'Failed to delete client'
+        throw new Error(errorMessage)
+      }
+
+      const result = await response.json()
+      console.log('📊 [handleDeleteClient] API success response:', result)
+
+      if (result.success) {
+        if (!result.data.canDelete && result.data.dependencies) {
+          // Show confirmation dialog with dependency information
+          setDeleteDependencies(result.data.dependencies)
+          setShowDeleteDialog(true)
+          return
+        }
+
+        // Deletion successful
+        toast.success(result.data.message)
+        setShowDeleteDialog(false)
+        
+        // Navigate back to "All Clients" view
+        setSelectedClient({
+          id: 'all',
+          name: 'All Clients',
+          type: 'all'
+        })
+
+        // Clear current client data
+        setClientData(null)
+        setStorageSettings(null)
+        setDeleteDependencies(undefined)
+      } else {
+        throw new Error(result.data?.message || result.message || 'Failed to delete client')
+      }
+    } catch (error) {
+      console.error('Error deleting client:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to delete client')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -537,10 +641,14 @@ export const ClientSettingsTab = () => {
                         const result = await response.json()
                         console.log('✅ [ClientSettingsTab] Storage settings saved successfully:', result)
                         
-                        // Update local state with saved settings
-                        setStorageSettings(result.clientSettings)
-                        setShowStorageDialog(false)
-                        toast.success('Storage settings saved successfully!')
+                        // Handle new standardized API format: { success: true, data: { clientSettings: {...} } }
+                        if (result.success && result.data?.clientSettings) {
+                          setStorageSettings(result.data.clientSettings)
+                          setShowStorageDialog(false)
+                          toast.success('Storage settings saved successfully!')
+                        } else {
+                          throw new Error('Unexpected response format from storage settings API')
+                        }
                       } catch (error) {
                         console.error('❌ [ClientSettingsTab] Error saving storage settings:', error)
                         toast.error(error instanceof Error ? error.message : 'Failed to save storage settings')
@@ -565,6 +673,50 @@ export const ClientSettingsTab = () => {
         <Save className="h-4 w-4 mr-2" />
         Save Changes
       </LoadingButton>
+
+      <Separator />
+
+      {/* Danger Zone */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <h3 className="text-lg font-semibold text-red-900">Danger Zone</h3>
+        </div>
+        
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-red-900 mb-1">
+                Delete Client
+              </h4>
+              <p className="text-sm text-red-700">
+                Permanently delete this client and all associated data. This action cannot be undone.
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => handleDeleteClient(false)}
+              disabled={isSaving || isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Client
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Client"
+        description={`Are you sure you want to delete "${clientData?.name}"?`}
+        itemName={clientData?.name || 'client'}
+        onConfirm={handleDeleteClient}
+        dependencies={deleteDependencies}
+        isLoading={isDeleting}
+      />
     </div>
   )
 } 

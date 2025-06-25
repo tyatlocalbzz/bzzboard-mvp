@@ -1,29 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getPostIdeaById, updatePostIdea, deletePostIdea } from '@/lib/db/post-ideas'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  getValidatedParams,
+  getValidatedBody,
+  validateId
+} from '@/lib/api/api-helpers'
+
+interface UpdatePostBody {
+  title?: string
+  platforms?: string[]
+  contentType?: 'photo' | 'video' | 'reel' | 'story'
+  caption?: string
+  shotList?: string[]
+  notes?: string
+}
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    // Await params in Next.js 15
-    const { id } = await params
-    const postIdeaId = parseInt(id)
-    if (isNaN(postIdeaId)) {
-      return NextResponse.json({ error: 'Invalid post idea ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const postIdeaId = validateId(id, 'Post idea')
 
-    // Get post details
     const postIdea = await getPostIdeaById(postIdeaId)
     if (!postIdea) {
-      return NextResponse.json({ error: 'Post idea not found' }, { status: 404 })
+      return ApiErrors.notFound('Post idea')
     }
 
     // Transform for frontend
@@ -41,17 +51,11 @@ export async function GET(
       updatedAt: postIdea.updatedAt
     }
 
-    return NextResponse.json({
-      success: true,
-      postIdea: transformedPostIdea
-    })
+    return ApiSuccess.ok({ postIdea: transformedPostIdea })
 
   } catch (error) {
-    console.error('Get post idea error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Posts API] Get post idea error:', error)
+    return ApiErrors.internalError('Failed to fetch post idea')
   }
 }
 
@@ -60,31 +64,18 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    // Await params in Next.js 15
-    const { id } = await params
-    const postIdeaId = parseInt(id)
-    if (isNaN(postIdeaId)) {
-      return NextResponse.json({ error: 'Invalid post idea ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const postIdeaId = validateId(id, 'Post idea')
 
-    const body = await request.json()
+    const body = await getValidatedBody<UpdatePostBody>(request)
     const { title, platforms, contentType, caption, shotList, notes } = body
 
-    const updates: {
-      title?: string
-      platforms?: string[]
-      contentType?: 'photo' | 'video' | 'reel' | 'story'
-      caption?: string
-      shotList?: string[]
-      notes?: string
-    } = {}
-
+    const updates: UpdatePostBody = {}
     if (title) updates.title = title
     if (platforms) updates.platforms = platforms
     if (contentType) updates.contentType = contentType
@@ -95,37 +86,32 @@ export async function PATCH(
     // Verify post exists
     const existingPostIdea = await getPostIdeaById(postIdeaId)
     if (!existingPostIdea) {
-      return NextResponse.json({ error: 'Post idea not found' }, { status: 404 })
+      return ApiErrors.notFound('Post idea')
     }
 
     // Update post idea
     const updatedPostIdea = await updatePostIdea(postIdeaId, updates)
     
     if (!updatedPostIdea) {
-      return NextResponse.json({ error: 'Post idea not found' }, { status: 404 })
+      return ApiErrors.notFound('Post idea')
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Post idea updated successfully',
-      postIdea: {
-        id: updatedPostIdea.id,
-        title: updatedPostIdea.title,
-        platforms: updatedPostIdea.platforms,
-        contentType: updatedPostIdea.contentType,
-        caption: updatedPostIdea.caption,
-        shotList: updatedPostIdea.shotList || [],
-        status: updatedPostIdea.status,
-        notes: updatedPostIdea.notes
-      }
-    })
+    const postIdeaData = {
+      id: updatedPostIdea.id,
+      title: updatedPostIdea.title,
+      platforms: updatedPostIdea.platforms,
+      contentType: updatedPostIdea.contentType,
+      caption: updatedPostIdea.caption,
+      shotList: updatedPostIdea.shotList || [],
+      status: updatedPostIdea.status,
+      notes: updatedPostIdea.notes
+    }
+
+    return ApiSuccess.ok({ postIdea: postIdeaData }, 'Post idea updated successfully')
 
   } catch (error) {
-    console.error('Update post idea error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Posts API] Update post idea error:', error)
+    return ApiErrors.internalError('Failed to update post idea')
   }
 }
 
@@ -134,39 +120,27 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    // Await params in Next.js 15
-    const { id } = await params
-    const postIdeaId = parseInt(id)
-    if (isNaN(postIdeaId)) {
-      return NextResponse.json({ error: 'Invalid post idea ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const postIdeaId = validateId(id, 'Post idea')
 
-    // Delete post idea
     const result = await deletePostIdea(postIdeaId)
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.message },
-        { status: result.message.includes('not found') ? 404 : 400 }
-      )
+      if (result.message.includes('not found')) {
+        return ApiErrors.notFound('Post idea')
+      }
+      return ApiErrors.badRequest(result.message)
     }
 
-    return NextResponse.json({
-      success: true,
-      message: result.message
-    })
+    return ApiSuccess.ok({}, result.message)
 
   } catch (error) {
-    console.error('Delete post idea error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Posts API] Delete post idea error:', error)
+    return ApiErrors.internalError('Failed to delete post idea')
   }
 } 

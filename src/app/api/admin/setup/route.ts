@@ -1,20 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  sanitizeUserResponse,
+  getValidatedBody 
+} from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface PromoteUserBody {
+  email: string
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json()
-
-    if (!email) {
-      return NextResponse.json(
-        { error: 'Email is required' },
-        { status: 400 }
-      )
+    // 🚨 CRITICAL SECURITY: Only existing admins can promote other users
+    const currentUser = await getCurrentUserForAPI()
+    if (!currentUser?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    // Check if user exists
+    if (currentUser.role !== 'admin') {
+      console.warn(`❌ [Admin Setup] Non-admin user attempted to promote user: ${currentUser.email}`)
+      return ApiErrors.forbidden()
+    }
+
+    const body = await getValidatedBody<PromoteUserBody>(request)
+    const { email } = body
+
+    if (!email) {
+      return ApiErrors.badRequest('Email is required')
+    }
+
+    // Check if target user exists
     const existingUser = await db
       .select()
       .from(users)
@@ -22,24 +42,16 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (existingUser.length === 0) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return ApiErrors.notFound('User')
     }
 
     const user = existingUser[0]
 
     if (user.role === 'admin') {
-      return NextResponse.json({
-        success: true,
-        message: 'User is already an admin',
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role
-        }
-      })
+      console.log(`ℹ️ [Admin Setup] User ${email} is already an admin`)
+      return ApiSuccess.ok({
+        user: sanitizeUserResponse(user)
+      }, 'User is already an admin')
     }
 
     // Promote user to admin
@@ -52,21 +64,15 @@ export async function POST(request: NextRequest) {
       .where(eq(users.id, user.id))
       .returning()
 
-    return NextResponse.json({
-      success: true,
-      message: 'User promoted to admin successfully',
-      user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        role: updatedUser.role
-      }
-    })
+    // Log admin promotion for security audit
+    console.log(`✅ [Admin Setup] User promoted to admin: ${email} by ${currentUser.email}`)
+
+    return ApiSuccess.ok({
+      user: sanitizeUserResponse(updatedUser)
+    }, 'User promoted to admin successfully')
 
   } catch (error) {
     console.error('❌ [Admin Setup] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to promote user')
   }
 } 

@@ -1,36 +1,49 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { getAllPostIdeas, getPostIdeasByClient, createPostIdea } from '@/lib/db/post-ideas'
 import { getClientByName } from '@/lib/db/clients'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface PostFilters {
+  clientId?: string
+  status?: string
+  search?: string
+}
+
+interface CreatePostBody {
+  title: string
+  clientName: string
+  platforms: string[]
+  contentType: 'photo' | 'video' | 'reel' | 'story'
+  caption?: string
+  shotList?: string[]
+  notes?: string
+}
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!user) return ApiErrors.unauthorized()
 
     const { searchParams } = new URL(request.url)
-    const clientId = searchParams.get('clientId')
-    const status = searchParams.get('status')
-    const search = searchParams.get('search')
-
-    let posts
-    
-    if (clientId && clientId !== 'all') {
-      posts = await getPostIdeasByClient(parseInt(clientId))
-    } else {
-      posts = await getAllPostIdeas()
+    const filters: PostFilters = {
+      clientId: searchParams.get('clientId') || undefined,
+      status: searchParams.get('status') || undefined,
+      search: searchParams.get('search') || undefined
     }
 
-    // Apply filters
-    if (status && status !== 'all') {
-      posts = posts.filter(post => post.status === status)
+    // Fetch posts based on client filter
+    let posts = filters.clientId && filters.clientId !== 'all' 
+      ? await getPostIdeasByClient(parseInt(filters.clientId))
+      : await getAllPostIdeas()
+
+    // Apply additional filters
+    if (filters.status && filters.status !== 'all') {
+      posts = posts.filter(post => post.status === filters.status)
     }
 
-    if (search) {
-      const searchLower = search.toLowerCase()
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase()
       posts = posts.filter(post => 
         post.title.toLowerCase().includes(searchLower) ||
         post.caption?.toLowerCase().includes(searchLower) ||
@@ -38,7 +51,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Transform for frontend
+    // Transform for frontend consistency
     const transformedPosts = posts.map(post => ({
       id: post.id,
       title: post.title,
@@ -53,53 +66,43 @@ export async function GET(request: NextRequest) {
       updatedAt: post.updatedAt.toISOString()
     }))
 
-    return NextResponse.json({
-      success: true,
+    return ApiSuccess.ok({
       posts: transformedPosts,
       totalCount: transformedPosts.length
     })
 
   } catch (error) {
-    console.error('Get posts error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Posts API] Get posts error:', error)
+    return ApiErrors.internalError()
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!user) return ApiErrors.unauthorized()
 
-    const body = await request.json()
+    const body: CreatePostBody = await request.json()
     const { title, clientName, platforms, contentType, caption, shotList, notes } = body
 
-    // Validation
+    // Validation with specific error messages
     if (!title?.trim()) {
-      return NextResponse.json({ error: 'Title is required' }, { status: 400 })
+      return ApiErrors.badRequest('Title is required')
     }
-
     if (!clientName) {
-      return NextResponse.json({ error: 'Client is required' }, { status: 400 })
+      return ApiErrors.badRequest('Client is required')
     }
-
     if (!platforms || !Array.isArray(platforms) || platforms.length === 0) {
-      return NextResponse.json({ error: 'At least one platform is required' }, { status: 400 })
+      return ApiErrors.badRequest('At least one platform is required')
     }
-
     if (!contentType) {
-      return NextResponse.json({ error: 'Content type is required' }, { status: 400 })
+      return ApiErrors.badRequest('Content type is required')
     }
 
     // Get client ID
     const client = await getClientByName(clientName)
     if (!client) {
-      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+      return ApiErrors.notFound('Client')
     }
 
     // Create post idea
@@ -113,29 +116,32 @@ export async function POST(request: NextRequest) {
       notes: notes?.trim() || undefined
     })
 
-    return NextResponse.json({
-      success: true,
-      post: {
-        id: postIdea.id,
-        title: postIdea.title,
-        platforms: postIdea.platforms,
-        contentType: postIdea.contentType,
-        caption: postIdea.caption,
-        shotList: postIdea.shotList,
-        status: postIdea.status,
-        notes: postIdea.notes,
-        client: { id: client.id, name: client.name },
-        createdAt: postIdea.createdAt.toISOString(),
-        updatedAt: postIdea.updatedAt.toISOString()
-      },
-      message: 'Post idea created successfully'
-    })
+    const responseData = {
+      id: postIdea.id,
+      title: postIdea.title,
+      platforms: postIdea.platforms,
+      contentType: postIdea.contentType,
+      caption: postIdea.caption,
+      shotList: postIdea.shotList,
+      status: postIdea.status,
+      notes: postIdea.notes,
+      client: { id: client.id, name: client.name },
+      createdAt: postIdea.createdAt.toISOString(),
+      updatedAt: postIdea.updatedAt.toISOString()
+    }
+
+    return ApiSuccess.created({ post: responseData }, 'Post idea created successfully')
 
   } catch (error) {
-    console.error('Create post error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Posts API] Create post error:', error)
+    
+    // Handle specific database errors
+    if (error instanceof Error) {
+      if (error.message.includes('unique')) {
+        return ApiErrors.conflict('A post with this title already exists')
+      }
+    }
+    
+    return ApiErrors.internalError()
   }
 } 

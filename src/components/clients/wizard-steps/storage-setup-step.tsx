@@ -1,37 +1,27 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Label } from '@/components/ui/label'
 import { StorageProviderSelector } from '@/components/ui/storage-provider-selector'
 import { FolderSelector } from '@/components/ui/folder-selector'
 import { FolderBrowserDialog, FolderBrowserItem } from '@/components/ui/folder-browser-dialog'
+import { useFolderBrowser } from '@/lib/hooks/use-folder-browser'
+import { useIntegrationStatus } from '@/lib/hooks/use-integration-status'
 import { HardDrive } from 'lucide-react'
 import { WizardStepProps } from '@/lib/types/wizard'
 import { ClientStorageSettings } from '@/lib/types/settings'
-import { toast } from 'sonner'
 
 export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
   const [showFolderBrowser, setShowFolderBrowser] = useState(false)
-  const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
+
+  // Use the reusable folder browser hook
+  const { browseFolders: handleBrowseFolders, createFolder: handleCreateFolder } = useFolderBrowser()
+  
+  // Use standardized integration status hook
+  const { isGoogleDriveConnected } = useIntegrationStatus()
 
   // Initialize storage settings if not present
   const storageSettings = data.storageSettings || {}
-
-  useEffect(() => {
-    checkGoogleDriveStatus()
-  }, [])
-
-  const checkGoogleDriveStatus = async () => {
-    try {
-      const response = await fetch('/api/integrations/status')
-      if (response.ok) {
-        const data = await response.json()
-        setGoogleDriveConnected(data.integrations?.googleDrive?.connected || false)
-      }
-    } catch (error) {
-      console.error('Error checking Google Drive status:', error)
-    }
-  }
 
   const handleStorageSettingChange = (key: keyof ClientStorageSettings, value: unknown) => {
     onUpdate({
@@ -40,53 +30,6 @@ export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
         [key]: value
       }
     })
-  }
-
-  const handleBrowseFolders = async (parentId?: string): Promise<FolderBrowserItem[]> => {
-    try {
-      const response = await fetch(`/api/integrations/google-drive/browse?parentId=${parentId || 'root'}`)
-
-      if (response.ok) {
-        const data = await response.json()
-        return data.folders || []
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        console.error('Error response:', errorData)
-        
-        if (response.status === 401) {
-          toast.error('Google Drive authentication expired. Please reconnect in the Integrations tab.')
-        } else if (response.status === 400) {
-          toast.error('Google Drive not properly connected. Please check your integration settings.')
-        } else {
-          toast.error(`Failed to load folders: ${errorData.error || 'Unknown error'}`)
-        }
-        
-        return []
-      }
-    } catch (error) {
-      console.error('Error loading folders:', error)
-      toast.error('Failed to load folders. Please check your Google Drive connection.')
-      return []
-    }
-  }
-
-  const handleCreateFolder = async (folderName: string, parentId?: string): Promise<void> => {
-    const response = await fetch('/api/integrations/google-drive/browse', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        folderName: folderName.trim(),
-        parentId: parentId
-    })
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to create folder')
-    }
   }
 
   const handleClientRootFolderSelect = (folder: FolderBrowserItem) => {
@@ -126,7 +69,7 @@ export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
       <StorageProviderSelector
         value={storageSettings.storageProvider || 'google-drive'}
         onValueChange={(value) => handleStorageSettingChange('storageProvider', value)}
-        googleDriveConnected={googleDriveConnected}
+        googleDriveConnected={isGoogleDriveConnected}
       />
 
       {/* Google Drive Folder Selection */}
@@ -138,7 +81,7 @@ export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
             folderName={storageSettings.clientRootFolderName}
             folderPath={storageSettings.clientRootFolderPath}
             folderId={storageSettings.clientRootFolderId}
-            isConnected={googleDriveConnected}
+            isConnected={isGoogleDriveConnected}
             notConnectedMessage="Connect Google Drive in Settings → Integrations to select folders"
             onBrowse={() => setShowFolderBrowser(true)}
             helpText="Main folder for all client content and organization"
@@ -151,7 +94,7 @@ export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
               folderName={storageSettings.contentFolderName}
               folderPath={storageSettings.contentFolderPath}
               folderId={storageSettings.contentFolderId}
-              isConnected={googleDriveConnected}
+              isConnected={isGoogleDriveConnected}
               notConnectedMessage="Select client root folder first"
               onBrowse={() => setShowFolderBrowser(true)}
               helpText="Subfolder within client root for shoot content"

@@ -1,14 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getIntegration } from '@/lib/db/integrations'
 import { UnifiedGoogleDriveService } from '@/lib/services/google-drive-unified'
+import { 
+  ApiErrors, 
+  ApiSuccess
+} from '@/lib/api/api-helpers'
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       console.log('❌ [GoogleDriveBrowse] Unauthorized - no user')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     const { searchParams } = new URL(req.url)
@@ -20,57 +24,48 @@ export async function GET(req: NextRequest) {
     // Get Google Drive integration
     const integration = await getIntegration(user.email, 'google-drive')
     
-    console.log('🔍 [GoogleDriveBrowse] Integration check:', {
-      exists: !!integration,
-      connected: integration?.connected,
-      hasAccessToken: !!integration?.accessToken,
-      hasRefreshToken: !!integration?.refreshToken,
-      email: integration?.email,
-      scope: integration?.data?.scope || 'not stored'
-    })
-
-    // Check if we have the right scopes for shared drive access
-    const storedScope = integration?.data?.scope as string | undefined
-    const hasReadOnlyScope = storedScope?.includes('drive.readonly') || false
-    const hasFileScope = storedScope?.includes('drive.file') || false
-    
-    console.log('🔑 [GoogleDriveBrowse] Scope analysis:', {
-      hasReadOnlyScope,
-      hasFileScope,
-      fullScope: storedScope
-    })
-
-    if (!hasReadOnlyScope) {
-      console.log('⚠️ [GoogleDriveBrowse] WARNING: Missing drive.readonly scope - may not be able to browse existing folders')
-    }
-
     if (!integration) {
       console.log('❌ [GoogleDriveBrowse] No Google Drive integration found')
-      return NextResponse.json(
-        { error: 'Google Drive integration not found. Please connect Google Drive first.' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Google Drive integration not found. Please connect Google Drive first.')
     }
 
     if (!integration.connected) {
       console.log('❌ [GoogleDriveBrowse] Google Drive not connected')
-      return NextResponse.json(
-        { error: 'Google Drive not connected. Please connect Google Drive first.' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Google Drive not connected. Please connect Google Drive first.')
     }
 
     if (!integration.accessToken) {
       console.log('❌ [GoogleDriveBrowse] No access token found')
-      return NextResponse.json(
-        { error: 'Google Drive access token missing. Please reconnect Google Drive.' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Google Drive access token missing. Please reconnect Google Drive.')
     }
 
-    console.log('🔐 [GoogleDriveBrowse] Creating Google Drive service for user:', integration.email)
+    console.log('🔍 [GoogleDriveBrowse] Integration check:', {
+      exists: !!integration,
+      connected: integration.connected,
+      hasAccessToken: !!integration.accessToken,
+      hasRefreshToken: !!integration.refreshToken,
+      email: integration.email,
+      scope: integration.data?.scope || 'not stored'
+    })
 
-    // Create Google Drive service instance with improved error handling
+    // Check if we have the required scopes
+    const scopes = integration.data?.scope as string || ''
+    const hasReadOnlyScope = scopes.includes('drive.readonly')
+    const hasFileScope = scopes.includes('drive.file')
+    
+    console.log('🔑 [GoogleDriveBrowse] Scope analysis:', {
+      hasReadOnlyScope,
+      hasFileScope,
+      fullScope: scopes || undefined
+    })
+    
+    if (!hasReadOnlyScope && !hasFileScope) {
+      console.log('⚠️ [GoogleDriveBrowse] WARNING: Missing drive.readonly scope - may not be able to browse existing folders')
+    }
+
+    console.log('🔐 [GoogleDriveBrowse] Creating Google Drive service for user:', user.email)
+
+    // Create Google Drive service instance
     const driveService = new UnifiedGoogleDriveService(
       integration.accessToken as string,
       integration.refreshToken as string | undefined,
@@ -91,10 +86,7 @@ export async function GET(req: NextRequest) {
       console.log('❌ [GoogleDriveBrowse] Health check failed - attempting token refresh')
       const refreshed = await driveService.refreshTokenIfNeeded()
       if (!refreshed) {
-        return NextResponse.json(
-          { error: 'Google Drive authentication expired. Please reconnect.' },
-          { status: 401 }
-        )
+        return ApiErrors.unauthorized()
       }
     }
 
@@ -103,16 +95,15 @@ export async function GET(req: NextRequest) {
     // Browse folders with improved error handling
     const folders = await driveService.browseFolders(parentFolderId)
     
-    console.log('📊 [GoogleDriveBrowse] Successfully found folders:', {
+    console.log('�� [GoogleDriveBrowse] Successfully found folders:', {
       count: folders.length,
       parentId: parentFolderId || 'root',
       folders: folders.map((f) => ({ id: f.id, name: f.name, path: f.path }))
     })
 
-    return NextResponse.json({ 
+    return ApiSuccess.ok({ 
       folders,
-      parentId: parentFolderId || 'root',
-      success: true
+      parentId: parentFolderId || 'root'
     })
     
   } catch (error) {
@@ -126,36 +117,24 @@ export async function GET(req: NextRequest) {
     if (error instanceof Error) {
       if (error.message.includes('401') || error.message.includes('unauthorized')) {
         console.log('🔄 [GoogleDriveBrowse] Authentication error - token may be expired')
-        return NextResponse.json(
-          { error: 'Google Drive authentication expired. Please reconnect in the Integrations tab.' },
-          { status: 401 }
-        )
+        return ApiErrors.unauthorized()
       }
       
       if (error.message.includes('403') || error.message.includes('forbidden')) {
         console.log('🚫 [GoogleDriveBrowse] Permission error')
-        return NextResponse.json(
-          { error: 'Insufficient permissions to access Google Drive. Please check your integration settings.' },
-          { status: 403 }
-        )
+        return ApiErrors.forbidden()
       }
       
       if (error.message.includes('rate limit') || error.message.includes('quota')) {
         console.log('⏰ [GoogleDriveBrowse] Rate limit error')
-        return NextResponse.json(
-          { error: 'Google Drive rate limit exceeded. Please try again in a moment.' },
-          { status: 429 }
-        )
+        return ApiErrors.rateLimit()
       }
     }
     
     // Return error instead of mock data
     console.log('❌ [GoogleDriveBrowse] API error - returning error response')
     
-    return NextResponse.json(
-      { error: 'Failed to browse Google Drive folders. Please check your connection and try again.' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to browse Google Drive folders. Please check your connection and try again.')
   }
 }
 
@@ -164,14 +143,14 @@ export async function POST(req: NextRequest) {
     const user = await getCurrentUserForAPI()
     if (!user || !user.email) {
       console.log('❌ [GoogleDriveCreateFolder] Unauthorized - no user')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     const body = await req.json()
     const { folderName, parentId } = body
 
     if (!folderName || typeof folderName !== 'string') {
-      return NextResponse.json({ error: 'Folder name is required' }, { status: 400 })
+      return ApiErrors.badRequest('Folder name is required')
     }
 
     console.log('📁 [GoogleDriveCreateFolder] Creating folder for user:', user.email)
@@ -181,13 +160,10 @@ export async function POST(req: NextRequest) {
     const integration = await getIntegration(user.email, 'google-drive')
     
     if (!integration || !integration.connected || !integration.accessToken) {
-      return NextResponse.json(
-        { error: 'Google Drive not connected. Please connect Google Drive first.' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Google Drive not connected. Please connect Google Drive first.')
     }
 
-    console.log('🔐 [GoogleDriveCreateFolder] Creating Google Drive service')
+    console.log('�� [GoogleDriveCreateFolder] Creating Google Drive service')
 
     // Create Google Drive service instance
     const driveService = new UnifiedGoogleDriveService(
@@ -210,10 +186,7 @@ export async function POST(req: NextRequest) {
       console.log('❌ [GoogleDriveCreateFolder] Health check failed - attempting token refresh')
       const refreshed = await driveService.refreshTokenIfNeeded()
       if (!refreshed) {
-        return NextResponse.json(
-          { error: 'Google Drive authentication expired. Please reconnect.' },
-          { status: 401 }
-        )
+        return ApiErrors.unauthorized()
       }
     }
 
@@ -228,11 +201,9 @@ export async function POST(req: NextRequest) {
       path: newFolder.path
     })
 
-    return NextResponse.json({ 
-      folder: newFolder,
-      success: true,
-      message: `Folder "${folderName}" created successfully`
-    })
+    return ApiSuccess.created({ 
+      folder: newFolder
+    }, `Folder "${folderName}" created successfully`)
     
   } catch (error) {
     console.error('❌ [GoogleDriveCreateFolder] Error creating folder:', error)
@@ -240,37 +211,22 @@ export async function POST(req: NextRequest) {
     // Handle specific error cases
     if (error instanceof Error) {
       if (error.message.includes('already exists')) {
-        return NextResponse.json(
-          { error: error.message },
-          { status: 409 } // Conflict
-        )
+        return ApiErrors.conflict(error.message)
       }
       
       if (error.message.includes('Folder name cannot be empty')) {
-        return NextResponse.json(
-          { error: 'Please enter a valid folder name' },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest('Please enter a valid folder name')
       }
       
       if (error.message.includes('401') || error.message.includes('unauthorized')) {
-        return NextResponse.json(
-          { error: 'Google Drive authentication expired. Please reconnect.' },
-          { status: 401 }
-        )
+        return ApiErrors.unauthorized()
       }
       
       if (error.message.includes('403') || error.message.includes('forbidden')) {
-        return NextResponse.json(
-          { error: 'Insufficient permissions to create folders in this location.' },
-          { status: 403 }
-        )
+        return ApiErrors.forbidden()
       }
     }
     
-    return NextResponse.json(
-      { error: 'Failed to create folder. Please try again.' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to create folder. Please try again.')
   }
 } 

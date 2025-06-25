@@ -10,6 +10,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { RefreshCw, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import { useIntegrationStatus } from '@/lib/hooks/use-integration-status'
 
 interface User {
   id: string
@@ -23,34 +24,16 @@ interface IntegrationsManagerProps {
   user: User
 }
 
-interface IntegrationStatus {
-  googleDrive: {
-    connected: boolean
-    email?: string
-    lastSync?: string
-    error?: string
-  }
-  googleCalendar: {
-    connected: boolean
-    email?: string
-    lastSync?: string
-    error?: string
-  }
-}
-
 export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
   const searchParams = useSearchParams()
-  const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus>({
-    googleDrive: { connected: false },
-    googleCalendar: { connected: false }
-  })
-  const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
-
-  // Load integration status
-  useEffect(() => {
-    loadIntegrationStatus()
-  }, [])
+  
+  // Use standardized integration status hook
+  const { 
+    status: integrationStatus, 
+    isLoading, 
+    refresh: refreshStatus 
+  } = useIntegrationStatus()
 
   // Handle URL parameters for success/error messages
   useEffect(() => {
@@ -63,10 +46,15 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
       } else if (success === 'google-calendar') {
         toast.success('Google Calendar connected!')
       }
-      // Refresh status after successful connection
+      // Refresh status immediately and again after a delay to ensure update
+      refreshStatus()
       setTimeout(() => {
-        loadIntegrationStatus()
-      }, 1000)
+        refreshStatus()
+      }, 500)
+      // Additional refresh after 2 seconds to handle any database delays
+      setTimeout(() => {
+        refreshStatus()
+      }, 2000)
     }
 
     if (error) {
@@ -87,34 +75,17 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
       }
       toast.error(errorMessage)
     }
-  }, [searchParams])
-
-  const loadIntegrationStatus = async () => {
-    try {
-      setIsLoading(true)
-      const response = await fetch('/api/integrations/status')
-      
-      if (response.ok) {
-        const data = await response.json()
-        setIntegrationStatus(data.integrations)
-      }
-    } catch (error) {
-      console.error('Failed to load integration status:', error)
-      toast.error('Failed to load status')
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  }, [searchParams, refreshStatus])
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
-    await loadIntegrationStatus()
+    await refreshStatus()
     setIsRefreshing(false)
     toast.success('Status refreshed')
   }
 
   const handleIntegrationChange = () => {
-    loadIntegrationStatus()
+    refreshStatus()
   }
 
   if (isLoading) {
@@ -125,8 +96,10 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
     )
   }
 
-  const connectedCount = Object.values(integrationStatus).filter(integration => integration.connected).length
-  const totalCount = Object.keys(integrationStatus).length
+  // Provide fallback for null status
+  const status = integrationStatus || { googleDrive: { connected: false }, googleCalendar: { connected: false } }
+  const connectedCount = Object.values(status).filter(integration => integration.connected).length
+  const totalCount = Object.keys(status).length
 
   return (
     <div className="space-y-6">
@@ -165,13 +138,13 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
         
         <div className="space-y-3">
           <GoogleDriveIntegration
-            status={integrationStatus.googleDrive}
+            status={status.googleDrive}
             onStatusChange={handleIntegrationChange}
             userEmail={user.email}
           />
           
           <GoogleCalendarIntegration
-            status={integrationStatus.googleCalendar}
+            status={status.googleCalendar}
             onStatusChange={handleIntegrationChange}
             userEmail={user.email}
           />

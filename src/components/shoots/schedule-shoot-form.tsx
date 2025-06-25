@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAsync } from '@/lib/hooks/use-async'
+import { useFormState } from '@/lib/hooks/use-form-state'
 import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { useClient } from '@/contexts/client-context'
 import { Calendar, Clock, Users, AlertTriangle } from 'lucide-react'
@@ -57,6 +58,17 @@ interface ScheduleShootResult {
   shootData?: ScheduleShootData
 }
 
+// Form state interface for useFormState
+interface ScheduleShootFormData {
+  selectedClient: string
+  selectedDuration: string
+  notes: string
+  // Conflict management state
+  detectedConflicts: ConflictEvent[]
+  showConflictWarning: boolean
+  pendingShootData: ScheduleShootData | null
+}
+
 // Real API function using database
 const scheduleShoot = async (data: ScheduleShootData): Promise<ScheduleShootResult> => {
   const response = await fetch('/api/shoots', {
@@ -83,18 +95,25 @@ const scheduleShoot = async (data: ScheduleShootData): Promise<ScheduleShootResu
 
 export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProps) => {
   const [isOpen, setIsOpen] = useState(false)
-  const [detectedConflicts, setDetectedConflicts] = useState<ConflictEvent[]>([])
-  const [showConflictWarning, setShowConflictWarning] = useState(false)
-  const [pendingShootData, setPendingShootData] = useState<ScheduleShootData | null>(null)
-  const [selectedClient, setSelectedClient] = useState('')
-  const [selectedDuration, setSelectedDuration] = useState('60')
-  const [notes, setNotes] = useState('')
   const router = useRouter()
   const { loading, execute } = useAsync(scheduleShoot)
   const { selectedClient: contextClient, clients } = useClient()
 
   // Get available clients (excluding "All Clients")
   const availableClients = clients.filter(client => client.type === 'client')
+
+  // Initialize form data
+  const getInitialFormData = (): ScheduleShootFormData => ({
+    selectedClient: contextClient.type === 'client' ? contextClient.name : '',
+    selectedDuration: '60',
+    notes: '',
+    detectedConflicts: [],
+    showConflictWarning: false,
+    pendingShootData: null
+  })
+
+  // Use the form state hook for all form data
+  const formState = useFormState<ScheduleShootFormData>(getInitialFormData())
 
   // Field validation hooks
   const titleField = useFieldValidation({
@@ -125,21 +144,24 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
     showValidation: isOpen
   })
 
-  // Initialize selected client from context
-  useState(() => {
-    if (contextClient.type === 'client') {
-      setSelectedClient(contextClient.name)
-    }
-  })
-
   const validateForm = (): string | null => {
     if (!titleField.value.trim()) return 'Shoot title is required'
-    if (!selectedClient) return 'Client selection is required'
+    if (!formState.data.selectedClient) return 'Client selection is required'
     if (!dateField.value) return 'Date is required'
     if (!timeField.value) return 'Time is required'
     if (!locationField.value.trim()) return 'Location is required'
     
     return null
+  }
+
+  // Reset form function - now centralized
+  const resetForm = () => {
+    const initialData = getInitialFormData()
+    formState.reset(initialData)
+    titleField.reset()
+    dateField.reset()
+    timeField.reset()
+    locationField.reset()
   }
 
   const handleSubmit = async () => {
@@ -161,16 +183,16 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
     }
 
     // Clear previous conflicts
-    setDetectedConflicts([])
+    formState.setField('detectedConflicts', [])
 
     const shootData = {
       title: titleField.value,
-      clientName: selectedClient,
+      clientName: formState.data.selectedClient,
       date: dateField.value,
       time: timeField.value,
-      duration: parseInt(selectedDuration) || 60,
+      duration: parseInt(formState.data.selectedDuration) || 60,
       location: locationField.value,
-      notes: notes.trim() || undefined // Notes are optional and not validated
+      notes: formState.data.notes.trim() || undefined // Notes are optional and not validated
     }
 
     const result = await execute(shootData)
@@ -178,9 +200,11 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
     if (result) {
       if (result.hasConflicts && result.conflicts && result.conflicts.length > 0) {
         // Show conflicts inline in the form
-        setDetectedConflicts(result.conflicts)
-        setPendingShootData(shootData)
-        setShowConflictWarning(true)
+        formState.setFields({
+          detectedConflicts: result.conflicts,
+          pendingShootData: shootData,
+          showConflictWarning: true
+        })
         
         // Show toast notification
         const conflictCount = result.conflicts.length
@@ -194,13 +218,7 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
         
       } else if (result.success) {
         // Success cases - reset form
-        titleField.reset()
-        dateField.reset()
-        timeField.reset()
-        locationField.reset()
-        setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
-        setSelectedDuration('60')
-        setNotes('')
+        resetForm()
         
         if (result.message) {
           toast.success(result.message)
@@ -241,10 +259,10 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
 
   // Handle user's decision to proceed despite conflicts
   const handleForceCreate = async () => {
-    if (!pendingShootData) return
+    if (!formState.data.pendingShootData) return
     
     const result = await execute({
-      ...pendingShootData,
+      ...formState.data.pendingShootData,
       forceCreate: true
     })
     
@@ -257,19 +275,7 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
       }
       
       // Reset conflict state and form
-      setShowConflictWarning(false)
-      setDetectedConflicts([])
-      setPendingShootData(null)
-      
-      // Reset form
-      titleField.reset()
-      dateField.reset()
-      timeField.reset()
-      locationField.reset()
-      setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
-      setSelectedDuration('60')
-      setNotes('')
-      
+      formState.reset(getInitialFormData())
       setIsOpen(false)
       
       // Trigger parent refresh if available, or navigate with refresh parameter
@@ -290,10 +296,10 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
 
   // Handle user's decision to force create calendar event despite conflicts
   const handleForceCalendarCreate = async () => {
-    if (!pendingShootData) return
+    if (!formState.data.pendingShootData) return
     
     const result = await execute({
-      ...pendingShootData,
+      ...formState.data.pendingShootData,
       forceCreate: true,
       forceCalendarCreate: true
     })
@@ -310,19 +316,7 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
       }
       
       // Reset conflict state and form
-      setShowConflictWarning(false)
-      setDetectedConflicts([])
-      setPendingShootData(null)
-      
-      // Reset form
-      titleField.reset()
-      dateField.reset()
-      timeField.reset()
-      locationField.reset()
-      setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
-      setSelectedDuration('60')
-      setNotes('')
-      
+      formState.reset(getInitialFormData())
       setIsOpen(false)
       
       // Trigger parent refresh if available, or navigate with refresh parameter
@@ -343,38 +337,26 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
 
   // Handle user's decision to modify time due to conflicts
   const handleModifyTime = () => {
-    setShowConflictWarning(false)
-    setDetectedConflicts([])
-    setPendingShootData(null)
+    formState.setFields({
+      showConflictWarning: false,
+      detectedConflicts: [],
+      pendingShootData: null
+    })
     // Keep the form open so user can modify the time
-  }
-
-  // Reset form function
-  const resetForm = () => {
-    setShowConflictWarning(false)
-    setDetectedConflicts([])
-    setPendingShootData(null)
-    titleField.reset()
-    dateField.reset()
-    timeField.reset()
-    locationField.reset()
-    setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
-    setSelectedDuration('60')
-    setNotes('')
   }
 
   // Reset form when closed
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open)
     if (!open) {
-      resetForm()
+      formState.reset(getInitialFormData())
     }
   }
 
   // Handle manual close with reset
   const handleClose = () => {
     setIsOpen(false)
-    resetForm()
+    formState.reset(getInitialFormData())
   }
 
   // Get today's date for min date input - use fixed date for consistency
@@ -414,8 +396,8 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
             <div className="space-y-2">
               <Label className="text-sm font-medium">Client *</Label>
               <Select 
-                value={selectedClient}
-                onValueChange={setSelectedClient}
+                value={formState.data.selectedClient}
+                onValueChange={(value) => formState.setField('selectedClient', value)}
                 required
               >
                 <SelectTrigger>
@@ -435,7 +417,7 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
                   ))}
                 </SelectContent>
               </Select>
-              {isOpen && !selectedClient && (
+              {isOpen && !formState.data.selectedClient && (
                 <p className="text-sm text-red-600">Please select a client</p>
               )}
             </div>
@@ -468,7 +450,10 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
             {/* Duration */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Duration</Label>
-              <Select value={selectedDuration} onValueChange={setSelectedDuration}>
+              <Select 
+                value={formState.data.selectedDuration} 
+                onValueChange={(value) => formState.setField('selectedDuration', value)}
+              >
                 <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-gray-500" />
@@ -507,8 +492,8 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
               <Textarea
                 id="notes"
                 name="notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                value={formState.data.notes}
+                onChange={(e) => formState.setField('notes', e.target.value)}
                 placeholder="Special requirements, equipment needed, shot list ideas..."
                 className="min-h-[80px] resize-none"
                 rows={3}
@@ -516,129 +501,87 @@ export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProp
             </div>
 
             {/* Conflict Warning - Inline */}
-            {showConflictWarning && detectedConflicts.length > 0 && (
-              <>
-                <div className="flex items-start gap-3 mb-4">
-                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-yellow-900">
+            {formState.data.showConflictWarning && formState.data.detectedConflicts.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-amber-900 mb-2">
                       Calendar Conflicts Detected
                     </h4>
-                    <p className="text-xs text-yellow-700 mt-1">
-                      Your shoot time overlaps with existing calendar events
+                    <p className="text-sm text-amber-800 mb-3">
+                      The following events overlap with your proposed shoot time:
                     </p>
-                  </div>
-                </div>
-                
-                <div className="space-y-2 mb-4">
-                  {detectedConflicts.map((conflict, index) => {
-                    const startTime = new Date(conflict.startTime).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true
-                    })
-                    const endTime = new Date(conflict.endTime).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true
-                    })
-                    const date = new Date(conflict.startTime).toLocaleDateString('en-US', {
-                      weekday: 'short',
-                      month: 'short',
-                      day: 'numeric'
-                    })
-                    
-                    return (
-                      <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-md">
-                        <div className="font-medium text-red-900 text-sm">{conflict.title}</div>
-                        <div className="text-xs text-red-700">
-                          {date} • {startTime} - {endTime}
+                    <div className="space-y-2 mb-4">
+                      {formState.data.detectedConflicts.map((conflict, index) => (
+                        <div key={index} className="bg-white rounded p-2 text-sm">
+                          <div className="font-medium text-gray-900">{conflict.title}</div>
+                          <div className="text-gray-600">
+                            {new Date(conflict.startTime).toLocaleString()} - {new Date(conflict.endTime).toLocaleString()}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <div className="bg-yellow-100 border border-yellow-300 rounded-md p-4">
-                  <p className="text-sm text-yellow-800 font-medium mb-2">What would you like to do?</p>
-                  
-                  <div className="text-xs text-yellow-700 mb-3 space-y-1">
-                    <div>• <strong>Change Time:</strong> Modify your shoot time to avoid conflicts</div>
-                    <div>• <strong>Schedule Anyway:</strong> Create shoot but skip calendar event (avoids conflicts)</div>
-                    <div>• <strong>Force Schedule:</strong> Create shoot and calendar event (despite conflicts)</div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={handleModifyTime}
-                        className="flex-1 h-10 text-yellow-800 border-yellow-300 hover:bg-yellow-200"
-                        disabled={loading}
-                      >
-                        Change Time
-                      </Button>
-                      <LoadingButton
-                        onClick={handleForceCreate}
-                        loading={loading}
-                        loadingText="Creating shoot..."
-                        className="flex-1 h-10 bg-yellow-600 hover:bg-yellow-700 text-white"
-                      >
-                        Schedule Anyway
-                      </LoadingButton>
+                      ))}
                     </div>
-                    <LoadingButton
-                      onClick={handleForceCalendarCreate}
-                      loading={loading}
-                      loadingText="Force creating..."
-                      className="w-full h-10 bg-red-600 hover:bg-red-700 text-white"
-                    >
-                      Force Schedule (Create Calendar Event)
-                    </LoadingButton>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-yellow-300">
-                    <Button
-                      variant="ghost"
-                      onClick={handleClose}
-                      className="w-full text-yellow-700 hover:bg-yellow-200"
-                      disabled={loading}
-                    >
-                      Cancel & Close
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleForceCreate}
+                          disabled={loading}
+                          className="flex-1"
+                        >
+                          Create Shoot Only
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={handleForceCalendarCreate}
+                          disabled={loading}
+                          className="flex-1"
+                        >
+                          Create Both Anyway
+                        </Button>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={handleModifyTime}
+                        disabled={loading}
+                        className="w-full"
+                      >
+                        Modify Time Instead
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </>
+              </div>
             )}
         </div>
 
-        {/* Actions */}
-        {!showConflictWarning && (
-          <div className="flex gap-3 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              className="flex-1"
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <LoadingButton
-              onClick={handleSubmit}
-              className="flex-1"
-              loading={loading}
-              loadingText="Checking conflicts..."
-            >
-              Schedule Shoot
-            </LoadingButton>
-          </div>
-        )}
+        <div className="flex gap-3 pt-4 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            className="flex-1"
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <LoadingButton
+            onClick={handleSubmit}
+            className="flex-1"
+            loading={loading}
+            loadingText="Scheduling..."
+          >
+            Schedule Shoot
+          </LoadingButton>
+        </div>
       </DialogContent>
     </Dialog>
-
-
     </>
   )
 } 

@@ -2,12 +2,11 @@
 
 import { useState } from 'react'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
 import { FolderSelector } from '@/components/ui/folder-selector'
 import { FolderBrowserDialog, FolderBrowserItem } from '@/components/ui/folder-browser-dialog'
+import { useFolderBrowser } from '@/lib/hooks/use-folder-browser'
 import { Settings } from 'lucide-react'
 import { GoogleDriveSettings } from '@/lib/types/settings'
 import { toast } from 'sonner'
@@ -31,25 +30,9 @@ export const GoogleDriveSettingsComponent = ({
   )
   const [showFolderBrowser, setShowFolderBrowser] = useState(false)
 
-  // Create new folder function
-  const handleCreateFolder = async (folderName: string, parentId?: string): Promise<void> => {
-    const response = await fetch('/api/integrations/google-drive/browse', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        folderName: folderName.trim(),
-        parentId: parentId
-      })
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to create folder')
-    }
-  }
+  // Use the reusable folder browser hook, but prefer the passed onBrowseFolders if available
+  const { browseFolders, createFolder: handleCreateFolder } = useFolderBrowser()
+  const effectiveBrowseFolders = onBrowseFolders || browseFolders
 
   const handleSettingChange = (key: keyof GoogleDriveSettings, value: string | boolean | undefined) => {
     const newSettings = { ...settings, [key]: value }
@@ -99,45 +82,6 @@ export const GoogleDriveSettingsComponent = ({
 
         <Separator />
 
-        {/* Auto-create Year Folders */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <Label className="text-sm font-medium">Auto-create Year Folders</Label>
-            <p className="text-xs text-gray-500">
-              Legacy setting - no longer used with current folder structure
-            </p>
-          </div>
-          <Switch
-            checked={settings.autoCreateYearFolders || false}
-            onCheckedChange={(checked) => handleSettingChange('autoCreateYearFolders', checked)}
-            disabled={true}
-          />
-        </div>
-
-        <Separator />
-
-        {/* Folder Naming Pattern */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Client Folder Naming</Label>
-          <p className="text-xs text-gray-500 mb-2">
-            Legacy setting - clients now select their specific folders directly
-          </p>
-          <Select
-            value={settings.folderNamingPattern || 'client-only'}
-            onValueChange={(value) => handleSettingChange('folderNamingPattern', value)}
-            disabled={true}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="client-only">Client Name Only</SelectItem>
-              <SelectItem value="year-client">Year - Client Name</SelectItem>
-              <SelectItem value="custom">Custom Template</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Preview */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">Current Folder Structure</Label>
@@ -165,7 +109,7 @@ export const GoogleDriveSettingsComponent = ({
         title="Select Parent Folder"
         description="Choose where to organize your client folders"
         onFolderSelect={handleFolderSelect}
-        onBrowseFolders={onBrowseFolders}
+        onBrowseFolders={effectiveBrowseFolders}
         onCreateFolder={handleCreateFolder}
       />
     </Card>

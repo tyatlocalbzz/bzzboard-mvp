@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, integer, json, boolean, pgEnum, unique } from 'drizzle-orm/pg-core'
+import { pgTable, serial, varchar, text, timestamp, integer, json, boolean, pgEnum, unique, index } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // Enums for better type safety
@@ -54,6 +54,21 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
+
+// User Activities table (for audit trail)
+export const userActivities = pgTable('user_activities', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  action: varchar('action', { length: 50 }).notNull(), // 'created', 'updated', 'role_changed', 'status_changed', 'deleted', 'invited', 'resent_invite'
+  details: json('details').$type<Record<string, unknown>>().default({}),
+  performedBy: integer('performed_by').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  // Indexes for performance
+  userIdIdx: index('idx_user_activities_user_id').on(table.userId),
+  createdAtIdx: index('idx_user_activities_created_at').on(table.createdAt.desc()),
+  performedByIdx: index('idx_user_activities_performed_by').on(table.performedBy),
+}))
 
 // Clients table
 export const clients = pgTable('clients', {
@@ -415,4 +430,6 @@ export type NewSystemPlatform = typeof systemPlatforms.$inferInsert
 export type SystemContentType = typeof systemContentTypes.$inferSelect
 export type NewSystemContentType = typeof systemContentTypes.$inferInsert
 export type SystemSetting = typeof systemSettings.$inferSelect
-export type NewSystemSetting = typeof systemSettings.$inferInsert 
+export type NewSystemSetting = typeof systemSettings.$inferInsert
+export type UserActivity = typeof userActivities.$inferSelect
+export type NewUserActivity = typeof userActivities.$inferInsert 

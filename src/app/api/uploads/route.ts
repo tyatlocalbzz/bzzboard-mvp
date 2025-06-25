@@ -1,66 +1,46 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { uploadedFiles, shoots, postIdeas, clients, clientSettings } from '@/lib/db/schema'
 import { getIntegration } from '@/lib/db/integrations'
 import { UnifiedGoogleDriveService } from '@/lib/services/google-drive-unified'
 import { eq, and } from 'drizzle-orm'
 import { GoogleDriveSettings } from '@/lib/types/settings'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+
 
 export async function POST(request: NextRequest) {
-  console.log('📤 [Upload API] Starting file upload request...')
-  
   try {
-    // Check authentication
-    console.log('🔐 [Upload API] Checking authentication...')
-    const session = await getSession()
-    if (!session?.user?.email) {
-      console.log('❌ [Upload API] Authentication failed - no session')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    console.log('📤 [Uploads API] Starting file upload request...')
+    
+    const user = await getCurrentUserForAPI()
+    if (!user?.email) {
+      console.log('❌ [Uploads API] Authentication failed')
+      return ApiErrors.unauthorized()
     }
-    console.log('✅ [Upload API] Authentication successful:', { 
-      userId: session.user?.id, 
-      userEmail: session.user?.email 
-    })
+    console.log('✅ [Uploads API] Authentication successful:', user.email)
 
-    // Parse form data
-    console.log('📋 [Upload API] Parsing form data...')
+    // Parse and validate form data
     const formData = await request.formData()
     const file = formData.get('file') as File
     const postIdeaId = formData.get('postIdeaId') as string
     const shootId = formData.get('shootId') as string
-    const notes = formData.get('notes') as string
-
-    console.log('📊 [Upload API] Form data parsed:', {
-      hasFile: !!file,
-      fileName: file?.name,
-      fileSize: file?.size,
-      fileType: file?.type,
-      postIdeaId,
-      shootId,
-      notes: notes ? `${notes.length} characters` : 'none'
-    })
+    // const notes = formData.get('notes') as string // Not currently used in upload record
 
     // Validation
-    if (!file) {
-      console.log('❌ [Upload API] Validation failed - no file provided')
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-    }
+    if (!file) return ApiErrors.badRequest('No file provided')
+    if (!shootId) return ApiErrors.badRequest('Shoot ID is required')
+    if (!postIdeaId) return ApiErrors.badRequest('Post idea ID is required for file uploads')
 
-    if (!shootId) {
-      console.log('❌ [Upload API] Validation failed - shootId is required')
-      return NextResponse.json({ error: 'shootId is required' }, { status: 400 })
-    }
+    console.log('📊 [Uploads API] Upload request:', {
+      fileName: file.name,
+      fileSize: file.size,
+      postIdeaId,
+      shootId
+    })
 
-    if (!postIdeaId) {
-      console.log('❌ [Upload API] Validation failed - postIdeaId is required')
-      return NextResponse.json({ error: 'postIdeaId is required for file uploads' }, { status: 400 })
-    }
-
-    console.log('✅ [Upload API] Validation passed')
-
-    // Get shoot and client information
-    console.log('📋 [Upload API] Fetching shoot and client information...')
+    // Get shoot and related data
     const shootData = await db
       .select({
         shoot: shoots,
@@ -74,52 +54,30 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (shootData.length === 0) {
-      console.log('❌ [Upload API] Shoot or post idea not found')
-      return NextResponse.json({ error: 'Shoot or post idea not found' }, { status: 404 })
+      return ApiErrors.notFound('Shoot or post idea')
     }
 
     const { shoot, client, postIdea } = shootData[0]
-    console.log('📊 [Upload API] Shoot data:', {
-      shootId: shoot.id,
-      shootTitle: shoot.title,
-      clientId: client.id,
-      clientName: client.name,
-      postIdeaId: postIdea.id,
-      postIdeaTitle: postIdea.title
-    })
 
-    // Get client settings for folder configuration
-    console.log('🔧 [Upload API] Fetching client settings...')
+    // Get client storage settings
     const settings = await db
       .select()
       .from(clientSettings)
       .where(and(
         eq(clientSettings.clientId, client.id),
-        eq(clientSettings.userEmail, session.user.email)
+        eq(clientSettings.userEmail, user.email)
       ))
       .limit(1)
 
     const clientSetting = settings[0] || null
-    console.log('⚙️ [Upload API] Client settings:', {
-      hasSettings: !!clientSetting,
-      storageProvider: clientSetting?.storageProvider,
-      storageFolderId: clientSetting?.storageFolderId,
-      storageFolderPath: clientSetting?.storageFolderPath
-    })
 
     // Check Google Drive integration
-    console.log('🔍 [Upload API] Checking Google Drive integration...')
-    const integration = await getIntegration(session.user.email, 'google-drive')
-    if (!integration || !integration.connected || !integration.accessToken) {
-      console.log('❌ [Upload API] Google Drive not connected')
-      return NextResponse.json({ 
-        error: 'Google Drive integration not connected. Please connect Google Drive in settings.' 
-      }, { status: 400 })
+    const integration = await getIntegration(user.email, 'google-drive')
+    if (!integration?.connected || !integration.accessToken) {
+      return ApiErrors.badRequest('Google Drive integration not connected. Please connect Google Drive in settings.')
     }
-    console.log('✅ [Upload API] Google Drive integration found')
 
-    // Create Google Drive service with proper parameters
-    console.log('🔐 [Upload API] Creating Google Drive service...')
+    // Create Google Drive service
     const driveSettings: GoogleDriveSettings | undefined = clientSetting ? {
       parentFolderId: clientSetting.storageFolderId || undefined,
       parentFolderPath: clientSetting.storageFolderPath || undefined,
@@ -134,222 +92,150 @@ export async function POST(request: NextRequest) {
     )
 
     // Health check
-    console.log('🏥 [Upload API] Performing Google Drive health check...')
     const isHealthy = await driveService.healthCheck()
     if (!isHealthy) {
-      console.log('❌ [Upload API] Google Drive health check failed')
-      return NextResponse.json({ 
-        error: 'Google Drive connection failed. Please reconnect in settings.' 
-      }, { status: 500 })
+      console.log('❌ [Uploads API] Google Drive health check failed')
+      return ApiErrors.internalError('Google Drive connection failed. Please reconnect in settings.')
     }
-    console.log('✅ [Upload API] Google Drive health check passed')
 
     // Create folder structure
-    console.log('🗂️ [Upload API] Creating folder structure...')
+    console.log('🗂️ [Uploads API] Creating folder structure...')
     const shootDate = new Date(shoot.scheduledAt).toISOString().split('T')[0]
     
-    // Create shoot folder
     const shootFolder = await driveService.createShootFolder(
       client.name,
       shoot.title,
       shootDate
     )
-    console.log('📁 [Upload API] Shoot folder created:', {
-      id: shootFolder.id,
-      name: shootFolder.name,
-      webViewLink: shootFolder.webViewLink
-    })
 
-    // Create post idea folder (always since we require postIdeaId)
-    console.log('🎯 [Upload API] Creating post idea folder...')
     const postIdeaFolder = await driveService.createPostIdeaFolder(
       postIdea.title,
       shootFolder.id
     )
     
-    // Get the raw-files subfolder ID - the createPostIdeaFolder should return the post idea folder, 
-    // and we need to get the raw-files subfolder within it
     const rawFilesFolder = await driveService.findOrCreateFolder('raw-files', postIdeaFolder.id)
-    const targetFolderId = rawFilesFolder.id
     const folderPath = await driveService.getFolderPath(rawFilesFolder.id)
-    
-    console.log('📁 [Upload API] Post idea folder structure created:', {
-      postIdeaFolderId: postIdeaFolder.id,
-      rawFilesFolderId: rawFilesFolder.id,
-      folderPath
-    })
 
-    // Convert File to Buffer for upload
-    console.log('📦 [Upload API] Converting file to buffer...')
+    // Upload file
+    console.log('🚀 [Uploads API] Uploading file to Google Drive...')
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    console.log('✅ [Upload API] File converted to buffer:', {
-      bufferSize: buffer.length,
-      originalSize: file.size
-    })
 
-    // Upload file to Google Drive
-    console.log('🚀 [Upload API] Uploading file to Google Drive...')
     const driveFile = await driveService.uploadFile(
       buffer,
       file.name,
-      targetFolderId,
+      rawFilesFolder.id,
       file.type
     )
-    console.log('✅ [Upload API] File uploaded to Google Drive:', {
-      driveFileId: driveFile.id,
-      fileName: driveFile.name,
-      size: driveFile.size,
-      webViewLink: driveFile.webViewLink
-    })
 
-    // Create notes file if notes provided
-    if (notes && notes.trim()) {
-      console.log('📝 [Upload API] Creating notes file...')
-      const notesFileName = `${file.name.split('.')[0]}_notes.txt`
-      await driveService.createNotesFile(
-        notes.trim(),
-        notesFileName,
-        targetFolderId
-      )
-      console.log('✅ [Upload API] Notes file created')
-    }
-
-    // Save file metadata to database
-    console.log('💾 [Upload API] Saving file metadata to database...')
-    const uploadData = {
-      postIdeaId: parseInt(postIdeaId), // Always provided now
+    // Save upload record to database
+    const uploadRecord = await db.insert(uploadedFiles).values({
       shootId: parseInt(shootId),
+      postIdeaId: parseInt(postIdeaId),
       fileName: file.name,
-      filePath: driveFile.webViewLink,
       fileSize: file.size,
+      filePath: folderPath,
       mimeType: file.type,
-      googleDriveId: driveFile.id,
-    }
+      googleDriveId: driveFile.id
+    }).returning()
 
-    const [savedFile] = await db.insert(uploadedFiles).values(uploadData).returning()
-    console.log('✅ [Upload API] File metadata saved to database:', {
-      id: savedFile.id,
-      fileName: savedFile.fileName,
-      filePath: savedFile.filePath
-    })
+    console.log('✅ [Uploads API] Upload completed successfully!')
 
-    // Prepare response
-    const response = {
-      success: true,
-      file: {
-        id: savedFile.id,
-        fileName: savedFile.fileName,
-        fileSize: savedFile.fileSize,
-        mimeType: savedFile.mimeType,
-        driveFileId: savedFile.googleDriveId,
-        webViewLink: savedFile.filePath,
-        uploadedAt: savedFile.uploadedAt.toISOString()
+    return ApiSuccess.created({
+      uploadId: uploadRecord[0].id,
+      fileName: file.name,
+      fileSize: file.size,
+      googleDriveFileId: driveFile.id,
+      folderPath: folderPath,
+      webViewLink: driveFile.webViewLink,
+      shoot: {
+        id: shoot.id,
+        title: shoot.title
       },
-      uploadDestination: {
-        type: 'post-idea',
-        postIdeaId: parseInt(postIdeaId),
-        shootId: parseInt(shootId),
-        hasNotes: !!(notes && notes.trim())
-      },
-      folderStructure: {
-        shootFolder: shootFolder.name,
-        targetFolder: `${postIdea.title}/raw-files`,
-        fullPath: folderPath
+      postIdea: {
+        id: postIdea.id,
+        title: postIdea.title
       }
-    }
-
-    console.log('🎉 [Upload API] Upload completed successfully!')
-    return NextResponse.json(response)
+    }, 'File uploaded successfully')
 
   } catch (error) {
-    console.error('❌ [Upload API] Upload process failed:', error)
-    console.error('🔍 [Upload API] Error details:', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString()
-    })
+    console.error('❌ [Uploads API] Upload process failed:', error)
     
-    // Return more specific error messages
+    // Handle specific Google Drive errors
     if (error instanceof Error) {
       if (error.message.includes('Google Drive')) {
-        return NextResponse.json(
-          { error: 'Google Drive upload failed. Please check your connection and try again.' },
-          { status: 500 }
-        )
+        return ApiErrors.internalError('Google Drive upload failed. Please check your connection and try again.')
       }
       if (error.message.includes('folder')) {
-        return NextResponse.json(
-          { error: 'Failed to create folder structure. Please check permissions.' },
-          { status: 500 }
-        )
+        return ApiErrors.internalError('Failed to create folder structure. Please check permissions.')
+      }
+      if (error.message.includes('401') || error.message.includes('unauthorized')) {
+        return ApiErrors.unauthorized()
       }
     }
     
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Upload failed')
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await getSession()
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const user = await getCurrentUserForAPI()
+    if (!user?.email) return ApiErrors.unauthorized()
 
-    // Get query parameters
     const { searchParams } = new URL(request.url)
     const shootId = searchParams.get('shootId')
     const postIdeaId = searchParams.get('postIdeaId')
 
-    console.log('📋 [Upload API] Fetching uploads:', { shootId, postIdeaId })
-
     // Build query conditions
     const conditions = []
-    if (shootId) {
-      conditions.push(eq(uploadedFiles.shootId, parseInt(shootId)))
-    }
-    if (postIdeaId) {
-      conditions.push(eq(uploadedFiles.postIdeaId, parseInt(postIdeaId)))
-    }
+    if (shootId) conditions.push(eq(uploadedFiles.shootId, parseInt(shootId)))
+    if (postIdeaId) conditions.push(eq(uploadedFiles.postIdeaId, parseInt(postIdeaId)))
 
-    // Query database for uploaded files
-    const files = await db
-      .select()
+    // Fetch uploads with related data
+    const uploads = await db
+      .select({
+        upload: uploadedFiles,
+        shoot: shoots,
+        postIdea: postIdeas,
+        client: clients
+      })
       .from(uploadedFiles)
+      .leftJoin(shoots, eq(uploadedFiles.shootId, shoots.id))
+      .leftJoin(postIdeas, eq(uploadedFiles.postIdeaId, postIdeas.id))
+      .leftJoin(clients, eq(shoots.clientId, clients.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(uploadedFiles.uploadedAt)
 
-    console.log('📊 [Upload API] Found uploaded files:', {
-      count: files.length,
-      shootId,
-      postIdeaId
-    })
+    const transformedUploads = uploads.map(row => ({
+      id: row.upload.id,
+      fileName: row.upload.fileName,
+      fileSize: row.upload.fileSize,
+      filePath: row.upload.filePath,
+      mimeType: row.upload.mimeType,
+      googleDriveFileId: row.upload.googleDriveId,
+      uploadedAt: row.upload.uploadedAt?.toISOString(),
+      shoot: row.shoot ? {
+        id: row.shoot.id,
+        title: row.shoot.title
+      } : null,
+      postIdea: row.postIdea ? {
+        id: row.postIdea.id,
+        title: row.postIdea.title
+      } : null,
+      client: row.client ? {
+        id: row.client.id,
+        name: row.client.name
+      } : null
+    }))
 
-    return NextResponse.json({
-      success: true,
-      files: files.map(file => ({
-        id: file.id,
-        fileName: file.fileName,
-        fileSize: file.fileSize,
-        mimeType: file.mimeType,
-        webViewLink: file.filePath,
-        driveFileId: file.googleDriveId,
-        uploadedAt: file.uploadedAt.toISOString(),
-        postIdeaId: file.postIdeaId,
-        shootId: file.shootId
-      }))
+    return ApiSuccess.ok({
+      uploads: transformedUploads,
+      totalCount: transformedUploads.length
     })
 
   } catch (error) {
-    console.error('❌ [Upload API] Get uploads failed:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Uploads API] Error fetching uploads:', error)
+    return ApiErrors.internalError('Failed to fetch uploads')
   }
 } 

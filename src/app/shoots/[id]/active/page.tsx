@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { MobileLayout } from '@/components/layout/mobile-layout'
 import { Button } from '@/components/ui/button'
@@ -10,13 +10,13 @@ import { PostIdeaSection } from '@/components/shoots/post-idea-section'
 import { PostIdeaForm } from '@/components/posts/post-idea-form'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { StopCircle, ChevronDown, ChevronRight, Plus } from 'lucide-react'
-import { useAsync } from '@/lib/hooks/use-async'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
 import { useClient } from '@/contexts/client-context'
+import { useShootData } from '@/lib/hooks/use-shoot-data'
+import { useShootActions } from '@/lib/hooks/use-shoot-actions'
+import { shootsApi } from '@/lib/api/shoots'
 import { ClientData } from '@/lib/types/client'
 import { toast } from 'sonner'
-import { shootsApi } from '@/lib/api/shoots'
-import type { ActiveShootData } from '@/lib/types/shoots'
 
 export default function ActiveShootPage() {
   const params = useParams()
@@ -25,149 +25,76 @@ export default function ActiveShootPage() {
   const { elapsedTime, endShoot: endActiveShoot } = useActiveShoot()
   const { clients } = useClient()
   
-  const [activeData, setActiveData] = useState<ActiveShootData | null>(null)
   const [showCompleted, setShowCompleted] = useState(false)
   const [showEndDialog, setShowEndDialog] = useState(false)
-  const [isInitialLoading, setIsInitialLoading] = useState(true)
-  
-  // Fetch initial data
-  const { loading: endLoading, execute: executeEndShoot } = useAsync(shootsApi.endShoot)
 
-  // Load shoot data
-  useEffect(() => {
-    const loadData = async () => {
-      if (!shootId) {
-        console.log('❌ No shootId provided')
-        return
-      }
-      
-      try {
-        console.log('🔍 Loading active shoot data for ID:', shootId)
-        setIsInitialLoading(true)
-        
-        // Direct API call instead of using useAsync
-        const data = await shootsApi.fetchActiveShootData(shootId)
-        console.log('📊 Received data:', data)
-        console.log('📊 Data type:', typeof data)
-        console.log('📊 Data keys:', data ? Object.keys(data) : 'null')
-        
-        if (data && data.shoot && data.postIdeas) {
-          setActiveData(data)
-          console.log('✅ Active data set successfully')
-        } else {
-          console.error('❌ Invalid data structure received:', data)
-          
-          // Show error instead of fallback data
-          console.error('❌ Invalid data structure - redirecting to shoot details')
-          toast.error('Failed to load active shoot data')
-          router.push(`/shoots/${shootId}`)
-        }
-      } catch (error) {
-        console.error('❌ Error loading data:', error)
-        console.error('❌ Error details:', {
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : 'No stack trace'
-        })
-        
-        // Show error and redirect instead of fallback data
-        console.error('❌ Error loading active shoot - redirecting to shoot details')
-        toast.error('Failed to load active shoot data')
-        router.push(`/shoots/${shootId}`)
-      } finally {
-        setIsInitialLoading(false)
-        console.log('🏁 Loading completed, isInitialLoading set to false')
-      }
+  // Use the custom hook for data management
+  const { shoot, postIdeas, isLoading, refresh } = useShootData({
+    shootId,
+    onError: (error) => {
+      console.error('Failed to load active shoot data:', error)
+      toast.error('Failed to load active shoot data')
+      router.push(`/shoots/${shootId}`)
     }
+  })
 
-    loadData()
-  }, [shootId, router]) // Added router dependency
+  // Use shoot actions hook for ending the shoot
+  const { completeShoot, isLoading: endLoading } = useShootActions({
+    shoot: shoot!,
+    onSuccess: () => {
+      endActiveShoot()
+      toast.success('Shoot ended successfully!')
+      router.push(`/shoots/${shootId}`)
+    }
+  })
 
-  // Calculate progress
+  // Calculate progress from post ideas
   const { totalPosts, completedPosts, activePostIdeas, completedPostIdeas } = useMemo(() => {
-    if (!activeData) return { totalPosts: 0, completedPosts: 0, activePostIdeas: [], completedPostIdeas: [] }
+    if (!postIdeas.length) return { totalPosts: 0, completedPosts: 0, activePostIdeas: [], completedPostIdeas: [] }
 
-    // Separate post ideas into active (has incomplete shots) and completed (all shots done)
-    const active = activeData.postIdeas.filter(idea => 
-      idea.shots.some(shot => !shot.completed)
-    )
-    
-    const completedIdeas = activeData.postIdeas.filter(idea => 
-      idea.shots.length > 0 && idea.shots.every(shot => shot.completed)
-    )
+    // Convert ExtendedPostIdea to PostIdea format with mock shots data
+    const convertedPostIdeas = postIdeas.map(idea => ({
+      ...idea,
+      contentType: idea.contentType as 'photo' | 'video' | 'reel' | 'story',
+      shots: idea.shotList.map((shot, index) => ({
+        id: index + 1,
+        postIdeaId: idea.id,
+        text: shot,
+        completed: idea.completed || false,
+        notes: ''
+      }))
+    }))
+
+    const active = convertedPostIdeas.filter(idea => !idea.completed)
+    const completed = convertedPostIdeas.filter(idea => idea.completed)
 
     return {
-      totalPosts: activeData.postIdeas.length,
-      completedPosts: completedIdeas.length,
+      totalPosts: postIdeas.length,
+      completedPosts: completed.length,
       activePostIdeas: active,
-      completedPostIdeas: completedIdeas
+      completedPostIdeas: completed
     }
-  }, [activeData])
+  }, [postIdeas])
 
-  // Handlers
+  // Handlers for shot management
   const handleShotToggle = useCallback(async (shotId: number) => {
-    if (!activeData) return
-    
     await shootsApi.toggleShot(shotId)
-    
-    // Update local state
-    setActiveData(prev => {
-      if (!prev) return prev
-      
-      return {
-        ...prev,
-        postIdeas: prev.postIdeas.map(idea => ({
-          ...idea,
-          shots: idea.shots.map(shot => 
-            shot.id === shotId ? { ...shot, completed: !shot.completed } : shot
-          )
-        }))
-      }
-    })
-  }, [activeData])
+    refresh() // Refresh data after toggle
+  }, [refresh])
 
   const handleShotEdit = useCallback(async (shotId: number, text: string, notes?: string) => {
     await shootsApi.editShot(shotId, text, notes)
-    
-    // Update local state
-    setActiveData(prev => {
-      if (!prev) return prev
-      
-      return {
-        ...prev,
-        postIdeas: prev.postIdeas.map(idea => ({
-          ...idea,
-          shots: idea.shots.map(shot => 
-            shot.id === shotId ? { ...shot, text, notes } : shot
-          )
-        }))
-      }
-    })
-    
+    refresh() // Refresh data after edit
     toast.success('Shot updated!')
-  }, [])
+  }, [refresh])
 
   const handleAddShot = useCallback(async (postIdeaId: number, shotText: string, notes?: string) => {
-    const newShot = await shootsApi.addShot(postIdeaId, shotText, notes)
-    
-    // Update local state with new shot
-    setActiveData(prev => {
-      if (!prev) return prev
-      
-      return {
-        ...prev,
-        postIdeas: prev.postIdeas.map(idea => 
-          idea.id === postIdeaId 
-            ? { ...idea, shots: [...idea.shots, newShot] }
-            : idea
-        )
-      }
-    })
-    
+    await shootsApi.addShot(postIdeaId, shotText, notes)
+    refresh() // Refresh data after adding
     toast.success('Shot added!')
-  }, [])
+  }, [refresh])
 
   const handlePostIdeaClick = useCallback((postIdeaId: number) => {
-    // Navigate to post idea details (back to shoot details page with focus on specific post idea)
     router.push(`/shoots/${shootId}#post-idea-${postIdeaId}`)
   }, [router, shootId])
 
@@ -176,25 +103,21 @@ export default function ActiveShootPage() {
   }, [])
 
   const handleConfirmEndShoot = useCallback(async () => {
-    await executeEndShoot(shootId)
-    endActiveShoot() // End the global active shoot
+    await completeShoot()
     setShowEndDialog(false)
-    toast.success('Shoot ended successfully!')
-    router.push(`/shoots/${shootId}`)
-  }, [executeEndShoot, shootId, router, endActiveShoot])
+  }, [completeShoot])
 
   const handleCancelEndShoot = useCallback(() => {
     setShowEndDialog(false)
   }, [])
 
-  // Helper function to find client override from shoot's client name
-  const getClientOverride = (clientName: string): ClientData | null => {
+  // Helper function to find client override
+  const getClientOverride = useCallback((clientName: string): ClientData | null => {
     return clients.find(client => client.name === clientName && client.type === 'client') || null
-  }
+  }, [clients])
 
   // Show loading state
-  if (isInitialLoading || !activeData) {
-    console.log('🔄 Rendering loading state - isInitialLoading:', isInitialLoading, 'activeData:', !!activeData)
+  if (isLoading || !shoot) {
     return (
       <MobileLayout 
         title="Loading..."
@@ -213,13 +136,11 @@ export default function ActiveShootPage() {
     )
   }
 
-  console.log('✅ Rendering active shoot page with data:', activeData)
-
   const progressPercentage = totalPosts > 0 ? (completedPosts / totalPosts) * 100 : 0
 
   return (
     <MobileLayout
-      title={activeData.shoot.client}
+      title={shoot.client}
       backHref={`/shoots/${shootId}`}
       showBottomNav={true}
       showClientSelector={false}
@@ -352,11 +273,8 @@ export default function ActiveShootPage() {
           mode="quick-add"
           context="shoot"
           shootId={shootId}
-          clientOverride={getClientOverride(activeData.shoot.client)}
-          onSuccess={() => {
-            // Refresh the page data
-            window.location.reload()
-          }}
+          clientOverride={getClientOverride(shoot.client)}
+          onSuccess={refresh}
           displayMode="dialog"
           trigger={
             <Button

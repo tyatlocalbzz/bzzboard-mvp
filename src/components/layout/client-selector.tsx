@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, Building, Users, UserPlus } from 'lucide-react'
 import {
   DropdownMenu,
@@ -24,35 +24,53 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
   const [isMounted, setIsMounted] = useState(false)
   const [showAddClientWizard, setShowAddClientWizard] = useState(false)
   
-  // Always call the hook - handle errors in render
-  let selectedClient: ClientData | undefined
-  let clients: ClientData[] = []
-  let setSelectedClient: ((client: ClientData) => void) | undefined
-  let hasError = false
-
-  try {
-    const context = useClient()
-    selectedClient = context.selectedClient
-    clients = context.clients
-    setSelectedClient = context.setSelectedClient
-  } catch (error) {
-    console.error('ClientSelector: Failed to access client context:', error)
-    hasError = true
-  }
+  // Always call the hook - React hooks must be called unconditionally
+  const contextData = useClient()
+  
+  // Check if context data is available (handle context provider errors)
+  const hasValidContext = contextData && contextData.selectedClient && contextData.clients
 
   // Ensure hydration safety
   useEffect(() => {
     setIsMounted(true)
   }, [])
 
+  // Memoize the clients data from context to prevent reference changes
+  const stableClientsData = useMemo(() => {
+    if (!hasValidContext) return []
+    return contextData.clients
+  }, [hasValidContext, contextData.clients])
+
+  // Memoize clients array based on actual data changes, not reference changes
+  const memoizedClients = useMemo(() => {
+    // Create a stable representation by serializing the essential data
+    return stableClientsData.map(client => ({
+      id: client.id,
+      name: client.name,
+      type: client.type,
+      activeProjects: client.activeProjects
+    }))
+  }, [stableClientsData])
+
+  // Debug logging for clients list changes
+  useEffect(() => {
+    if (memoizedClients && memoizedClients.length > 0) {
+      console.log('📋 [ClientSelector] Clients list updated:', {
+        count: memoizedClients.length,
+        clients: memoizedClients.map(c => ({ id: c.id, name: c.name, type: c.type }))
+      })
+    }
+  }, [memoizedClients])
+
   const handleClientSelect = (client: ClientData) => {
-    if (setSelectedClient) {
-      setSelectedClient(client)
+    console.log('🔄 [ClientSelector] Selecting client:', client.name, 'ID:', client.id)
+    if (contextData?.setSelectedClient) {
+      contextData.setSelectedClient(client)
     }
   }
 
   // Show error state if context is not available
-  if (hasError || !selectedClient) {
+  if (!hasValidContext) {
     return (
       <Button 
         variant="ghost" 
@@ -95,15 +113,15 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
             className={`h-8 px-2 text-left justify-between min-w-0 max-w-[140px] ${className}`}
           >
             <div className="flex items-center gap-1 min-w-0">
-              {selectedClient.type === 'all' ? (
+              {contextData.selectedClient.type === 'all' ? (
                 <Users className="h-3 w-3 text-gray-500 flex-shrink-0" />
               ) : (
                 <Building className="h-3 w-3 text-gray-500 flex-shrink-0" />
               )}
               <span className="text-xs font-medium truncate">
-                {compact && selectedClient.name.length > 12 
-                  ? `${selectedClient.name.substring(0, 12)}...`
-                  : selectedClient.name
+                {compact && contextData.selectedClient.name.length > 12 
+                  ? `${contextData.selectedClient.name.substring(0, 12)}...`
+                  : contextData.selectedClient.name
                 }
               </span>
             </div>
@@ -117,12 +135,12 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           
-          {clients.map((client) => (
+          {memoizedClients.map((client) => (
             <DropdownMenuItem
               key={client.id}
               onClick={() => handleClientSelect(client)}
               className={`flex items-center justify-between py-2 ${
-                selectedClient.id === client.id ? 'bg-blue-50 text-blue-700' : ''
+                contextData.selectedClient.id === client.id ? 'bg-blue-50 text-blue-700' : ''
               }`}
             >
               <div className="flex items-center gap-2 min-w-0">
@@ -141,7 +159,7 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
                 </div>
               </div>
               
-              {selectedClient.id === client.id && (
+              {contextData.selectedClient.id === client.id && (
                 <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0" />
               )}
             </DropdownMenuItem>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { FormSheet } from '@/components/ui/form-sheet'
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useAsync } from '@/lib/hooks/use-async'
+import { useFormState } from '@/lib/hooks/use-form-state'
 import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { useClient } from '@/contexts/client-context'
 import { toast } from 'sonner'
@@ -31,6 +32,16 @@ export interface PostIdeaData {
   shotList?: string[]
   notes?: string
   clientName?: string // For standalone post creation
+}
+
+// Form state interface for useFormState
+interface PostIdeaFormData {
+  platforms: string[]
+  contentType: 'photo' | 'video' | 'reel' | 'story' | 'carousel'
+  selectedClient: string
+  shotList: string[]
+  caption: string
+  notes: string
 }
 
 export interface PostIdeaFormProps {
@@ -146,15 +157,21 @@ export const PostIdeaForm = ({
   const [internalOpen, setInternalOpen] = useState(false)
   const isControlled = open !== undefined
   const isOpen = isControlled ? open : internalOpen
-  
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(postIdea?.platforms || [])
-  const [selectedContentType, setSelectedContentType] = useState<PostIdeaData['contentType']>(postIdea?.contentType || 'photo')
-  const [selectedClient, setSelectedClient] = useState(postIdea?.client?.name || '')
-  const [shotList, setShotList] = useState<string[]>(postIdea?.shotList || [''])
-  const [caption, setCaption] = useState(postIdea?.caption || '')
-  const [notes, setNotes] = useState(postIdea?.notes || '')
 
   const { selectedClient: contextClient, clients } = useClient()
+  
+  // Initialize form data based on mode and existing data
+  const getInitialFormData = useCallback((): PostIdeaFormData => ({
+    platforms: postIdea?.platforms || [],
+    contentType: postIdea?.contentType || 'photo',
+    selectedClient: postIdea?.client?.name || (contextClient.type === 'client' ? contextClient.name : ''),
+    shotList: postIdea?.shotList || [''],
+    caption: postIdea?.caption || '',
+    notes: postIdea?.notes || ''
+  }), [postIdea, contextClient])
+
+  // Use the form state hook for all form data
+  const formState = useFormState<PostIdeaFormData>(getInitialFormData())
   
   // Get all platforms and filter based on context
   // Use clientOverride when provided (shoot context) to show the shoot's client platforms
@@ -173,7 +190,7 @@ export const PostIdeaForm = ({
   
   const loading = createLoading || updateLoading || addToShootLoading
 
-  // Field validation
+  // Field validation for title
   const titleField = useFieldValidation({
     fieldName: 'title',
     initialValue: mode === 'duplicate' ? `${postIdea?.title} (Copy)` : (postIdea?.title || ''),
@@ -198,36 +215,38 @@ export const PostIdeaForm = ({
     }
   }
 
-  // Initialize form data
+  // Initialize/reset form data when opening or when postIdea changes
   useEffect(() => {
-    if (postIdea && mode === 'edit') {
-      setSelectedClient(postIdea.client?.name || '')
-    } else if (!postIdea && contextClient.type === 'client') {
-      setSelectedClient(contextClient.name)
+    if (isOpen) {
+      const initialData = getInitialFormData()
+      formState.reset(initialData)
     }
-  }, [postIdea, mode, contextClient])
+  }, [isOpen, postIdea, mode, contextClient, formState, getInitialFormData])
 
   // Platform handling
   const togglePlatform = (platformName: string) => {
-    setSelectedPlatforms(prev => 
-      prev.includes(platformName) 
-        ? prev.filter(p => p !== platformName)
-        : [...prev, platformName]
-    )
+    const currentPlatforms = formState.data.platforms
+    const newPlatforms = currentPlatforms.includes(platformName) 
+      ? currentPlatforms.filter(p => p !== platformName)
+      : [...currentPlatforms, platformName]
+    
+    formState.setField('platforms', newPlatforms)
   }
 
   // Shot list handling
   const addShotItem = () => {
-    setShotList(prev => [...prev, ''])
+    formState.setField('shotList', [...formState.data.shotList, ''])
   }
 
   const updateShotItem = (index: number, value: string) => {
-    setShotList(prev => prev.map((item, i) => i === index ? value : item))
+    const newShotList = formState.data.shotList.map((item, i) => i === index ? value : item)
+    formState.setField('shotList', newShotList)
   }
 
   const removeShotItem = (index: number) => {
-    if (shotList.length > 1) {
-      setShotList(prev => prev.filter((_, i) => i !== index))
+    if (formState.data.shotList.length > 1) {
+      const newShotList = formState.data.shotList.filter((_, i) => i !== index)
+      formState.setField('shotList', newShotList)
     }
   }
 
@@ -238,11 +257,11 @@ export const PostIdeaForm = ({
       return titleValidation.error || 'Please enter a valid title'
     }
 
-    if (selectedPlatforms.length === 0) {
+    if (formState.data.platforms.length === 0) {
       return 'Please select at least one platform'
     }
 
-    if (context === 'standalone' && !selectedClient) {
+    if (context === 'standalone' && !formState.data.selectedClient) {
       return 'Please select a client'
     }
 
@@ -259,12 +278,12 @@ export const PostIdeaForm = ({
 
     const formData: PostIdeaData = {
       title: titleField.value,
-      platforms: selectedPlatforms,
-      contentType: selectedContentType,
-      caption: caption || undefined,
-      shotList: shotList.filter(shot => shot.trim() !== ''),
-      notes: notes || undefined,
-      clientName: context === 'standalone' ? selectedClient : undefined
+      platforms: formState.data.platforms,
+      contentType: formState.data.contentType,
+      caption: formState.data.caption || undefined,
+      shotList: formState.data.shotList.filter(shot => shot.trim() !== ''),
+      notes: formState.data.notes || undefined,
+      clientName: context === 'standalone' ? formState.data.selectedClient : undefined
     }
 
     try {
@@ -335,11 +354,15 @@ export const PostIdeaForm = ({
       {context === 'standalone' && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">Client *</Label>
-          <Select value={selectedClient} onValueChange={setSelectedClient} required>
+          <Select 
+            value={formState.data.selectedClient} 
+            onValueChange={(value) => formState.setField('selectedClient', value)} 
+            required
+          >
             <SelectTrigger>
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-gray-500" />
-                <span>{selectedClient || 'Choose a client'}</span>
+                <span>{formState.data.selectedClient || 'Choose a client'}</span>
               </div>
             </SelectTrigger>
             <SelectContent>
@@ -353,7 +376,7 @@ export const PostIdeaForm = ({
               ))}
             </SelectContent>
           </Select>
-          {isOpen && !selectedClient && (
+          {isOpen && !formState.data.selectedClient && (
             <p className="text-sm text-red-600">Please select a client</p>
           )}
         </div>
@@ -369,7 +392,7 @@ export const PostIdeaForm = ({
               type="button"
               onClick={() => togglePlatform(platform.name)}
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors relative ${
-                selectedPlatforms.includes(platform.name)
+                formState.data.platforms.includes(platform.name)
                   ? 'bg-blue-500 text-white'
                   : platform.isConfigured
                   ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
@@ -386,34 +409,34 @@ export const PostIdeaForm = ({
             </button>
           ))}
         </div>
-        {selectedPlatforms.length > 0 && (
+        {formState.data.platforms.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {selectedPlatforms.map((platform) => (
+            {formState.data.platforms.map((platform) => (
               <Badge key={platform} variant="secondary" className="text-xs">
                 {platform}
               </Badge>
             ))}
           </div>
         )}
-        {isOpen && selectedPlatforms.length === 0 && (
+        {isOpen && formState.data.platforms.length === 0 && (
           <p className="text-sm text-red-600">Please select at least one platform</p>
         )}
-        <p className="text-xs text-gray-500">
-          Platforms with ✓ have social media handles configured in client settings
-        </p>
       </div>
 
       {/* Content Type */}
       <div className="space-y-2">
-        <Label>Content Type *</Label>
-        <Select value={selectedContentType} onValueChange={(value: PostIdeaData['contentType']) => setSelectedContentType(value)}>
-          <SelectTrigger className="h-12 text-base tap-target">
+        <Label>Content Type</Label>
+        <Select 
+          value={formState.data.contentType} 
+          onValueChange={(value: PostIdeaFormData['contentType']) => formState.setField('contentType', value)}
+        >
+          <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {CONTENT_TYPE_OPTIONS.map((type) => (
-              <SelectItem key={type.value} value={type.value}>
-                {type.label}
+            {CONTENT_TYPE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -427,8 +450,8 @@ export const PostIdeaForm = ({
           id="caption"
           name="caption"
           placeholder="Write your caption..."
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
+          value={formState.data.caption}
+          onChange={(e) => formState.setField('caption', e.target.value)}
           rows={3}
           className="text-base tap-target resize-none"
         />
@@ -447,7 +470,7 @@ export const PostIdeaForm = ({
           </button>
         </div>
         <div className="space-y-2">
-          {shotList.map((shot, index) => (
+          {formState.data.shotList.map((shot, index) => (
             <div key={index} className="flex gap-2">
               <MobileInput
                 placeholder={`Shot ${index + 1}...`}
@@ -456,7 +479,7 @@ export const PostIdeaForm = ({
                 className="flex-1"
                 showValidationIcon={false}
               />
-              {shotList.length > 1 && (
+              {formState.data.shotList.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeShotItem(index)}
@@ -477,8 +500,8 @@ export const PostIdeaForm = ({
           id="notes"
           name="notes"
           placeholder="Additional notes..."
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          value={formState.data.notes}
+          onChange={(e) => formState.setField('notes', e.target.value)}
           rows={2}
           className="text-base tap-target resize-none"
         />
@@ -486,7 +509,7 @@ export const PostIdeaForm = ({
     </div>
   )
 
-  // Render based on display mode and pattern
+  // Render based on display mode
   if (displayMode === 'form-sheet') {
     return (
       <FormSheet
@@ -497,10 +520,10 @@ export const PostIdeaForm = ({
         icon={getIcon()}
         isOpen={isOpen}
         onOpenChange={handleOpenChange}
-        onSubmit={handleSubmit}
+        onSubmit={async () => await handleSubmit()}
         loading={loading}
-        submitText={mode === 'edit' ? 'Update Post Idea' : 'Create Post Idea'}
-        loadingText={mode === 'edit' ? 'Updating...' : 'Creating...'}
+        submitText={mode === 'edit' ? 'Save Changes' : 'Create Post Idea'}
+        loadingText={mode === 'edit' ? 'Saving...' : 'Creating...'}
       />
     )
   }
@@ -508,8 +531,7 @@ export const PostIdeaForm = ({
   if (displayMode === 'sheet') {
     return (
       <Sheet open={isOpen} onOpenChange={handleOpenChange}>
-        {/* Only render trigger if not controlled */}
-        {!isControlled && trigger && (
+        {trigger && (
           <SheetTrigger asChild>
             {trigger}
           </SheetTrigger>
@@ -525,12 +547,14 @@ export const PostIdeaForm = ({
             </SheetDescription>
           </SheetHeader>
           
-          <div className="flex flex-col h-full px-4 pb-4">
-            <div className="flex-1 space-y-4 overflow-y-auto pt-4">
-              {renderFormContent()}
+          <div className="flex flex-col h-full pt-2">
+            <div className="flex-1 overflow-y-auto px-4">
+              <div className="space-y-4 py-2">
+                {renderFormContent()}
+              </div>
             </div>
 
-            <div className="flex gap-3 pt-6 border-t">
+            <div className="flex-shrink-0 flex gap-3 p-4 border-t bg-white">
               <Button
                 type="button"
                 variant="outline"
@@ -544,9 +568,9 @@ export const PostIdeaForm = ({
                 onClick={handleSubmit}
                 className="flex-1 h-12"
                 loading={loading}
-                loadingText={mode === 'edit' ? 'Updating...' : 'Creating...'}
+                loadingText={mode === 'edit' ? 'Saving...' : 'Creating...'}
               >
-                {mode === 'edit' ? 'Update Post Idea' : 'Create Post Idea'}
+                {mode === 'edit' ? 'Save Changes' : 'Create Post Idea'}
               </LoadingButton>
             </div>
           </div>
@@ -558,8 +582,7 @@ export const PostIdeaForm = ({
   // Default: Dialog mode
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      {/* Only render trigger if not controlled */}
-      {!isControlled && trigger && (
+      {trigger && (
         <DialogTrigger asChild>
           {trigger}
         </DialogTrigger>
@@ -575,7 +598,7 @@ export const PostIdeaForm = ({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4 overflow-y-auto max-h-[60vh] pr-2">
+        <div className="flex flex-col max-h-[60vh] overflow-y-auto pr-2">
           {renderFormContent()}
         </div>
 
@@ -593,9 +616,9 @@ export const PostIdeaForm = ({
             onClick={handleSubmit}
             className="flex-1"
             loading={loading}
-            loadingText={mode === 'edit' ? 'Updating...' : 'Creating...'}
+            loadingText={mode === 'edit' ? 'Saving...' : 'Creating...'}
           >
-            {mode === 'edit' ? 'Update Post Idea' : 'Create Post Idea'}
+            {mode === 'edit' ? 'Save Changes' : 'Create Post Idea'}
           </LoadingButton>
         </div>
       </DialogContent>

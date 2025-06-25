@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import type { UnifiedEvent, UnifiedEventFilter, UnifiedEventsResponse } from '@/lib/types/shoots'
+import { useMemo, useCallback, useEffect } from 'react'
+import { useApiData, useApiMutation } from './use-api-data'
+import type { UnifiedEvent, UnifiedEventFilter } from '@/lib/types/shoots'
 
 interface UseUnifiedEventsOptions {
   clientName?: string
@@ -23,14 +24,14 @@ interface UseUnifiedEventsReturn {
   optimisticDelete: (eventId: string, eventType: 'shoot' | 'calendar') => void
 }
 
-export const useUnifiedEvents = (options: UseUnifiedEventsOptions = {}): UseUnifiedEventsReturn => {
-  const [events, setEvents] = useState<UnifiedEvent[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [totalCount, setTotalCount] = useState(0)
-  const [shootsCount, setShootsCount] = useState(0)
-  const [calendarEventsCount, setCalendarEventsCount] = useState(0)
+interface UnifiedEventsResponse {
+  events: UnifiedEvent[]
+  totalCount: number
+  shootsCount: number
+  calendarEventsCount: number
+}
 
+export const useUnifiedEvents = (options: UseUnifiedEventsOptions = {}): UseUnifiedEventsReturn => {
   const {
     clientName,
     filter = 'shoots',
@@ -39,116 +40,128 @@ export const useUnifiedEvents = (options: UseUnifiedEventsOptions = {}): UseUnif
     autoRefresh = false
   } = options
 
-  const fetchEvents = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const params = new URLSearchParams()
-      if (clientName && clientName !== 'All Clients') {
-        params.append('client', clientName)
-      }
-      if (filter) {
-        params.append('filter', filter)
-      }
-      if (startDate) {
-        params.append('startDate', startDate.toISOString())
-      }
-      if (endDate) {
-        params.append('endDate', endDate.toISOString())
-      }
-
-      const response = await fetch(`/api/shoots?${params.toString()}`)
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch events: ${response.status}`)
-      }
-
-      const data: UnifiedEventsResponse = await response.json()
-      
-      if (data.success) {
-        setEvents(data.events)
-        setTotalCount(data.totalCount)
-        setShootsCount(data.shootsCount)
-        setCalendarEventsCount(data.calendarEventsCount)
-      } else {
-        throw new Error('Failed to fetch events')
-      }
-    } catch (err) {
-      console.error('Error fetching unified events:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch events')
-      setEvents([])
-      setTotalCount(0)
-      setShootsCount(0)
-      setCalendarEventsCount(0)
-    } finally {
-      setLoading(false)
+  // Build endpoint with parameters
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams()
+    
+    if (clientName && clientName !== 'All Clients') {
+      params.append('client', clientName)
     }
+    if (filter) {
+      params.append('filter', filter)
+    }
+    if (startDate) {
+      params.append('startDate', startDate.toISOString())
+    }
+    if (endDate) {
+      params.append('endDate', endDate.toISOString())
+    }
+
+    return `/api/shoots?${params.toString()}`
   }, [clientName, filter, startDate, endDate])
 
-  const syncCalendar = useCallback(async () => {
-    try {
-      setError(null)
-      
-      const response = await fetch('/api/integrations/google-calendar/sync', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ forceFullSync: false })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to sync calendar')
+  // Transform function to handle both API response formats
+  const transform = useCallback((data: unknown) => {
+    const result = data as {
+      events?: UnifiedEvent[]
+      totalCount?: number
+      shootsCount?: number
+      calendarEventsCount?: number
+      data?: {
+        events?: UnifiedEvent[]
+        totalCount?: number
+        shootsCount?: number
+        calendarEventsCount?: number
       }
-
-      const data = await response.json()
-      
-      if (data.success) {
-        // Refresh events after successful sync
-        await fetchEvents()
-      } else {
-        throw new Error(data.error || 'Sync failed')
-      }
-    } catch (err) {
-      console.error('Error syncing calendar:', err)
-      setError(err instanceof Error ? err.message : 'Failed to sync calendar')
     }
-  }, [fetchEvents])
 
-  // Initial fetch
-  useEffect(() => {
-    fetchEvents()
-  }, [fetchEvents])
+    // Handle both new standardized API format and old format
+    if (result.events) {
+      return {
+        events: Array.isArray(result.events) ? result.events : [],
+        totalCount: result.totalCount || 0,
+        shootsCount: result.shootsCount || 0,
+        calendarEventsCount: result.calendarEventsCount || 0
+      }
+    } else if (result.data?.events) {
+      return {
+        events: Array.isArray(result.data.events) ? result.data.events : [],
+        totalCount: result.data.totalCount || 0,
+        shootsCount: result.data.shootsCount || 0,
+        calendarEventsCount: result.data.calendarEventsCount || 0
+      }
+    } else {
+      console.error('Unexpected API response format:', result)
+      return {
+        events: [],
+        totalCount: 0,
+        shootsCount: 0,
+        calendarEventsCount: 0
+      }
+    }
+  }, [])
+
+  // Use standardized API data hook with auto-refresh
+  const { data, isLoading, error, refresh, updateData } = useApiData<UnifiedEventsResponse>({
+    endpoint,
+    dependencies: [clientName, filter, startDate, endDate],
+    transform,
+    autoFetch: true
+  })
 
   // Auto-refresh if enabled
   useEffect(() => {
     if (!autoRefresh) return
 
     const interval = setInterval(() => {
-      fetchEvents()
+      refresh()
     }, 5 * 60 * 1000) // Refresh every 5 minutes
 
     return () => clearInterval(interval)
-  }, [autoRefresh, fetchEvents])
+  }, [autoRefresh, refresh])
 
-  const optimisticDelete = useCallback((eventId: string, eventType: 'shoot' | 'calendar') => {
-    setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId))
-    if (eventType === 'shoot') {
-      setShootsCount(prevCount => prevCount - 1)
-    } else if (eventType === 'calendar') {
-      setCalendarEventsCount(prevCount => prevCount - 1)
+  // Calendar sync mutation
+  const syncMutation = useApiMutation<{ success: boolean }>('/api/integrations/google-calendar/sync', 'POST')
+
+  const syncCalendar = useCallback(async () => {
+    try {
+      const result = await syncMutation.mutate({ forceFullSync: false })
+      
+      if (result.success) {
+        // Refresh events after successful sync
+        await refresh()
+      }
+    } catch (error) {
+      // Error handling is already done in useApiMutation
+      console.error('Calendar sync failed:', error)
     }
-  }, [])
+  }, [syncMutation, refresh])
+
+  // Optimistic delete with proper state updates
+  const optimisticDelete = useCallback((eventId: string, eventType: 'shoot' | 'calendar') => {
+    updateData(prev => {
+      if (!prev) return null
+      
+      const filteredEvents = prev.events.filter(event => event.id !== eventId)
+      
+      return {
+        ...prev,
+        events: filteredEvents,
+        totalCount: prev.totalCount - 1,
+        shootsCount: eventType === 'shoot' ? prev.shootsCount - 1 : prev.shootsCount,
+        calendarEventsCount: eventType === 'calendar' ? prev.calendarEventsCount - 1 : prev.calendarEventsCount
+      }
+    })
+  }, [updateData])
 
   return {
-    events,
-    loading,
+    events: data?.events || [],
+    loading: isLoading,
     error,
-    totalCount,
-    shootsCount,
-    calendarEventsCount,
-    refresh: fetchEvents,
+    totalCount: data?.totalCount || 0,
+    shootsCount: data?.shootsCount || 0,
+    calendarEventsCount: data?.calendarEventsCount || 0,
+    refresh,
     syncCalendar,
     optimisticDelete
   }

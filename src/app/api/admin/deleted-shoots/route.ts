@@ -1,19 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { getDeletedShoots, restoreShoot } from '@/lib/db/shoots'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  getValidatedBody
+} from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface RestoreShootBody {
+  shootId: number
+  action: string
+}
 
 export async function GET() {
   try {
-    // Check authentication
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Admin authentication check
+    const user = await getCurrentUserForAPI()
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
-
-    // TODO: Add admin role check here
-    // if (session.user.role !== 'admin') {
-    //   return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    // }
+    if (user.role !== 'admin') {
+      return ApiErrors.forbidden()
+    }
 
     // Get deleted shoots
     const deletedShoots = await getDeletedShoots()
@@ -32,59 +40,51 @@ export async function GET() {
       postIdeasCount: shoot.postIdeasCount
     }))
 
-    return NextResponse.json({
-      success: true,
+    return ApiSuccess.ok({
       deletedShoots: transformedShoots
     })
 
   } catch (error) {
-    console.error('❌ [API] Get deleted shoots error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Admin API] Get deleted shoots error:', error)
+    return ApiErrors.internalError('Failed to fetch deleted shoots')
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const session = await getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Admin authentication check
+    const user = await getCurrentUserForAPI()
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
+    }
+    if (user.role !== 'admin') {
+      return ApiErrors.forbidden()
     }
 
-    // TODO: Add admin role check here
-    // if (session.user.role !== 'admin') {
-    //   return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    // }
-
-    const { shootId, action } = await request.json()
+    const body = await getValidatedBody<RestoreShootBody>(request)
+    const { shootId, action } = body
 
     if (!shootId || !action) {
-      return NextResponse.json({ error: 'Shoot ID and action are required' }, { status: 400 })
+      return ApiErrors.badRequest('Shoot ID and action are required')
     }
 
     if (action === 'restore') {
       const success = await restoreShoot(shootId)
       
       if (!success) {
-        return NextResponse.json({ error: 'Failed to restore shoot' }, { status: 500 })
+        return ApiErrors.internalError('Failed to restore shoot')
       }
 
-      return NextResponse.json({
-        success: true,
-        message: 'Shoot restored successfully'
-      })
+      // Log admin action for audit trail
+      console.log(`✅ [Admin] Shoot ${shootId} restored by admin: ${user.email}`)
+
+      return ApiSuccess.ok({}, 'Shoot restored successfully')
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    return ApiErrors.badRequest('Invalid action')
 
   } catch (error) {
-    console.error('❌ [API] Restore shoot error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Admin API] Restore shoot error:', error)
+    return ApiErrors.internalError('Failed to process shoot restoration')
   }
 } 

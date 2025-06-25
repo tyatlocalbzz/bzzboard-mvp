@@ -4,9 +4,8 @@ import { ReactNode, useState, useEffect } from 'react'
 import { FormSheet } from '@/components/ui/form-sheet'
 import { MobileInput } from '@/components/ui/mobile-input'
 import { Label } from '@/components/ui/label'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { useAsync } from '@/lib/hooks/use-async'
+import { useAuthMutations } from '@/lib/hooks/use-auth-mutations'
 import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { clientValidation } from '@/lib/validation/client-validation'
 import { Edit, Mail, User } from 'lucide-react'
@@ -19,33 +18,9 @@ interface EditProfileFormProps {
   }
 }
 
-interface UpdateProfileData {
-  name: string
-  email: string
-}
-
-const updateProfile = async (data: UpdateProfileData) => {
-  const response = await fetch('/api/auth/update-profile', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  })
-
-  const result = await response.json()
-
-  if (!response.ok) {
-    throw new Error(result.error || 'Failed to update profile')
-  }
-
-  return result
-}
-
 export const EditProfileForm = ({ children, user }: EditProfileFormProps) => {
   const [isOpen, setIsOpen] = useState(false)
-  const router = useRouter()
-  const { loading, execute } = useAsync(updateProfile)
+  const { updateProfile } = useAuthMutations()
 
   // Field validation hooks
   const nameField = useFieldValidation({
@@ -102,16 +77,12 @@ export const EditProfileForm = ({ children, user }: EditProfileFormProps) => {
       return
     }
 
-    const result = await execute({
+    await updateProfile.mutate({
       name: nameField.value,
       email: emailField.value
     })
     
-    if (result) {
-      toast.success('Profile updated successfully')
-      setIsOpen(false)
-      router.refresh()
-    }
+    setIsOpen(false)
   }
 
   const handleOpenChange = (open: boolean) => {
@@ -182,7 +153,7 @@ export const EditProfileForm = ({ children, user }: EditProfileFormProps) => {
       isOpen={isOpen}
       onOpenChange={handleOpenChange}
       onSubmit={handleSubmit}
-      loading={loading}
+      loading={updateProfile.isLoading}
       submitText="Save Changes"
       loadingText="Saving..."
     />

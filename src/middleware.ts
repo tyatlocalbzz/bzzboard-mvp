@@ -37,6 +37,22 @@ export default auth((req) => {
     return NextResponse.redirect(signInUrl)
   }
 
+  // Check if authenticated user is on first login and needs to set password
+  // Allow access to first-login page and auth-related API routes
+  const isFirstLoginPage = pathname === '/auth/first-login'
+  const isAuthChangePasswordApi = pathname === '/api/auth/change-password'
+  const isAuthSetFirstPasswordApi = pathname === '/api/auth/set-first-password'
+  const isAuthCheckFirstLoginApi = pathname === '/api/auth/check-first-login'
+  
+  if (isAuthenticated && req.auth?.user) {
+    // Note: We can't access the database user data in middleware easily
+    // So we'll handle the first-login redirect in the main layout or pages
+    // For now, just allow access to first-login page and related APIs
+    if (isFirstLoginPage || isAuthChangePasswordApi || isAuthSetFirstPasswordApi || isAuthCheckFirstLoginApi) {
+      return NextResponse.next()
+    }
+  }
+
   return NextResponse.next()
 })
 

@@ -21,10 +21,27 @@ export interface UserIntegrations {
 // Get all integrations for a user
 export const getUserIntegrations = async (userEmail: string): Promise<UserIntegrations> => {
   try {
+    console.log('🗃️ [getUserIntegrations] Querying database for user:', userEmail)
+    
     const userIntegrations = await db
       .select()
       .from(integrations)
       .where(eq(integrations.userEmail, userEmail))
+
+    console.log('🗃️ [getUserIntegrations] Raw database results:', {
+      count: userIntegrations.length,
+      integrations: userIntegrations.map(i => ({
+        id: i.id,
+        provider: i.provider,
+        connected: i.connected,
+        connectedEmail: i.connectedEmail,
+        lastSync: i.lastSync?.toISOString(),
+        error: i.error,
+        hasAccessToken: !!i.accessToken,
+        hasRefreshToken: !!i.refreshToken,
+        expiryDate: i.expiryDate?.toISOString()
+      }))
+    })
 
     const result: UserIntegrations = {}
 
@@ -40,6 +57,13 @@ export const getUserIntegrations = async (userEmail: string): Promise<UserIntegr
         data: integration.metadata ? (integration.metadata as Record<string, unknown>) : undefined
       }
 
+      console.log(`🔍 [getUserIntegrations] Processing ${integration.provider}:`, {
+        connected: status.connected,
+        email: status.email,
+        lastSync: status.lastSync,
+        error: status.error
+      })
+
       if (integration.provider === 'google-drive') {
         result.googleDrive = status
       } else if (integration.provider === 'google-calendar') {
@@ -47,9 +71,10 @@ export const getUserIntegrations = async (userEmail: string): Promise<UserIntegr
       }
     }
 
+    console.log('📊 [getUserIntegrations] Final result:', result)
     return result
   } catch (error) {
-    console.error('Error fetching user integrations:', error)
+    console.error('❌ [getUserIntegrations] Error fetching user integrations:', error)
     return {}
   }
 }

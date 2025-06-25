@@ -1,88 +1,90 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { 
   getAllSystemSettings,
-  upsertSystemSetting
+  upsertSystemSetting,
+  ensureDefaultSettings
 } from '@/lib/db/system-settings'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  getValidatedBody 
+} from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface UpdateSettingBody {
+  key: string
+  value: string
+  type?: string
+  description?: string
+}
 
 // GET /api/admin/settings - Get all system settings
 export async function GET() {
   try {
-    // Check authentication and admin role
+    // Admin authentication check
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
+    }
+    if (user.role !== 'admin') {
+      return ApiErrors.forbidden()
     }
 
-    if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-    }
+    // Ensure default settings exist
+    await ensureDefaultSettings()
 
     const settings = await getAllSystemSettings()
+    
+    // Debug logging
+    console.log('🔧 [API] Admin settings GET - timezone setting:', settings.find(s => s.key === 'default_timezone'))
 
-    return NextResponse.json({
-      success: true,
-      settings
-    })
+    return ApiSuccess.ok({ settings })
   } catch (error) {
     console.error('❌ [Admin API] Error fetching settings:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch settings' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to fetch settings')
   }
 }
 
 // PATCH /api/admin/settings - Update system setting
 export async function PATCH(request: NextRequest) {
   try {
-    // Check authentication and admin role
+    // Admin authentication check
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
-
     if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      return ApiErrors.forbidden()
     }
 
-    const body = await request.json()
+    const body = await getValidatedBody<UpdateSettingBody>(request)
     const { key, value } = body
 
+    console.log('🔧 [API] Admin settings PATCH request:', { key, value, body })
+
     if (!key || typeof key !== 'string') {
-      return NextResponse.json(
-        { error: 'Setting key is required' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Setting key is required')
     }
 
-    if (value === undefined) {
-      return NextResponse.json(
-        { error: 'Setting value is required' },
-        { status: 400 }
-      )
+    if (value === undefined || value === null) {
+      return ApiErrors.badRequest('Setting value is required')
     }
 
-    const setting = await upsertSystemSetting(key, value)
+    const { type = 'string', description } = body
+    const setting = await upsertSystemSetting(key, value, type, description)
+    
+    console.log('🔧 [API] Admin settings PATCH result:', setting)
 
-    return NextResponse.json({
-      success: true,
-      setting,
-      message: 'Setting updated successfully'
-    })
+    return ApiSuccess.ok({
+      setting
+    }, 'Setting updated successfully')
   } catch (error) {
     console.error('❌ [Admin API] Error updating setting:', error)
     
     if (error instanceof Error && error.message.includes('Setting not found')) {
-      return NextResponse.json(
-        { error: 'Setting not found' },
-        { status: 404 }
-      )
+      return ApiErrors.notFound('Setting')
     }
 
-    return NextResponse.json(
-      { error: 'Failed to update setting' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to update setting')
   }
 } 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +10,8 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { StorageProviderSelector } from '@/components/ui/storage-provider-selector'
 import { FolderSelector } from '@/components/ui/folder-selector'
 import { FolderBrowserDialog, FolderBrowserItem } from '@/components/ui/folder-browser-dialog'
+import { useFolderBrowser } from '@/lib/hooks/use-folder-browser'
+import { useIntegrationStatus } from '@/lib/hooks/use-integration-status'
 import { 
   HardDrive,
   Save
@@ -54,77 +56,15 @@ export const ClientStorageSettingsForm = ({
 
   const [showFolderBrowser, setShowFolderBrowser] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
 
-  // Check Google Drive connection status
-  useEffect(() => {
-    checkGoogleDriveStatus()
-  }, [])
-
-  const checkGoogleDriveStatus = async () => {
-    try {
-      const response = await fetch('/api/integrations/status')
-      if (response.ok) {
-        const data = await response.json()
-        setGoogleDriveConnected(data.integrations?.googleDrive?.connected || false)
-      }
-    } catch (error) {
-      console.error('Error checking Google Drive status:', error)
-    }
-  }
+  // Use the reusable folder browser hook
+  const { browseFolders: handleBrowseFolders, createFolder: handleCreateFolder } = useFolderBrowser()
+  
+  // Use standardized integration status hook
+  const { isGoogleDriveConnected } = useIntegrationStatus()
 
   const handleSettingChange = (key: keyof ClientStorageSettings, value: unknown) => {
     setSettings(prev => ({ ...prev, [key]: value }))
-  }
-
-  const handleBrowseFolders = async (parentId?: string): Promise<FolderBrowserItem[]> => {
-    try {
-      const response = await fetch(`/api/integrations/google-drive/browse?parentId=${parentId || 'root'}`)
-
-      if (response.ok) {
-        const data = await response.json()
-        return data.folders || []
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        console.error('Error response:', errorData)
-        
-        if (response.status === 401) {
-          toast.error('Google Drive authentication expired. Please reconnect in the Integrations tab.')
-        } else if (response.status === 400) {
-          toast.error('Google Drive not properly connected. Please check your integration settings.')
-        } else {
-          toast.error(`Failed to load folders: ${errorData.error || 'Unknown error'}`)
-        }
-        
-        // Return empty array if API fails
-        return []
-      }
-    } catch (error) {
-      console.error('Error loading folders:', error)
-      toast.error('Failed to load folders. Please check your Google Drive connection.')
-      
-      // Return empty array if API fails
-      return []
-    }
-  }
-
-  const handleCreateFolder = async (folderName: string, parentId?: string): Promise<void> => {
-    const response = await fetch('/api/integrations/google-drive/browse', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        folderName: folderName.trim(),
-        parentId: parentId
-      })
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to create folder')
-    }
   }
 
   const handleFolderSelect = (folder: FolderBrowserItem) => {
@@ -185,7 +125,7 @@ export const ClientStorageSettingsForm = ({
       <StorageProviderSelector
               value={settings.storageProvider || 'google-drive'}
               onValueChange={(value) => handleSettingChange('storageProvider', value)}
-        googleDriveConnected={googleDriveConnected}
+        googleDriveConnected={isGoogleDriveConnected}
       />
 
           {/* Google Drive Folder Selection */}
@@ -195,7 +135,7 @@ export const ClientStorageSettingsForm = ({
           folderName={settings.storageFolderName}
           folderPath={settings.storageFolderPath}
           folderId={settings.storageFolderId}
-          isConnected={googleDriveConnected}
+          isConnected={isGoogleDriveConnected}
           notConnectedMessage="Connect Google Drive in Settings → Integrations to select a folder"
           onBrowse={() => setShowFolderBrowser(true)}
           onClear={clearStorageFolder}

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useClient } from '@/contexts/client-context'
+import { useApiData, useApiMutation } from './use-api-data'
 
 export interface PostIdea {
   id: number
@@ -25,12 +26,6 @@ export interface PostsFilters {
   search: string
 }
 
-export interface PostsResponse {
-  success: boolean
-  posts: PostIdea[]
-  totalCount: number
-}
-
 export interface CreatePostData {
   title: string
   clientName: string
@@ -43,135 +38,110 @@ export interface CreatePostData {
 
 export type UpdatePostData = CreatePostData
 
-export const usePosts = (initialFilters?: Partial<PostsFilters>) => {
-  const [posts, setPosts] = useState<PostIdea[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [filters, setFilters] = useState<PostsFilters>({
+interface PostsApiResponse {
+  posts: PostIdea[]
+}
+
+export const usePosts = (initialFilters: Partial<PostsFilters> = {}) => {
+  const { selectedClient } = useClient()
+  
+  // Make filters stateful to prevent recreation on every render
+  const [filters, setFilters] = useState<PostsFilters>(() => ({
     status: 'all',
     search: '',
     ...initialFilters
-  })
+  }))
 
-  const { selectedClient } = useClient()
-
-  const fetchPosts = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const params = new URLSearchParams()
-      
-      // Add client filter
-      if (selectedClient.type === 'client') {
-        params.append('clientId', selectedClient.id.toString())
-      } else {
-        params.append('clientId', 'all')
-      }
-
-      // Add other filters
-      if (filters.status !== 'all') {
-        params.append('status', filters.status)
-      }
-      if (filters.search.trim()) {
-        params.append('search', filters.search.trim())
-      }
-
-      const response = await fetch(`/api/posts?${params.toString()}`)
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch posts: ${response.status}`)
-      }
-
-      const data: PostsResponse = await response.json()
-      
-      if (data.success) {
-        setPosts(data.posts)
-      } else {
-        throw new Error('Failed to fetch posts')
-      }
-    } catch (err) {
-      console.error('Error fetching posts:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch posts')
-      setPosts([])
-    } finally {
-      setLoading(false)
+  // Build endpoint with parameters
+  const endpoint = useMemo(() => {
+    const params = new URLSearchParams()
+    
+    // Add client filter
+    if (selectedClient.type === 'client') {
+      params.append('clientId', selectedClient.id.toString())
+    } else {
+      params.append('clientId', 'all')
     }
+
+    // Add other filters
+    if (filters.status !== 'all') {
+      params.append('status', filters.status)
+    }
+    if (filters.search.trim()) {
+      params.append('search', filters.search.trim())
+    }
+
+    return `/api/posts?${params.toString()}`
   }, [selectedClient, filters])
 
-  const createPost = useCallback(async (data: CreatePostData): Promise<PostIdea> => {
-    const response = await fetch('/api/posts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to create post')
-    }
-
-    const result = await response.json()
+  // Transform function to handle both API response formats
+  const transform = useCallback((data: unknown) => {
+    const result = data as { posts?: unknown[]; data?: { posts?: unknown[] } }
     
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to create post')
+    // Handle both new standardized API format and old format
+    if (result.posts) {
+      return { posts: Array.isArray(result.posts) ? result.posts as PostIdea[] : [] }
+    } else if (result.data && result.data.posts) {
+      return { posts: Array.isArray(result.data.posts) ? result.data.posts as PostIdea[] : [] }
+    } else {
+      console.error('Unexpected Posts API response format:', result)
+      return { posts: [] }
     }
+  }, [])
 
+  // Use standardized API data hook
+  const { data, isLoading, error, refresh, updateData } = useApiData<PostsApiResponse>({
+    endpoint,
+    dependencies: [selectedClient, filters],
+    transform
+  })
+
+  // Mutation hooks
+  const createMutation = useApiMutation<PostIdea, CreatePostData>('/api/posts', 'POST')
+  const updateMutation = useApiMutation<PostIdea, UpdatePostData & { id: number }>(
+    (variables) => `/api/posts/${variables.id}`, 
+    'PUT'
+  )
+  const deleteMutation = useApiMutation<void, { id: number }>(
+    (variables) => `/api/posts/${variables.id}`, 
+    'DELETE'
+  )
+  const assignMutation = useApiMutation<void, { postId: number; shootId: number }>(
+    (variables) => `/api/posts/${variables.postId}/assign-to-shoot`, 
+    'POST'
+  )
+
+  // Wrapped mutation functions with optimistic updates
+  const createPost = useCallback(async (postData: CreatePostData): Promise<PostIdea> => {
+    const result = await createMutation.mutate(postData)
+    
     // Add to local state
-    setPosts(prev => [result.post, ...prev])
+    updateData(prev => prev ? {
+      posts: [result, ...prev.posts]
+    } : { posts: [result] })
     
-    return result.post
-  }, [])
+    return result
+  }, [createMutation, updateData])
 
-  const updatePost = useCallback(async (id: number, data: UpdatePostData): Promise<PostIdea> => {
-    const response = await fetch(`/api/posts/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to update post')
-    }
-
-    const result = await response.json()
+  const updatePost = useCallback(async (id: number, postData: UpdatePostData): Promise<PostIdea> => {
+    const result = await updateMutation.mutate({ ...postData, id })
     
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to update post')
-    }
-
     // Update local state
-    setPosts(prev => prev.map(post => 
-      post.id === id ? result.post : post
-    ))
+    updateData(prev => prev ? {
+      posts: prev.posts.map(p => p.id === id ? result : p)
+    } : null)
     
-    return result.post
-  }, [])
+    return result
+  }, [updateMutation, updateData])
 
   const deletePost = useCallback(async (id: number): Promise<void> => {
-    const response = await fetch(`/api/posts/${id}`, {
-      method: 'DELETE'
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to delete post')
-    }
-
-    const result = await response.json()
+    await deleteMutation.mutate({ id })
     
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to delete post')
-    }
-
     // Remove from local state
-    setPosts(prev => prev.filter(post => post.id !== id))
-  }, [])
+    updateData(prev => prev ? {
+      posts: prev.posts.filter(p => p.id !== id)
+    } : null)
+  }, [deleteMutation, updateData])
 
   const duplicatePost = useCallback(async (originalPost: PostIdea, newClientName?: string): Promise<PostIdea> => {
     const duplicateData: CreatePostData = {
@@ -183,53 +153,15 @@ export const usePosts = (initialFilters?: Partial<PostsFilters>) => {
       shotList: [...originalPost.shotList],
       notes: originalPost.notes
     }
-
-    const response = await fetch('/api/posts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(duplicateData)
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to duplicate post')
-    }
-
-    const result = await response.json()
     
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to duplicate post')
-    }
-
-    // Add to local state
-    setPosts(prev => [result.post, ...prev])
-    
-    return result.post
-  }, [])
+    return createPost(duplicateData)
+  }, [createPost])
 
   const assignToShoot = useCallback(async (postId: number, shootId: number): Promise<void> => {
-    const response = await fetch(`/api/posts/${postId}/assign-to-shoot`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ shootId })
-    })
+    await assignMutation.mutate({ postId, shootId })
+  }, [assignMutation])
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || 'Failed to assign post to shoot')
-    }
-
-    const result = await response.json()
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to assign post to shoot')
-    }
-  }, [])
-
+  // Proper filter update functions
   const updateFilters = useCallback((newFilters: Partial<PostsFilters>) => {
     setFilters(prev => ({ ...prev, ...newFilters }))
   }, [])
@@ -238,17 +170,12 @@ export const usePosts = (initialFilters?: Partial<PostsFilters>) => {
     setFilters({ status: 'all', search: '' })
   }, [])
 
-  // Initial fetch and refetch when dependencies change
-  useEffect(() => {
-    fetchPosts()
-  }, [fetchPosts])
-
   return {
-    posts,
-    loading,
+    posts: data?.posts || [],
+    loading: isLoading,
     error,
     filters,
-    fetchPosts,
+    fetchPosts: refresh,
     createPost,
     updatePost,
     duplicatePost,
@@ -256,6 +183,6 @@ export const usePosts = (initialFilters?: Partial<PostsFilters>) => {
     assignToShoot,
     updateFilters,
     resetFilters,
-    totalCount: posts.length
+    totalCount: data?.posts?.length || 0
   }
 } 

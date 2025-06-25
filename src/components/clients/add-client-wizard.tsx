@@ -6,16 +6,16 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { Progress } from '@/components/ui/progress'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
+import { ChevronLeft, ChevronRight, UserPlus, AlertTriangle } from 'lucide-react'
 import { useClient } from '@/contexts/client-context'
+import { useClients } from '@/lib/hooks/use-clients'
 import { ClientData } from '@/lib/types/client'
-import { WizardData, createEmptyWizardData, hasUnsavedChanges } from '@/lib/types/wizard'
+import { toast } from 'sonner'
 import { clientValidation } from '@/lib/validation/client-validation'
 import { BasicInfoStep } from './wizard-steps/basic-info-step'
 import { SocialMediaStep } from './wizard-steps/social-media-step'
 import { StorageSetupStep } from './wizard-steps/storage-setup-step'
-import { UserPlus, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
+import { WizardData, createEmptyWizardData, hasUnsavedChanges } from '@/lib/types/wizard'
 
 interface AddClientWizardProps {
   children: ReactNode
@@ -55,8 +55,8 @@ export const AddClientWizard = ({
   const [loading, setLoading] = useState(false)
   const [wizardData, setWizardData] = useState<WizardData>(createEmptyWizardData())
 
-  const router = useRouter()
   const { setSelectedClient } = useClient()
+  const { refresh: refreshClients } = useClients()
 
   const updateWizardData = (stepData: Partial<WizardData>) => {
     setWizardData(prev => ({ ...prev, ...stepData }))
@@ -184,7 +184,14 @@ export const AddClientWizard = ({
       }
 
       const clientData = await clientResponse.json()
-      const newClient = clientData.client
+      console.log('✅ [AddClientWizard] Client creation response:', clientData)
+      
+      // Handle new standardized API format: { success: true, data: { client: {...} } }
+      if (!clientData.success || !clientData.data?.client) {
+        throw new Error('Unexpected response format from client API')
+      }
+      
+      const newClient = clientData.data.client
 
       // Create storage settings if configured
       if (wizardData.storageSettings && Object.keys(wizardData.storageSettings).length > 0) {
@@ -205,14 +212,7 @@ export const AddClientWizard = ({
 
       toast.success(`Client "${newClient.name}" created successfully!`)
       
-      // Select the new client
-      setSelectedClient({
-        id: newClient.id,
-        name: newClient.name,
-        type: 'client' as const
-      })
-      
-      // Reset wizard state
+      // Reset wizard state first
       setCurrentStep(1)
       setCompletedSteps(new Set())
       setSkippedSteps(new Set())
@@ -222,8 +222,34 @@ export const AddClientWizard = ({
       // Close wizard
       setIsOpen(false)
       
-      // Refresh the page to load new client data
-      router.refresh()
+      try {
+        // Refresh the clients list to show the new client
+        await refreshClients()
+        console.log('✅ [AddClientWizard] Clients list refreshed successfully')
+        
+        // Select the new client after refresh completes
+        setSelectedClient({
+          id: newClient.id,
+          name: newClient.name,
+          type: 'client' as const,
+          primaryContactName: newClient.primaryContactName,
+          primaryContactEmail: newClient.primaryContactEmail,
+          primaryContactPhone: newClient.primaryContactPhone,
+          website: newClient.website,
+          socialMedia: newClient.socialMedia,
+          notes: newClient.notes
+        })
+        
+        console.log('✅ [AddClientWizard] New client selected:', newClient.name)
+      } catch (error) {
+        console.error('❌ [AddClientWizard] Failed to refresh clients list:', error)
+        // Still try to select the client even if refresh failed
+        setSelectedClient({
+          id: newClient.id,
+          name: newClient.name,
+          type: 'client' as const
+        })
+      }
       
       // Call success callback if provided
       onSuccess?.(newClient)

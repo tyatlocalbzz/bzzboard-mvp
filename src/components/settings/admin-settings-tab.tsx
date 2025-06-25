@@ -20,6 +20,7 @@ export const AdminSettingsTab = () => {
     data,
     loading,
     error,
+    isRefreshing,
     createPlatform,
     updatePlatformStatus,
     deletePlatform,
@@ -34,9 +35,13 @@ export const AdminSettingsTab = () => {
   const [newContentTypeValue, setNewContentTypeValue] = useState('')
   const [isCreatingPlatform, setIsCreatingPlatform] = useState(false)
   const [isCreatingContentType, setIsCreatingContentType] = useState(false)
+  const [isUpdatingTimezone, setIsUpdatingTimezone] = useState(false)
 
   // Get current timezone setting
   const currentTimezone = data?.settings.find(s => s.key === 'default_timezone')?.value || 'America/New_York'
+  
+  // Debug logging for timezone
+  console.log('🕐 [AdminSettings] Current timezone:', currentTimezone, 'from settings:', data?.settings.find(s => s.key === 'default_timezone'))
 
   const handleCreatePlatform = async () => {
     if (!newPlatformName.trim()) {
@@ -120,11 +125,22 @@ export const AdminSettingsTab = () => {
   }
 
   const handleTimezoneChange = async (timezone: string) => {
+    if (isUpdatingTimezone) {
+      console.log('🕐 [AdminSettings] Timezone update already in progress, skipping...')
+      return
+    }
+
+    console.log('🕐 [AdminSettings] Timezone change requested:', timezone)
     try {
+      setIsUpdatingTimezone(true)
       await updateSetting('default_timezone', timezone, 'string', 'Default timezone for the application')
+      console.log('🕐 [AdminSettings] Timezone update completed, data should refresh now')
       toast.success('Default timezone updated successfully')
     } catch (error) {
+      console.error('🕐 [AdminSettings] Timezone update failed:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to update timezone')
+    } finally {
+      setIsUpdatingTimezone(false)
     }
   }
 
@@ -157,6 +173,12 @@ export const AdminSettingsTab = () => {
           <h2 className="text-lg font-semibold text-gray-900">Admin Settings</h2>
           <p className="text-sm text-gray-600">Manage system-wide configuration</p>
         </div>
+        {isRefreshing && (
+          <div className="flex items-center gap-2 text-sm text-blue-600">
+            <LoadingSpinner size="sm" />
+            <span>Updating...</span>
+          </div>
+        )}
       </div>
 
       {/* System Settings */}
@@ -169,7 +191,11 @@ export const AdminSettingsTab = () => {
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="timezone">Default Timezone</Label>
-            <Select value={currentTimezone} onValueChange={handleTimezoneChange}>
+            <Select 
+              value={currentTimezone} 
+              onValueChange={handleTimezoneChange}
+              disabled={isUpdatingTimezone || isRefreshing}
+            >
               <SelectTrigger id="timezone">
                 <SelectValue />
               </SelectTrigger>
@@ -183,6 +209,12 @@ export const AdminSettingsTab = () => {
             </Select>
             <p className="text-xs text-gray-500">
               This timezone is used as the default for new users and calendar events
+              {isUpdatingTimezone && (
+                <span className="text-blue-600 ml-2">
+                  <LoadingSpinner size="sm" className="inline mr-1" />
+                  Saving...
+                </span>
+              )}
             </p>
           </div>
         </div>

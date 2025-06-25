@@ -53,7 +53,7 @@ export const updateUser = async (email: string, updates: UpdateUserInput) => {
     .where(eq(users.email, email))
 }
 
-// Update user password
+// Update user password (for actual login/password changes)
 export const updateUserPassword = async (email: string, newPassword: string) => {
   const hashedPassword = await bcrypt.hash(newPassword, 12)
   
@@ -63,6 +63,19 @@ export const updateUserPassword = async (email: string, newPassword: string) => 
       isFirstLogin: false,
       lastLoginAt: new Date(),
       updatedAt: new Date()
+    })
+    .where(eq(users.email, email))
+}
+
+// Update user password for invitation resends (keeps isFirstLogin: true)
+export const updateUserTempPassword = async (email: string, newPassword: string) => {
+  const hashedPassword = await bcrypt.hash(newPassword, 12)
+  
+  await db.update(users)
+    .set({ 
+      passwordHash: hashedPassword,
+      updatedAt: new Date()
+      // Keep isFirstLogin: true and don't set lastLoginAt
     })
     .where(eq(users.email, email))
 }

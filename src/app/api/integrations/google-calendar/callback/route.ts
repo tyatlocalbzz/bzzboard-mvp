@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     )
     
   } catch (error) {
-    console.error('Google Calendar callback error:', error)
+    console.error('❌ [Calendar API] OAuth callback error:', error)
     return NextResponse.redirect(
       `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=callback_failed`
     )

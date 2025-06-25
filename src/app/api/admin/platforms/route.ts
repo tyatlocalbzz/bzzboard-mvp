@@ -1,185 +1,148 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserForAPI } from '@/lib/auth/session'
+import { NextRequest } from 'next/server'
 import { 
   getAllSystemPlatforms,
   createSystemPlatform,
   updateSystemPlatformStatus,
   deleteSystemPlatform
 } from '@/lib/db/system-settings'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  getValidatedBody,
+  validateId
+} from '@/lib/api/api-helpers'
+import { getCurrentUserForAPI } from '@/lib/auth/session'
+
+interface CreatePlatformBody {
+  name: string
+}
+
+interface UpdatePlatformBody {
+  id: number
+  enabled: boolean
+}
 
 // GET /api/admin/platforms - Get all platforms
 export async function GET() {
   try {
-    // Check authentication and admin role
+    // Admin authentication check
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
-
     if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      return ApiErrors.forbidden()
     }
 
     const platforms = await getAllSystemPlatforms()
-
-    return NextResponse.json({
-      success: true,
-      platforms
-    })
+    return ApiSuccess.ok({ platforms })
   } catch (error) {
     console.error('❌ [Admin API] Error fetching platforms:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch platforms' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to fetch platforms')
   }
 }
 
 // POST /api/admin/platforms - Create new platform
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication and admin role
+    // Admin authentication check
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
-
     if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      return ApiErrors.forbidden()
     }
 
-    const body = await request.json()
+    const body = await getValidatedBody<CreatePlatformBody>(request)
     const { name } = body
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return NextResponse.json(
-        { error: 'Platform name is required' },
-        { status: 400 }
-      )
+    if (!name?.trim()) {
+      return ApiErrors.badRequest('Platform name is required')
     }
 
-    const platform = await createSystemPlatform(name)
+    const platform = await createSystemPlatform(name.trim())
 
-    return NextResponse.json({
-      success: true,
-      platform,
-      message: 'Platform created successfully'
-    })
+    return ApiSuccess.created({
+      platform
+    }, 'Platform created successfully')
   } catch (error) {
     console.error('❌ [Admin API] Error creating platform:', error)
     
     // Handle duplicate name error
     if (error instanceof Error && error.message.includes('unique')) {
-      return NextResponse.json(
-        { error: 'Platform name already exists' },
-        { status: 409 }
-      )
+      return ApiErrors.conflict('Platform name already exists')
     }
 
-    return NextResponse.json(
-      { error: 'Failed to create platform' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to create platform')
   }
 }
 
 // PATCH /api/admin/platforms - Update platform status
 export async function PATCH(request: NextRequest) {
   try {
-    // Check authentication and admin role
+    // Admin authentication check
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
-
     if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      return ApiErrors.forbidden()
     }
 
-    const body = await request.json()
+    const body = await getValidatedBody<UpdatePlatformBody>(request)
     const { id, enabled } = body
 
     if (typeof id !== 'number' || typeof enabled !== 'boolean') {
-      return NextResponse.json(
-        { error: 'Valid platform ID and enabled status required' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Valid platform ID and enabled status required')
     }
 
     const platform = await updateSystemPlatformStatus(id, enabled)
 
-    return NextResponse.json({
-      success: true,
-      platform,
-      message: `Platform ${enabled ? 'enabled' : 'disabled'} successfully`
-    })
+    return ApiSuccess.ok({
+      platform
+    }, `Platform ${enabled ? 'enabled' : 'disabled'} successfully`)
   } catch (error) {
     console.error('❌ [Admin API] Error updating platform:', error)
-    return NextResponse.json(
-      { error: 'Failed to update platform' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to update platform')
   }
 }
 
 // DELETE /api/admin/platforms - Delete platform
 export async function DELETE(request: NextRequest) {
   try {
-    // Check authentication and admin role
+    // Admin authentication check
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
-
     if (user.role !== 'admin') {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      return ApiErrors.forbidden()
     }
 
     const { searchParams } = new URL(request.url)
     const idParam = searchParams.get('id')
 
     if (!idParam) {
-      return NextResponse.json(
-        { error: 'Platform ID is required' },
-        { status: 400 }
-      )
+      return ApiErrors.badRequest('Platform ID is required')
     }
 
-    const id = parseInt(idParam)
-    if (isNaN(id)) {
-      return NextResponse.json(
-        { error: 'Invalid platform ID' },
-        { status: 400 }
-      )
-    }
-
+    const id = validateId(idParam, 'Platform')
     await deleteSystemPlatform(id)
 
-    return NextResponse.json({
-      success: true,
-      message: 'Platform deleted successfully'
-    })
+    return ApiSuccess.ok({}, 'Platform deleted successfully')
   } catch (error) {
     console.error('❌ [Admin API] Error deleting platform:', error)
     
     if (error instanceof Error) {
       if (error.message.includes('Cannot delete default platform')) {
-        return NextResponse.json(
-          { error: 'Cannot delete default platform' },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest('Cannot delete default platform')
       }
       if (error.message.includes('Platform not found')) {
-        return NextResponse.json(
-          { error: 'Platform not found' },
-          { status: 404 }
-        )
+        return ApiErrors.notFound('Platform')
       }
     }
 
-    return NextResponse.json(
-      { error: 'Failed to delete platform' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to delete platform')
   }
 } 

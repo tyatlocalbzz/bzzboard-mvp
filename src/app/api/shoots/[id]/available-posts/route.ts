@@ -1,25 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getPostIdeasByClient } from '@/lib/db/post-ideas'
 import { getShootById, getAssignedPostIdeaIds } from '@/lib/db/shoots'
+import { 
+  ApiErrors, 
+  ApiSuccess, 
+  getValidatedParams,
+  validateId
+} from '@/lib/api/api-helpers'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Check authentication
     const user = await getCurrentUserForAPI()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    // Await params in Next.js 15
-    const { id } = await params
-    const shootId = parseInt(id)
-    if (isNaN(shootId)) {
-      return NextResponse.json({ error: 'Invalid shoot ID' }, { status: 400 })
-    }
+    const { id } = await getValidatedParams(params)
+    const shootId = validateId(id, 'Shoot')
 
     // Get URL search params
     const { searchParams } = new URL(request.url)
@@ -29,7 +30,7 @@ export async function GET(
     // Verify shoot exists and get client info
     const shoot = await getShootById(shootId)
     if (!shoot) {
-      return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+      return ApiErrors.notFound('Shoot')
     }
 
     // Get all post ideas for this client
@@ -57,8 +58,7 @@ export async function GET(
       availablePosts = availablePosts.filter(post => post.status === status)
     }
 
-    return NextResponse.json({
-      success: true,
+    return ApiSuccess.ok({
       posts: availablePosts,
       totalCount: availablePosts.length,
       assignedCount: assignedPostIds.length,
@@ -70,10 +70,7 @@ export async function GET(
     })
 
   } catch (error) {
-    console.error('Get available posts error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('❌ [Shoots API] Get available posts error:', error)
+    return ApiErrors.internalError('Failed to fetch available posts')
   }
 } 

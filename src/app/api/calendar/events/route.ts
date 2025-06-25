@@ -1,15 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getCachedEvents } from '@/lib/db/calendar'
 import { eq, and, gte, lte } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { calendarEventsCache } from '@/lib/db/schema'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
     const { searchParams } = new URL(req.url)
@@ -32,10 +33,7 @@ export async function GET(req: NextRequest) {
       const end = new Date(endDate)
       
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        return NextResponse.json(
-          { error: 'Invalid date format' },
-          { status: 400 }
-        )
+        return ApiErrors.badRequest('Invalid date format')
       }
 
       const query = db
@@ -89,8 +87,7 @@ export async function GET(req: NextRequest) {
       lastModified: event.lastModified.toISOString()
     }))
 
-    return NextResponse.json({
-      success: true,
+    return ApiSuccess.ok({
       events: transformedEvents,
       totalCount: transformedEvents.length,
       filter,
@@ -99,9 +96,6 @@ export async function GET(req: NextRequest) {
 
   } catch (error) {
     console.error('❌ [Calendar API] Error fetching events:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch calendar events' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to fetch calendar events')
   }
 } 

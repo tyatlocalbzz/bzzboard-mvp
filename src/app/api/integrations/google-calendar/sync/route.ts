@@ -1,26 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
 import { clearEventCache } from '@/lib/db/calendar'
+import { ApiErrors, ApiSuccess, getValidatedBody } from '@/lib/api/api-helpers'
+
+interface SyncRequestBody {
+  forceFullSync?: boolean
+  clearCache?: boolean
+}
 
 export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
-    const body = await req.json()
+    const body = await getValidatedBody<SyncRequestBody>(req)
     const { forceFullSync = false, clearCache = false } = body
 
     // Clear calendar cache if requested (for testing/cleanup)
     if (clearCache) {
       console.log(`🧹 [Calendar API] Clearing calendar cache for ${user.email}`)
       await clearEventCache(user.email)
-      return NextResponse.json({
-        success: true,
-        message: 'Calendar cache cleared successfully'
-      })
+      return ApiSuccess.ok({}, 'Calendar cache cleared successfully')
     }
 
     // Regular sync
@@ -29,27 +32,17 @@ export async function POST(req: NextRequest) {
     const result = await calendarSync.syncCalendar(user.email, 'primary', forceFullSync)
 
     if (result.success) {
-      return NextResponse.json({
-        success: true,
-        message: 'Calendar sync completed successfully',
-        result: {
-          syncedEvents: result.syncedEvents,
-          deletedEvents: result.deletedEvents,
-          conflicts: result.conflicts
-        }
-      })
+      return ApiSuccess.ok({
+        syncedEvents: result.syncedEvents,
+        deletedEvents: result.deletedEvents,
+        conflicts: result.conflicts
+      }, 'Calendar sync completed successfully')
     } else {
-      return NextResponse.json({
-        success: false,
-        error: result.error || 'Sync failed'
-      }, { status: 500 })
+      return ApiErrors.internalError(result.error || 'Sync failed')
     }
 
   } catch (error) {
     console.error('❌ [Calendar API] Sync error:', error)
-    return NextResponse.json(
-      { error: 'Failed to sync calendar' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to sync calendar')
   }
 } 

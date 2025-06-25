@@ -90,6 +90,60 @@ Client Name/
 - Google Drive API
 - Vercel hosting
 
+## API Layer Standards
+
+All API routes follow standardized patterns using `/lib/api/api-helpers.ts`:
+
+### Authentication
+```typescript
+const user = await getCurrentUserForAPI()
+if (!user?.email) return ApiErrors.unauthorized()
+```
+
+### Parameter Validation
+```typescript
+const { id } = await getValidatedParams(params)
+const resourceId = validateId(id, 'ResourceName')
+```
+
+### Request Body Handling
+```typescript
+interface RequestBody {
+  field: string
+  optionalField?: number
+}
+const body = await getValidatedBody<RequestBody>(request)
+```
+
+### Error Responses
+```typescript
+return ApiErrors.unauthorized()
+return ApiErrors.notFound('Resource')
+return ApiErrors.badRequest('Validation message')
+return ApiErrors.internalError('Action failed')
+```
+
+### Success Responses
+```typescript
+return ApiSuccess.ok(data, 'Optional message')
+return ApiSuccess.created(data, 'Resource created')
+```
+
+### Admin Routes
+```typescript
+// Use withAdminAuth wrapper for admin-only endpoints
+const user = await getCurrentUserForAPI()
+if (!user?.email) return ApiErrors.unauthorized()
+if (user.role !== 'admin') return ApiErrors.forbidden()
+```
+
+**Security Features:**
+- All routes use `getCurrentUserForAPI()` for consistent auth
+- Admin routes have role-based access control
+- Security audit logging for sensitive operations
+- Input validation and sanitization
+- Proper error handling without information leakage
+
 ## MVP Exclusions
 - No email notifications
 - No team collaboration features

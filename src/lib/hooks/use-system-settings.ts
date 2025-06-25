@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useApiMutation } from './use-api-data'
 import type { AdminSystemSetting } from '@/lib/types/admin'
 import { 
   DEFAULT_PLATFORMS, 
@@ -21,6 +22,7 @@ interface UseSystemSettingsReturn {
   data: SystemSettingsData | null
   loading: boolean
   error: string | null
+  isRefreshing: boolean
   refresh: () => Promise<void>
   
   // Platform operations
@@ -41,17 +43,34 @@ export const useSystemSettings = (): UseSystemSettingsReturn => {
   const [data, setData] = useState<SystemSettingsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const isFetchingRef = useRef(false)
 
-  // Fetch system settings data (only custom platforms/content types + settings)
-  const fetchData = useCallback(async () => {
+  // Centralized data fetcher with debouncing to prevent rapid re-fetches
+  const fetchData = useCallback(async (isInitialLoad = false) => {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) {
+      console.log('🔧 [useSystemSettings] Fetch already in progress, skipping...')
+      return
+    }
+
     try {
-      setLoading(true)
+      isFetchingRef.current = true
+      
+      // Don't show loading spinner for refreshes, only for initial load
+      if (isInitialLoad) {
+        setLoading(true)
+      } else {
+        setIsRefreshing(true)
+      }
       setError(null)
 
+      // Add cache-busting parameter to ensure fresh data
+      const timestamp = Date.now()
       const [platformsRes, contentTypesRes, settingsRes] = await Promise.all([
-        fetch('/api/admin/platforms'),
-        fetch('/api/admin/content-types'),
-        fetch('/api/admin/settings')
+        fetch(`/api/admin/platforms?_t=${timestamp}`),
+        fetch(`/api/admin/content-types?_t=${timestamp}`),
+        fetch(`/api/admin/settings?_t=${timestamp}`)
       ])
 
       if (!platformsRes.ok || !contentTypesRes.ok || !settingsRes.ok) {
@@ -64,43 +83,63 @@ export const useSystemSettings = (): UseSystemSettingsReturn => {
         settingsRes.json()
       ])
 
+      // Handle standardized API response format: { success: true, data: { ... } }
+      const platforms = platformsData.success ? platformsData.data.platforms : platformsData.platforms
+      const contentTypes = contentTypesData.success ? contentTypesData.data.contentTypes : contentTypesData.contentTypes
+      const settings = settingsData.success ? settingsData.data.settings : settingsData.settings
+
       // Combine hard-coded defaults with custom items from database
-      const effectivePlatforms = getEffectivePlatforms(platformsData.platforms || [])
-      const effectiveContentTypes = getEffectiveContentTypes(contentTypesData.contentTypes || [])
+      const effectivePlatforms = getEffectivePlatforms(platforms || [])
+      const effectiveContentTypes = getEffectiveContentTypes(contentTypes || [])
 
       setData({
         platforms: effectivePlatforms,
         contentTypes: effectiveContentTypes,
-        settings: settingsData.settings || []
+        settings: settings || []
+      })
+      
+      // Debug logging for settings
+      console.log('🔧 [useSystemSettings] Data updated:', {
+        settingsCount: settings?.length || 0,
+        timezoneFromAPI: settings?.find((s: { key: string; value: string }) => s.key === 'default_timezone'),
+        rawResponse: settingsData,
+        processedSettings: settings
       })
     } catch (err) {
       console.error('Error fetching system settings:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch system settings')
+      setData(null)
     } finally {
-      setLoading(false)
+      if (isInitialLoad) {
+        setLoading(false)
+      } else {
+        setIsRefreshing(false)
+      }
+      isFetchingRef.current = false
     }
   }, [])
 
-  // Platform operations
-  const createPlatform = useCallback(async (name: string) => {
-    try {
-      const response = await fetch('/api/admin/platforms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create platform')
-      }
-
-      await fetchData() // Refresh data
-    } catch (err) {
-      console.error('Error creating platform:', err)
-      throw err
-    }
+  // Initial data fetch
+  useEffect(() => {
+    fetchData(true) // Mark as initial load
   }, [fetchData])
+
+  // Mutation hooks for different operations
+  const createPlatformMutation = useApiMutation<void, { name: string }>('/api/admin/platforms', 'POST')
+  const updatePlatformMutation = useApiMutation<void, { id: number; enabled: boolean }>('/api/admin/platforms', 'PATCH')
+  const deletePlatformMutation = useApiMutation<void, { id: number }>((variables) => `/api/admin/platforms?id=${variables.id}`, 'DELETE')
+  
+  const createContentTypeMutation = useApiMutation<void, { name: string; value: string }>('/api/admin/content-types', 'POST')
+  const updateContentTypeMutation = useApiMutation<void, { id: number; enabled: boolean }>('/api/admin/content-types', 'PATCH')
+  const deleteContentTypeMutation = useApiMutation<void, { id: number }>((variables) => `/api/admin/content-types?id=${variables.id}`, 'DELETE')
+  
+  const updateSettingMutation = useApiMutation<void, { key: string; value: string; type?: string; description?: string }>('/api/admin/settings', 'PATCH')
+
+  // Platform operations with optimized refresh
+  const createPlatform = useCallback(async (name: string) => {
+    await createPlatformMutation.mutate({ name })
+    await fetchData(false) // Refresh without full loading state
+  }, [createPlatformMutation, fetchData])
 
   const updatePlatformStatus = useCallback(async (id: string | number, enabled: boolean) => {
     try {
@@ -108,66 +147,28 @@ export const useSystemSettings = (): UseSystemSettingsReturn => {
       if (typeof id === 'string') {
         // Default platform - update in localStorage
         updatePlatformSetting(id, enabled)
-        await fetchData() // Refresh to show updated state
+        await fetchData(false) // Refresh to show updated state
       } else {
         // Custom platform - update in database
-        const response = await fetch('/api/admin/platforms', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, enabled })
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to update platform')
-        }
-
-        await fetchData() // Refresh data
+        await updatePlatformMutation.mutate({ id, enabled })
+        await fetchData(false)
       }
     } catch (err) {
       console.error('Error updating platform:', err)
       throw err
     }
-  }, [fetchData])
+  }, [updatePlatformMutation, fetchData])
 
   const deletePlatform = useCallback(async (id: number) => {
-    try {
-      const response = await fetch(`/api/admin/platforms?id=${id}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete platform')
-      }
-
-      await fetchData() // Refresh data
-    } catch (err) {
-      console.error('Error deleting platform:', err)
-      throw err
-    }
-  }, [fetchData])
+    await deletePlatformMutation.mutate({ id })
+    await fetchData(false)
+  }, [deletePlatformMutation, fetchData])
 
   // Content type operations
   const createContentType = useCallback(async (name: string, value: string) => {
-    try {
-      const response = await fetch('/api/admin/content-types', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, value })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create content type')
-      }
-
-      await fetchData() // Refresh data
-    } catch (err) {
-      console.error('Error creating content type:', err)
-      throw err
-    }
-  }, [fetchData])
+    await createContentTypeMutation.mutate({ name, value })
+    await fetchData(false)
+  }, [createContentTypeMutation, fetchData])
 
   const updateContentTypeStatus = useCallback(async (id: string | number, enabled: boolean) => {
     try {
@@ -175,82 +176,43 @@ export const useSystemSettings = (): UseSystemSettingsReturn => {
       if (typeof id === 'string') {
         // Default content type - update in localStorage
         updateContentTypeSetting(id, enabled)
-        await fetchData() // Refresh to show updated state
+        await fetchData(false) // Refresh to show updated state
       } else {
         // Custom content type - update in database
-        const response = await fetch('/api/admin/content-types', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, enabled })
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to update content type')
-        }
-
-        await fetchData() // Refresh data
+        await updateContentTypeMutation.mutate({ id, enabled })
+        await fetchData(false)
       }
     } catch (err) {
       console.error('Error updating content type:', err)
       throw err
     }
-  }, [fetchData])
+  }, [updateContentTypeMutation, fetchData])
 
   const deleteContentType = useCallback(async (id: number) => {
-    try {
-      const response = await fetch(`/api/admin/content-types?id=${id}`, {
-        method: 'DELETE'
-      })
+    await deleteContentTypeMutation.mutate({ id })
+    await fetchData(false)
+  }, [deleteContentTypeMutation, fetchData])
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete content type')
-      }
-
-      await fetchData() // Refresh data
-    } catch (err) {
-      console.error('Error deleting content type:', err)
-      throw err
-    }
-  }, [fetchData])
-
-  // Settings operations
+  // Settings operations with optimized refresh
   const updateSetting = useCallback(async (
     key: string, 
     value: string, 
     type: string = 'string', 
     description?: string
   ) => {
-    try {
-      const response = await fetch('/api/admin/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value, type, description })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to update setting')
-      }
-
-      await fetchData() // Refresh data
-    } catch (err) {
-      console.error('Error updating setting:', err)
-      throw err
-    }
-  }, [fetchData])
-
-  // Initial data fetch
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    console.log('🔧 [useSystemSettings] updateSetting called:', { key, value, type, description })
+    await updateSettingMutation.mutate({ key, value, type, description })
+    console.log('🔧 [useSystemSettings] Setting mutation completed, refreshing data...')
+    await fetchData(false) // Refresh without full loading state
+    console.log('🔧 [useSystemSettings] Data refresh completed')
+  }, [updateSettingMutation, fetchData])
 
   return {
     data,
     loading,
     error,
-    refresh: fetchData,
+    isRefreshing,
+    refresh: () => fetchData(false),
     createPlatform,
     updatePlatformStatus,
     deletePlatform,

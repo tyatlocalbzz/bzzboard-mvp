@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getAllClientSettings, toClientStorageSettings } from '@/lib/db/client-settings'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
 
 export async function GET() {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user?.email) {
+      return ApiErrors.unauthorized()
     }
 
     console.log('📖 [ClientSettings] Loading all client settings for user:', user.email)
@@ -19,16 +19,12 @@ export async function GET() {
 
     console.log('📖 [ClientSettings] Loaded settings for', clientSettings.length, 'clients')
 
-    return NextResponse.json({ 
-      success: true,
+    return ApiSuccess.ok({
       clientSettings 
     })
     
   } catch (error) {
     console.error('❌ [ClientSettings] Error loading client settings:', error)
-    return NextResponse.json(
-      { error: 'Failed to load client settings' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to load client settings')
   }
 } 

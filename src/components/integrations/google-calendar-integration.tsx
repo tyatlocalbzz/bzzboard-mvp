@@ -46,14 +46,15 @@ export const GoogleCalendarIntegration = ({
 
       const data = await response.json()
 
-      if (response.ok && data.authUrl) {
+      // Handle new API response format: { success: true, data: { authUrl: '...' } }
+      if (response.ok && data.success && data.data?.authUrl) {
         // Redirect to Google OAuth
-        window.location.href = data.authUrl
+        window.location.href = data.data.authUrl
       } else {
-        throw new Error(data.error || 'Failed to initiate connection')
+        throw new Error(data.error || data.message || 'Failed to initiate connection')
       }
     } catch (error) {
-      console.error('Google Calendar connection error:', error)
+      console.error('❌ [GoogleCalendarIntegration] Connection error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to connect to Google Calendar')
       setIsConnecting(false)
     }
@@ -65,12 +66,14 @@ export const GoogleCalendarIntegration = ({
         method: 'POST',
       })
 
-      if (response.ok) {
+      const data = await response.json()
+      
+      // Handle new API response format: { success: true, data: {...} }
+      if (response.ok && data.success) {
         toast.success('Google Calendar disconnected successfully')
         onStatusChange()
       } else {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to disconnect')
+        throw new Error(data.error || data.message || 'Failed to disconnect')
       }
     } catch (error) {
       console.error('Google Calendar disconnect error:', error)

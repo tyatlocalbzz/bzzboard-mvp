@@ -1,14 +1,14 @@
-import { NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { removeIntegration, getIntegration } from '@/lib/db/integrations'
 import { google } from 'googleapis'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
 
 export async function POST() {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
+    if (!user?.email) {
       console.log('❌ [GoogleDriveDisconnect] Unauthorized - no user found')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return ApiErrors.unauthorized()
     }
 
     console.log('🔌 [GoogleDriveDisconnect] Disconnecting Google Drive for user:', user.email)
@@ -16,7 +16,7 @@ export async function POST() {
     // Get current integration to revoke tokens
     const currentIntegration = await getIntegration(user.email, 'google-drive')
     
-    if (currentIntegration && currentIntegration.accessToken) {
+    if (currentIntegration?.accessToken) {
       console.log('🔑 [GoogleDriveDisconnect] Revoking Google OAuth tokens...')
       
       try {
@@ -45,16 +45,11 @@ export async function POST() {
     const verifyRemoval = await getIntegration(user.email, 'google-drive')
     if (verifyRemoval) {
       console.error('❌ [GoogleDriveDisconnect] Integration still exists after removal attempt')
-      return NextResponse.json({ 
-        error: 'Failed to completely disconnect Google Drive' 
-      }, { status: 500 })
+      return ApiErrors.internalError('Failed to completely disconnect Google Drive')
     }
 
     console.log('🎉 [GoogleDriveDisconnect] Google Drive disconnected successfully')
-    return NextResponse.json({ 
-      success: true,
-      message: 'Google Drive disconnected successfully. All tokens have been revoked.'
-    })
+    return ApiSuccess.ok({}, 'Google Drive disconnected successfully. All tokens have been revoked.')
     
   } catch (error) {
     console.error('❌ [GoogleDriveDisconnect] Error during disconnect:', error)
@@ -63,9 +58,6 @@ export async function POST() {
       stack: error instanceof Error ? error.stack : undefined
     })
     
-    return NextResponse.json(
-      { error: 'Failed to disconnect Google Drive. Please try again.' },
-      { status: 500 }
-    )
+    return ApiErrors.internalError('Failed to disconnect Google Drive. Please try again.')
   }
 } 

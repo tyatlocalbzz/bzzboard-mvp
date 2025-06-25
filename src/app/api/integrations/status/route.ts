@@ -1,19 +1,26 @@
-import { NextResponse } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getUserIntegrations } from '@/lib/db/integrations'
+import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
 
 export async function GET() {
   try {
     const user = await getCurrentUserForAPI()
-    if (!user || !user.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    console.log('🔍 [IntegrationsStatus] Current user:', { email: user?.email })
+    
+    if (!user?.email) {
+      console.log('❌ [IntegrationsStatus] No user email found')
+      return ApiErrors.unauthorized()
     }
 
     // Get user integrations from database
-    const integrations = await getUserIntegrations(user.email!)
+    console.log('📋 [IntegrationsStatus] Fetching integrations for user:', user.email)
+    const integrations = await getUserIntegrations(user.email)
+    console.log('📊 [IntegrationsStatus] Raw integrations from database:', {
+      googleDrive: integrations.googleDrive,
+      googleCalendar: integrations.googleCalendar
+    })
 
-    return NextResponse.json({ 
-      success: true,
+    const responseData = { 
       integrations: {
         googleDrive: {
           connected: integrations.googleDrive?.connected || false,
@@ -28,13 +35,13 @@ export async function GET() {
           error: integrations.googleCalendar?.error
         }
       }
-    })
+    }
+
+    console.log('📤 [IntegrationsStatus] Sending response:', responseData)
+    return ApiSuccess.ok(responseData)
     
   } catch (error) {
-    console.error('Integration status error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch integration status' },
-      { status: 500 }
-    )
+    console.error('❌ [Integrations] Status fetch error:', error)
+    return ApiErrors.internalError('Failed to fetch integration status')
   }
 } 

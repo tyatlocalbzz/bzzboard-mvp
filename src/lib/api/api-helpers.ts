@@ -69,6 +69,124 @@ export const ApiSuccess = {
 }
 
 /**
+ * Rate limiting helper (simple in-memory implementation for MVP)
+ * In production, use Redis or a proper rate limiting service
+ */
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
+
+export function checkRateLimit(
+  identifier: string, 
+  maxRequests = 100, 
+  windowMs = 15 * 60 * 1000 // 15 minutes
+): boolean {
+  const now = Date.now()
+  const windowStart = now - windowMs
+  
+  const record = rateLimitMap.get(identifier)
+  
+  if (!record || record.resetTime < windowStart) {
+    // Reset or create new record
+    rateLimitMap.set(identifier, { count: 1, resetTime: now })
+    return true
+  }
+  
+  if (record.count >= maxRequests) {
+    return false
+  }
+  
+  record.count++
+  return true
+}
+
+/**
+ * Enhanced authentication wrapper with rate limiting and logging
+ */
+export async function withSecureAuth(
+  handler: (req: NextRequest, user: ApiUser, ...args: unknown[]) => Promise<NextResponse>,
+  options?: {
+    rateLimit?: { maxRequests: number; windowMs: number }
+    logAccess?: boolean
+  }
+) {
+  return async (req: NextRequest, ...args: unknown[]): Promise<NextResponse> => {
+    try {
+      // Get user first for rate limiting by user ID
+      const user = await getCurrentUserForAPI()
+      if (!user || !user.email) {
+        return ApiErrors.unauthorized()
+      }
+
+      // Apply rate limiting if configured
+      if (options?.rateLimit) {
+        const { maxRequests, windowMs } = options.rateLimit
+        if (!checkRateLimit(user.email, maxRequests, windowMs)) {
+          console.warn(`🚨 [API Rate Limit] User ${user.email} exceeded rate limit`)
+          return ApiErrors.rateLimit()
+        }
+      }
+
+      // Security logging
+      if (options?.logAccess) {
+        console.log(`🔐 [API Access] ${req.method} ${req.url} - User: ${user.email}`)
+      }
+
+      return await handler(req, user as ApiUser, ...args)
+    } catch (error) {
+      console.error('❌ [API Secure Auth] Authentication error:', error)
+      return ApiErrors.internalError()
+    }
+  }
+}
+
+/**
+ * Session validation helper for client-side auth checks
+ */
+export async function validateSession(): Promise<{
+  isValid: boolean
+  user?: ApiUser
+  error?: string
+}> {
+  try {
+    const user = await getCurrentUserForAPI()
+    
+    if (!user || !user.email) {
+      return { isValid: false, error: 'No valid session found' }
+    }
+
+    // Additional session validation can be added here
+    // e.g., check if user is still active, not banned, etc.
+    
+    return { isValid: true, user: user as ApiUser }
+  } catch (error) {
+    console.error('❌ [Session Validation] Error:', error)
+    return { isValid: false, error: 'Session validation failed' }
+  }
+}
+
+/**
+ * CORS helper for API routes
+ */
+export function setCorsHeaders(response: NextResponse): NextResponse {
+  response.headers.set('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*')
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  response.headers.set('Access-Control-Max-Age', '86400')
+  return response
+}
+
+/**
+ * Security headers helper
+ */
+export function setSecurityHeaders(response: NextResponse): NextResponse {
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-XSS-Protection', '1; mode=block')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  return response
+}
+
+/**
  * Authentication wrapper - handles auth checking and returns user
  */
 export async function withAuth(

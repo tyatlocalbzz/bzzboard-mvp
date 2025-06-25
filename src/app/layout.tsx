@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/auth/session-provider";
-import { FirstLoginGuard } from "@/components/auth/first-login-guard";
+import { AuthGuard } from "@/components/auth/auth-guard";
 import { ClientProvider } from "@/contexts/client-context";
 import { ActiveShootProvider } from "@/contexts/active-shoot-context";
 import { getSession } from "@/lib/auth/session";
@@ -36,14 +36,14 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <SessionProvider session={session}>
-          <FirstLoginGuard>
+          <AuthGuard>
             <ClientProvider>
               <ActiveShootProvider>
                 {children}
                 <Toaster position="top-center" richColors />
               </ActiveShootProvider>
             </ClientProvider>
-          </FirstLoginGuard>
+          </AuthGuard>
         </SessionProvider>
       </body>
     </html>

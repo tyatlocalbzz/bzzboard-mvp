@@ -5,57 +5,76 @@ export default auth((req) => {
   const isAuthenticated = !!req.auth
   const pathname = req.nextUrl.pathname
 
-  // Public routes that don't require authentication
-  const publicRoutes = ['/auth/signin', '/api/auth']
-  const isPublicRoute = publicRoutes.some(route => 
-    pathname.startsWith(route)
-  )
-
-  // API routes should handle their own authentication and return JSON responses
-  // Don't redirect API routes to signin page
-  const isApiRoute = pathname.startsWith('/api/')
+  // Define route categories for better organization
+  const publicRoutes = [
+    '/auth/signin',
+    '/auth/signup', // For future registration
+  ]
   
-  // If user is authenticated and trying to access signin, redirect to dashboard
+  const authApiRoutes = [
+    '/api/auth/signin',
+    '/api/auth/callback',
+    '/api/auth/csrf',
+    '/api/auth/session',
+    '/api/auth/providers',
+  ]
+
+  const protectedAuthRoutes = [
+    '/auth/first-login',
+  ]
+
+  // Check route types
+  const isPublicRoute = publicRoutes.some(route => pathname === route)
+  const isAuthApiRoute = authApiRoutes.some(route => pathname.startsWith(route))
+  const isProtectedAuthRoute = protectedAuthRoutes.some(route => pathname === route)
+  const isApiRoute = pathname.startsWith('/api/')
+
+  // Add security headers to all responses
+  const response = NextResponse.next()
+  
+  // Security headers
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  
+  // Handle authenticated user trying to access signin
   if (isAuthenticated && pathname === '/auth/signin') {
-    return NextResponse.redirect(new URL('/', req.url))
+    const callbackUrl = req.nextUrl.searchParams.get('callbackUrl')
+    const redirectUrl = callbackUrl && callbackUrl.startsWith('/') ? callbackUrl : '/'
+    return NextResponse.redirect(new URL(redirectUrl, req.url))
   }
 
-  // Allow access to public routes
-  if (isPublicRoute) {
-    return NextResponse.next()
+  // Allow public routes (signin, signup, etc.)
+  if (isPublicRoute || isAuthApiRoute) {
+    return response
   }
 
-  // Allow API routes to handle their own authentication
+  // Protected auth routes require authentication but have special handling
+  if (isProtectedAuthRoute) {
+    if (!isAuthenticated) {
+      const signInUrl = new URL('/auth/signin', req.url)
+      signInUrl.searchParams.set('callbackUrl', pathname)
+      return NextResponse.redirect(signInUrl)
+    }
+    return response
+  }
+
+  // API routes handle their own authentication (return JSON, not redirects)
   if (isApiRoute) {
-    return NextResponse.next()
+    return response
   }
 
-  // Redirect to signin if not authenticated (only for page routes)
+  // All other routes require authentication
   if (!isAuthenticated) {
     const signInUrl = new URL('/auth/signin', req.url)
     signInUrl.searchParams.set('callbackUrl', pathname)
     return NextResponse.redirect(signInUrl)
   }
 
-  // Check if authenticated user is on first login and needs to set password
-  // Allow access to first-login page and auth-related API routes
-  const isFirstLoginPage = pathname === '/auth/first-login'
-  const isAuthChangePasswordApi = pathname === '/api/auth/change-password'
-  const isAuthSetFirstPasswordApi = pathname === '/api/auth/set-first-password'
-  const isAuthCheckFirstLoginApi = pathname === '/api/auth/check-first-login'
-  
-  if (isAuthenticated && req.auth?.user) {
-    // Note: We can't access the database user data in middleware easily
-    // So we'll handle the first-login redirect in the main layout or pages
-    // For now, just allow access to first-login page and related APIs
-    if (isFirstLoginPage || isAuthChangePasswordApi || isAuthSetFirstPasswordApi || isAuthCheckFirstLoginApi) {
-      return NextResponse.next()
-    }
-  }
-
-  return NextResponse.next()
+  return response
 })
 
+// Comprehensive matcher that protects all routes except static assets
 export const config = {
   matcher: [
     /*
@@ -63,8 +82,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public assets
+     * - public folder assets (images, etc.)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$).*)',
   ],
 } 

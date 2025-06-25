@@ -22,6 +22,8 @@ export interface ClientContextType {
   selectedClient: ClientData
   setSelectedClient: (client: ClientData) => void
   clients: ClientData[]
+  isLoading?: boolean
+  refresh?: () => Promise<void>
 }
 
 // Default client for "All Clients" view

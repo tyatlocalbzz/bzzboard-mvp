@@ -97,17 +97,17 @@ export const ChangePasswordForm = ({ children, isFirstLogin = false }: ChangePas
       return null
     } else {
       // For regular password change, validate all fields
-      const validation = clientValidation.passwordChange({
-        currentPassword: currentPasswordField.value,
-        newPassword: newPasswordField.value,
-        confirmPassword: confirmPasswordField.value
-      })
-      
-      if (!validation.valid) {
-        return Object.values(validation.errors)[0] as string
-      }
-      
-      return null
+    const validation = clientValidation.passwordChange({
+      currentPassword: currentPasswordField.value,
+      newPassword: newPasswordField.value,
+      confirmPassword: confirmPasswordField.value
+    })
+    
+    if (!validation.valid) {
+      return Object.values(validation.errors)[0] as string
+    }
+    
+    return null
     }
   }
 
@@ -131,13 +131,13 @@ export const ChangePasswordForm = ({ children, isFirstLogin = false }: ChangePas
         toast.error('Please fix the validation errors before submitting')
         return
       }
-    }
+      }
 
-    const validationError = validateForm()
-    if (validationError) {
-      toast.error(validationError)
-      return
-    }
+      const validationError = validateForm()
+      if (validationError) {
+        toast.error(validationError)
+        return
+      }
 
     try {
       if (userIsFirstLogin) {
@@ -149,11 +149,11 @@ export const ChangePasswordForm = ({ children, isFirstLogin = false }: ChangePas
         router.push('/')
       } else {
         await changePassword.mutate({
-          currentPassword: currentPasswordField.value,
-          newPassword: newPasswordField.value
-        })
+          currentPassword: currentPasswordField.value, 
+          newPassword: newPasswordField.value 
+      })
       }
-      
+
       setIsOpen(false)
     } catch (error) {
       console.error('Password change error:', error)
@@ -175,24 +175,24 @@ export const ChangePasswordForm = ({ children, isFirstLogin = false }: ChangePas
   const formContent = (
     <>
       {!userIsFirstLogin && (
-        <div className="space-y-2">
-          <Label htmlFor="currentPassword" className="text-sm font-medium">
-            Current Password *
-          </Label>
-          <MobileInput
-            id="currentPassword"
-            name="currentPassword"
-            type="password"
-            value={currentPasswordField.value}
-            onChange={currentPasswordField.handleChange}
-            onBlur={currentPasswordField.handleBlur}
-            placeholder="Enter current password"
-            error={currentPasswordField.validationResult.error}
-            validationState={currentPasswordField.validationResult.state}
-            autoComplete="current-password"
-            required
-          />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="currentPassword" className="text-sm font-medium">
+          Current Password *
+        </Label>
+        <MobileInput
+          id="currentPassword"
+          name="currentPassword"
+          type="password"
+          value={currentPasswordField.value}
+          onChange={currentPasswordField.handleChange}
+          onBlur={currentPasswordField.handleBlur}
+          placeholder="Enter current password"
+          error={currentPasswordField.validationResult.error}
+          validationState={currentPasswordField.validationResult.state}
+          autoComplete="current-password"
+          required
+        />
+      </div>
       )}
       
       <div className="space-y-2">

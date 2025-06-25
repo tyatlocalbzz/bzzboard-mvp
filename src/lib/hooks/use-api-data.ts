@@ -34,12 +34,24 @@ export const useApiData = <T>({
   const [isLoading, setIsLoading] = useState(autoFetch)
   const [error, setError] = useState<string | null>(null)
 
+  console.log('🔗 [useApiData] Hook called:', {
+    endpoint,
+    autoFetch,
+    dependenciesLength: dependencies.length,
+    dependencies: dependencies.map(dep => typeof dep === 'object' ? JSON.stringify(dep) : dep),
+    hasTransform: !!transform,
+    hasOnError: !!onError,
+    hasOnSuccess: !!onSuccess
+  })
+
   // Memoize callbacks to prevent infinite loops when passed as inline functions
   const memoizedOnError = useCallback((error: string) => {
+    console.log('❌ [useApiData] Calling onError callback:', error)
     onError?.(error)
   }, [onError])
 
   const memoizedOnSuccess = useCallback((data: T) => {
+    console.log('✅ [useApiData] Calling onSuccess callback with data:', data)
     onSuccess?.(data)
   }, [onSuccess])
 
@@ -72,29 +84,40 @@ export const useApiData = <T>({
   }, [endpoint, transform])
 
   const loadData = useCallback(async (forceRefresh = false) => {
+    console.log('🔄 [useApiData] loadData called:', {
+      endpoint,
+      forceRefresh,
+      currentIsLoading: isLoading
+    })
+    
     try {
       setIsLoading(true)
       setError(null)
       
       const result = await fetchData(forceRefresh)
       
+      console.log('✅ [useApiData] Setting data:', result)
       setData(result)
       memoizedOnSuccess(result)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load data'
+      console.error('❌ [useApiData] Error in loadData:', errorMessage)
       setError(errorMessage)
       memoizedOnError(errorMessage)
       toast.error(errorMessage)
     } finally {
+      console.log('🏁 [useApiData] Setting isLoading to false')
       setIsLoading(false)
     }
-  }, [fetchData, memoizedOnError, memoizedOnSuccess])
+  }, [fetchData, memoizedOnError, memoizedOnSuccess, endpoint])
 
   const refresh = useCallback(async () => {
+    console.log('🔄 [useApiData] refresh called for:', endpoint)
     await loadData(true) // Force refresh to bypass cache
   }, [loadData])
 
   const updateData = useCallback((updates: Partial<T> | ((prev: T | null) => T | null)) => {
+    console.log('🔄 [useApiData] updateData called for:', endpoint)
     setData(prev => {
       if (typeof updates === 'function') {
         return updates(prev)
@@ -104,11 +127,58 @@ export const useApiData = <T>({
   }, [])
 
   useEffect(() => {
+    console.log('🔄 [useApiData] useEffect triggered:', {
+      endpoint,
+      autoFetch,
+      dependenciesLength: dependencies.length,
+      dependencies: dependencies.map(dep => typeof dep === 'object' ? JSON.stringify(dep) : dep)
+    })
+    
     if (autoFetch) {
-      loadData()
+      console.log('🚀 [useApiData] Calling loadData from useEffect')
+      
+      // Call loadData directly to avoid dependency cycle
+      const executeLoad = async () => {
+        console.log('🔄 [useApiData] executeLoad called:', {
+          endpoint,
+          currentIsLoading: isLoading
+        })
+        
+        try {
+          setIsLoading(true)
+          setError(null)
+          
+          const result = await fetchData(false)
+          
+          console.log('✅ [useApiData] Setting data:', result)
+          setData(result)
+          memoizedOnSuccess(result)
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to load data'
+          console.error('❌ [useApiData] Error in executeLoad:', errorMessage)
+          setError(errorMessage)
+          memoizedOnError(errorMessage)
+          toast.error(errorMessage)
+        } finally {
+          console.log('🏁 [useApiData] Setting isLoading to false')
+          setIsLoading(false)
+        }
+      }
+      
+      executeLoad()
+    } else {
+      console.log('⏸️ [useApiData] Skipping loadData (autoFetch is false)')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFetch, loadData, ...dependencies])
+  }, [autoFetch, fetchData, memoizedOnError, memoizedOnSuccess, ...dependencies])
+
+  console.log('🔗 [useApiData] Returning state:', {
+    endpoint,
+    hasData: !!data,
+    dataLength: Array.isArray(data) ? data.length : 'not-array',
+    isLoading,
+    hasError: !!error
+  })
 
   return {
     data,

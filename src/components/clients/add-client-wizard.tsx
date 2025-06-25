@@ -8,7 +8,6 @@ import { LoadingButton } from '@/components/ui/loading-button'
 import { Progress } from '@/components/ui/progress'
 import { ChevronLeft, ChevronRight, UserPlus, AlertTriangle } from 'lucide-react'
 import { useClient } from '@/contexts/client-context'
-import { useClients } from '@/lib/hooks/use-clients'
 import { ClientData } from '@/lib/types/client'
 import { toast } from 'sonner'
 import { clientValidation } from '@/lib/validation/client-validation'
@@ -55,8 +54,7 @@ export const AddClientWizard = ({
   const [loading, setLoading] = useState(false)
   const [wizardData, setWizardData] = useState<WizardData>(createEmptyWizardData())
 
-  const { setSelectedClient } = useClient()
-  const { refresh: refreshClients } = useClients()
+  const { setSelectedClient, refresh: refreshClients } = useClient()
 
   const updateWizardData = (stepData: Partial<WizardData>) => {
     setWizardData(prev => ({ ...prev, ...stepData }))
@@ -224,8 +222,10 @@ export const AddClientWizard = ({
       
       try {
         // Refresh the clients list to show the new client
-        await refreshClients()
-        console.log('✅ [AddClientWizard] Clients list refreshed successfully')
+        if (refreshClients) {
+          await refreshClients()
+          console.log('✅ [AddClientWizard] Clients list refreshed successfully')
+        }
         
         // Select the new client after refresh completes
         setSelectedClient({

@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 interface AuthGuardProps {
@@ -18,27 +18,64 @@ interface AuthGuardProps {
  * 4. Authenticated users (allow access)
  */
 export const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
-  const { data: session, status } = useSession()
+  const { data: session, status, update } = useSession()
   const router = useRouter()
   const pathname = usePathname()
   const [isCheckingFirstLogin, setIsCheckingFirstLogin] = useState(false)
+  const [isManuallyRefreshing, setIsManuallyRefreshing] = useState(false)
+  const hasTriedRefresh = useRef(false)
 
-  // Routes that don't require authentication
-  const publicRoutes = ['/auth/signin', '/auth/signup']
-  const isPublicRoute = publicRoutes.includes(pathname)
+  // Debug effect to track session changes
+  useEffect(() => {
+    // Handle post-login session sync issue
+    if (status === 'unauthenticated' && pathname === '/' && !hasTriedRefresh.current) {
+      console.log('🔄 [AuthGuard] Attempting session refresh...')
+      hasTriedRefresh.current = true
+      setIsManuallyRefreshing(true)
+      
+      // Try to manually update the session
+      update().then((updatedSession) => {
+        setIsManuallyRefreshing(false)
+        if (!updatedSession) {
+          // If manual refresh fails, redirect to signin
+          router.push('/auth/signin')
+        }
+      }).catch((error) => {
+        console.error('❌ [AuthGuard] Session refresh failed:', error)
+        setIsManuallyRefreshing(false)
+        router.push('/auth/signin')
+      })
+    }
+  }, [session, status, pathname, router, update])
 
-  // Auth-related routes that need special handling
-  const authRoutes = ['/auth/first-login']
-  const isAuthRoute = authRoutes.includes(pathname)
+  // Reset refresh flag when leaving home page
+  useEffect(() => {
+    if (pathname !== '/') {
+      hasTriedRefresh.current = false
+    }
+  }, [pathname])
+
+  // Memoize route calculations to prevent useEffect dependency issues
+  const routeInfo = useMemo(() => {
+    const publicRoutes = ['/auth/signin', '/auth/signup']
+    const authRoutes = ['/auth/first-login']
+    
+    return {
+      isPublicRoute: publicRoutes.includes(pathname),
+      isAuthRoute: authRoutes.includes(pathname)
+    }
+  }, [pathname])
 
   useEffect(() => {
     const handleAuthentication = async () => {
-      // Skip if still loading session
-      if (status === 'loading') return
+      // Skip if still loading session or manually refreshing
+      if (status === 'loading' || isManuallyRefreshing) {
+        return
+      }
 
       // Handle unauthenticated users
       if (status === 'unauthenticated') {
-        if (!isPublicRoute) {
+        if (!routeInfo.isPublicRoute) {
           const signInUrl = `/auth/signin?callbackUrl=${encodeURIComponent(pathname)}`
           router.push(signInUrl)
         }
@@ -57,7 +94,7 @@ export const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
         }
 
         // Check first-login status for non-auth routes
-        if (!isAuthRoute && !isPublicRoute) {
+        if (!routeInfo.isAuthRoute && !routeInfo.isPublicRoute) {
           setIsCheckingFirstLogin(true)
           
           try {
@@ -70,10 +107,11 @@ export const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
               const data = await response.json()
               
               if (data.isFirstLogin) {
-                console.log('🔒 [AuthGuard] Redirecting first-time user to password setup')
                 router.push('/auth/first-login')
                 return
               }
+            } else {
+              console.error('❌ [AuthGuard] First login check failed:', response.status)
             }
           } catch (error) {
             console.error('❌ [AuthGuard] Error checking first login status:', error)
@@ -85,15 +123,17 @@ export const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
     }
 
     handleAuthentication()
-  }, [session, status, pathname, router, isPublicRoute, isAuthRoute])
+  }, [session, status, pathname, router, routeInfo.isPublicRoute, routeInfo.isAuthRoute, isManuallyRefreshing])
+  // Note: isCheckingFirstLogin is intentionally omitted from deps to prevent infinite loop
+  // since it's set inside the effect
 
-  // Show loading spinner while checking authentication
-  if (status === 'loading' || isCheckingFirstLogin) {
+  // Show loading spinner while checking authentication or manually refreshing
+  if (status === 'loading' || isCheckingFirstLogin || isManuallyRefreshing) {
     return fallback || <AuthLoadingFallback />
   }
 
   // Show nothing while redirecting unauthenticated users
-  if (status === 'unauthenticated' && !isPublicRoute) {
+  if (status === 'unauthenticated' && !routeInfo.isPublicRoute) {
     return fallback || <AuthLoadingFallback />
   }
 
@@ -104,21 +144,23 @@ export const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
 /**
  * Default loading fallback component
  */
-const AuthLoadingFallback = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <div className="text-center space-y-4">
-      <LoadingSpinner size="lg" />
-      <div className="space-y-2">
-        <h3 className="text-lg font-semibold text-gray-900">
-          Loading Buzzboard
-        </h3>
-        <p className="text-sm text-gray-600">
-          Checking your authentication status...
-        </p>
+const AuthLoadingFallback = () => {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center space-y-4">
+        <LoadingSpinner size="lg" />
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Loading Buzzboard
+          </h3>
+          <p className="text-sm text-gray-600">
+            Checking your authentication status...
+          </p>
+        </div>
       </div>
     </div>
-  </div>
-)
+  )
+}
 
 /**
  * Higher-order component for page-level authentication protection

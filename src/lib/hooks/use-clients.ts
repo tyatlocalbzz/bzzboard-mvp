@@ -18,6 +18,8 @@ interface UseClientsReturn {
 export const useClients = (): UseClientsReturn => {
   const { status } = useSession()
 
+  console.log('📋 [useClients] Hook called with session status:', status)
+
   // Transform function to handle API response and add default client
   const transform = useCallback((apiResponse: unknown) => {
     console.log('🔄 [useClients] Transform input:', apiResponse)
@@ -45,6 +47,12 @@ export const useClients = (): UseClientsReturn => {
     console.error('❌ [useClients] Error fetching clients:', error)
   }, [])
 
+  console.log('📋 [useClients] About to call useApiData with:', {
+    endpoint: '/api/clients',
+    autoFetch: status === 'authenticated',
+    sessionStatus: status
+  })
+
   // Use standardized API data hook with conditional fetching
   const { data: clients, isLoading, error, refresh } = useApiData<ClientData[]>({
     endpoint: '/api/clients',
@@ -54,8 +62,22 @@ export const useClients = (): UseClientsReturn => {
     onError
   })
 
+  console.log('📋 [useClients] useApiData returned:', {
+    hasClients: !!clients,
+    clientsLength: clients?.length || 0,
+    isLoading,
+    hasError: !!error,
+    sessionStatus: status
+  })
+
   // Return default client array for unauthenticated users or when data is null
   const effectiveClients = status === 'unauthenticated' || !clients ? [DEFAULT_CLIENT] : clients
+
+  console.log('📋 [useClients] Returning effective clients:', {
+    count: effectiveClients.length,
+    clients: effectiveClients.map(c => ({ id: c.id, name: c.name, type: c.type })),
+    isLoading: status === 'loading' || (status === 'authenticated' && isLoading)
+  })
 
   return {
     clients: effectiveClients,

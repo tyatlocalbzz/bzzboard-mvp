@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
-import { getShootById, updateShootStatus, deleteShoot, getPostIdeasForShoot } from '@/lib/db/shoots'
+import { getShootById, updateShootStatus, updateShoot, deleteShoot, getPostIdeasForShoot } from '@/lib/db/shoots'
 import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
 
 export async function GET(
@@ -102,39 +102,77 @@ export async function PATCH(
 
     // Parse request body
     const body = await request.json()
-    const { status, action } = body
+    const { status, action, title, duration, location, notes, scheduledAt } = body
 
-    if (!status) {
-      return NextResponse.json({ error: 'Status is required' }, { status: 400 })
-    }
-
-    // Prepare timestamps based on status
-    const timestamps: { startedAt?: Date; completedAt?: Date } = {}
-    
-    if (status === 'active' && action === 'start') {
-      timestamps.startedAt = new Date()
-    } else if (status === 'completed' && action === 'complete') {
-      timestamps.completedAt = new Date()
-    }
-
-    // Update shoot status
-    const updatedShoot = await updateShootStatus(shootId, status, timestamps)
-    
-    if (!updatedShoot) {
-      return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Shoot status changed to ${status}`,
-      shoot: {
-        id: updatedShoot.id,
-        title: updatedShoot.title,
-        status: updatedShoot.status,
-        startedAt: updatedShoot.startedAt?.toISOString(),
-        completedAt: updatedShoot.completedAt?.toISOString()
+    // Handle status updates
+    if (status) {
+      // Prepare timestamps based on status
+      const timestamps: { startedAt?: Date; completedAt?: Date } = {}
+      
+      if (status === 'active' && action === 'start') {
+        timestamps.startedAt = new Date()
+      } else if (status === 'completed' && action === 'complete') {
+        timestamps.completedAt = new Date()
       }
-    })
+
+      // Update shoot status
+      const updatedShoot = await updateShootStatus(shootId, status, timestamps)
+      
+      if (!updatedShoot) {
+        return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Shoot status changed to ${status}`,
+        shoot: {
+          id: updatedShoot.id,
+          title: updatedShoot.title,
+          status: updatedShoot.status,
+          startedAt: updatedShoot.startedAt?.toISOString(),
+          completedAt: updatedShoot.completedAt?.toISOString()
+        }
+      })
+    }
+
+    // Handle shoot details updates
+    if (title || duration || location || notes || scheduledAt) {
+      const updateData: {
+        title?: string
+        duration?: number
+        location?: string
+        notes?: string
+        scheduledAt?: Date
+      } = {}
+      
+      if (title) updateData.title = title
+      if (duration) updateData.duration = parseInt(duration)
+      if (location !== undefined) updateData.location = location
+      if (notes !== undefined) updateData.notes = notes
+      if (scheduledAt) updateData.scheduledAt = new Date(scheduledAt)
+
+      const updatedShoot = await updateShoot(shootId, updateData)
+      
+      if (!updatedShoot) {
+        return NextResponse.json({ error: 'Shoot not found' }, { status: 404 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Shoot updated successfully',
+        shoot: {
+          id: updatedShoot.id,
+          title: updatedShoot.title,
+          duration: updatedShoot.duration,
+          location: updatedShoot.location,
+          notes: updatedShoot.notes,
+          scheduledAt: updatedShoot.scheduledAt.toISOString(),
+          status: updatedShoot.status
+        }
+      })
+    }
+
+    return NextResponse.json({ error: 'No valid update fields provided' }, { status: 400 })
 
   } catch (error) {
     console.error('Update shoot error:', error)
@@ -198,12 +236,11 @@ export async function DELETE(
       success: true,
       message: 'Shoot deleted successfully',
       calendarEventRemoved: calendarEventDeleted,
-      // Include recovery info
-      recoveryNote: 'This shoot can be restored from the admin panel within 30 days'
+      recoveryNote: 'This shoot has been moved to trash and can be recovered from the admin panel.'
     })
 
   } catch (error) {
-    console.error('❌ [API] Delete shoot error:', error)
+    console.error('Delete shoot error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

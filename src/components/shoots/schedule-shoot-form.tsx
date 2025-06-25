@@ -1,7 +1,7 @@
 'use client'
 
 import { ReactNode, useState } from 'react'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { Button } from '@/components/ui/button'
 import { MobileInput } from '@/components/ui/mobile-input'
@@ -17,6 +17,7 @@ import { Calendar, Clock, Users, AlertTriangle } from 'lucide-react'
 
 interface ScheduleShootFormProps {
   children: ReactNode
+  onSuccess?: () => void
 }
 
 interface ScheduleShootData {
@@ -28,6 +29,7 @@ interface ScheduleShootData {
   location: string
   notes?: string
   forceCreate?: boolean
+  forceCalendarCreate?: boolean
 }
 
 interface ConflictEvent {
@@ -79,13 +81,14 @@ const scheduleShoot = async (data: ScheduleShootData): Promise<ScheduleShootResu
   return result
 }
 
-export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
+export const ScheduleShootForm = ({ children, onSuccess }: ScheduleShootFormProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const [detectedConflicts, setDetectedConflicts] = useState<ConflictEvent[]>([])
-  const [showConflictDialog, setShowConflictDialog] = useState(false)
+  const [showConflictWarning, setShowConflictWarning] = useState(false)
   const [pendingShootData, setPendingShootData] = useState<ScheduleShootData | null>(null)
   const [selectedClient, setSelectedClient] = useState('')
   const [selectedDuration, setSelectedDuration] = useState('60')
+  const [notes, setNotes] = useState('')
   const router = useRouter()
   const { loading, execute } = useAsync(scheduleShoot)
   const { selectedClient: contextClient, clients } = useClient()
@@ -167,26 +170,26 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
       time: timeField.value,
       duration: parseInt(selectedDuration) || 60,
       location: locationField.value,
-      notes: undefined // Notes are optional and not validated
+      notes: notes.trim() || undefined // Notes are optional and not validated
     }
 
     const result = await execute(shootData)
     
     if (result) {
       if (result.hasConflicts && result.conflicts && result.conflicts.length > 0) {
-        // Show immediate notification about conflicts
-        const conflictCount = result.conflicts.length
-        toast.warning(
-          `Calendar conflict${conflictCount > 1 ? 's' : ''} detected! ${conflictCount} event${conflictCount > 1 ? 's' : ''} overlap${conflictCount === 1 ? 's' : ''} with your shoot time.`,
-          { duration: 6000 }
-        )
-        
-        // Show conflict confirmation dialog instead of creating shoot
+        // Show conflicts inline in the form
         setDetectedConflicts(result.conflicts)
         setPendingShootData(shootData)
-        setShowConflictDialog(true)
+        setShowConflictWarning(true)
         
-        // Don't close the form or show success - let user decide
+        // Show toast notification
+        const conflictCount = result.conflicts.length
+        toast.warning(
+          `Calendar conflict${conflictCount > 1 ? 's' : ''} detected! Please review and choose how to proceed.`,
+          { duration: 4000 }
+        )
+        
+        // Don't close the form - let user decide inline
         return
         
       } else if (result.success) {
@@ -197,6 +200,7 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
         locationField.reset()
         setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
         setSelectedDuration('60')
+        setNotes('')
         
         if (result.message) {
           toast.success(result.message)
@@ -207,8 +211,26 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
           toast.success('Shoot scheduled successfully!')
         }
         
+        // Show warning if calendar event wasn't created
+        if (result.warning) {
+          toast.warning(result.warning, { duration: 5000 })
+        }
+        
         setIsOpen(false)
-        router.refresh()
+        
+        // Trigger parent refresh if available, or navigate with refresh parameter
+        if (onSuccess) {
+          onSuccess()
+        } else {
+          // If no parent refresh available, check if we should navigate to shoots page
+          const currentPath = window.location.pathname
+          if (currentPath === '/shoots') {
+            router.refresh()
+          } else {
+            // Navigate to shoots page with refresh parameter
+            router.push('/shoots?refresh=true')
+          }
+        }
         
       } else if (result.warning) {
         // Other warnings (non-conflict)
@@ -227,12 +249,15 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
     })
     
     if (result && result.success) {
-      toast.success('Shoot scheduled successfully!')
       if (result.warning) {
-        toast.warning(result.warning)
+        toast.success('Shoot created successfully!')
+        toast.warning(result.warning, { duration: 5000 })
+      } else {
+        toast.success('Shoot scheduled successfully!')
       }
       
-      setShowConflictDialog(false)
+      // Reset conflict state and form
+      setShowConflictWarning(false)
       setDetectedConflicts([])
       setPendingShootData(null)
       
@@ -243,32 +268,113 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
       locationField.reset()
       setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
       setSelectedDuration('60')
+      setNotes('')
       
       setIsOpen(false)
-      router.refresh()
+      
+      // Trigger parent refresh if available, or navigate with refresh parameter
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        // If no parent refresh available, check if we should navigate to shoots page
+        const currentPath = window.location.pathname
+        if (currentPath === '/shoots') {
+          router.refresh()
+        } else {
+          // Navigate to shoots page with refresh parameter
+          router.push('/shoots?refresh=true')
+        }
+      }
     }
   }
 
-  // Handle user's decision to cancel due to conflicts
-  const handleCancelConflict = () => {
-    setShowConflictDialog(false)
-    setDetectedConflicts([])
-    setPendingShootData(null)
-    // Keep the form open so user can modify the time
-  }
-
-  // Reset form when closed
-  const handleOpenChange = (open: boolean) => {
-    setIsOpen(open)
-    if (!open) {
+  // Handle user's decision to force create calendar event despite conflicts
+  const handleForceCalendarCreate = async () => {
+    if (!pendingShootData) return
+    
+    const result = await execute({
+      ...pendingShootData,
+      forceCreate: true,
+      forceCalendarCreate: true
+    })
+    
+    if (result && result.success) {
+      if (result.message) {
+        toast.success(result.message)
+      } else {
+        toast.success('Shoot scheduled successfully!')
+      }
+      
+      if (result.warning) {
+        toast.warning(result.warning, { duration: 6000 })
+      }
+      
+      // Reset conflict state and form
+      setShowConflictWarning(false)
       setDetectedConflicts([])
+      setPendingShootData(null)
+      
+      // Reset form
       titleField.reset()
       dateField.reset()
       timeField.reset()
       locationField.reset()
       setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
       setSelectedDuration('60')
+      setNotes('')
+      
+      setIsOpen(false)
+      
+      // Trigger parent refresh if available, or navigate with refresh parameter
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        // If no parent refresh available, check if we should navigate to shoots page
+        const currentPath = window.location.pathname
+        if (currentPath === '/shoots') {
+          router.refresh()
+        } else {
+          // Navigate to shoots page with refresh parameter
+          router.push('/shoots?refresh=true')
+        }
+      }
     }
+  }
+
+  // Handle user's decision to modify time due to conflicts
+  const handleModifyTime = () => {
+    setShowConflictWarning(false)
+    setDetectedConflicts([])
+    setPendingShootData(null)
+    // Keep the form open so user can modify the time
+  }
+
+  // Reset form function
+  const resetForm = () => {
+    setShowConflictWarning(false)
+    setDetectedConflicts([])
+    setPendingShootData(null)
+    titleField.reset()
+    dateField.reset()
+    timeField.reset()
+    locationField.reset()
+    setSelectedClient(contextClient.type === 'client' ? contextClient.name : '')
+    setSelectedDuration('60')
+    setNotes('')
+  }
+
+  // Reset form when closed
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
+    if (!open) {
+      resetForm()
+    }
+  }
+
+  // Handle manual close with reset
+  const handleClose = () => {
+    setIsOpen(false)
+    resetForm()
   }
 
   // Get today's date for min date input - use fixed date for consistency
@@ -276,23 +382,22 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
 
   return (
     <>
-    <Sheet open={isOpen} onOpenChange={handleOpenChange}>
-      <SheetTrigger asChild>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
         {children}
-      </SheetTrigger>
-      <SheetContent side="bottom" className="h-[90vh] max-h-[700px] flex flex-col">
-        <SheetHeader className="flex-shrink-0">
-          <SheetTitle className="flex items-center gap-2">
+      </DialogTrigger>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
             Schedule New Shoot
-          </SheetTitle>
-          <SheetDescription>
+          </DialogTitle>
+          <DialogDescription>
             Plan a content creation session with your client
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
         
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <div className="space-y-4 overflow-y-auto max-h-[60vh] pr-2">
             {/* Shoot Title */}
             <MobileInput
               label="Shoot Title *"
@@ -313,7 +418,7 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
                 onValueChange={setSelectedClient}
                 required
               >
-                <SelectTrigger className="h-12 text-base tap-target">
+                <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-gray-500" />
                     <SelectValue placeholder="Choose a client" />
@@ -364,7 +469,7 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
             <div className="space-y-2">
               <Label className="text-sm font-medium">Duration</Label>
               <Select value={selectedDuration} onValueChange={setSelectedDuration}>
-                <SelectTrigger className="h-12 text-base tap-target">
+                <SelectTrigger>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-gray-500" />
                     <SelectValue />
@@ -402,162 +507,138 @@ export const ScheduleShootForm = ({ children }: ScheduleShootFormProps) => {
               <Textarea
                 id="notes"
                 name="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
                 placeholder="Special requirements, equipment needed, shot list ideas..."
-                className="min-h-[80px] text-base tap-target resize-none"
+                className="min-h-[80px] resize-none"
                 rows={3}
               />
             </div>
 
-            {/* Conflict Display */}
-            {detectedConflicts.length > 0 && (
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <AlertTriangle className="w-3 h-3 text-yellow-600" />
+            {/* Conflict Warning - Inline */}
+            {showConflictWarning && detectedConflicts.length > 0 && (
+              <>
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-medium text-yellow-900 mb-2">
+                  <div>
+                    <h4 className="text-sm font-medium text-yellow-900">
                       Calendar Conflicts Detected
                     </h4>
-                    <div className="space-y-2">
-                      {detectedConflicts.map((conflict, index) => {
-                        const startTime = new Date(conflict.startTime).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })
-                        const endTime = new Date(conflict.endTime).toLocaleTimeString('en-US', {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true
-                        })
-                        return (
-                          <div key={index} className="text-sm text-yellow-800 bg-yellow-100 rounded p-2">
-                            <div className="font-medium">{conflict.title}</div>
-                            <div className="text-xs">{startTime} - {endTime}</div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <p className="text-xs text-yellow-700 mt-2">
-                      Your shoot was created but not added to Google Calendar due to these conflicts.
-                      Consider rescheduling or manually resolving conflicts in your calendar.
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Your shoot time overlaps with existing calendar events
                     </p>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+                
+                <div className="space-y-2 mb-4">
+                  {detectedConflicts.map((conflict, index) => {
+                    const startTime = new Date(conflict.startTime).toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                    const endTime = new Date(conflict.endTime).toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    })
+                    const date = new Date(conflict.startTime).toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric'
+                    })
+                    
+                    return (
+                      <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-md">
+                        <div className="font-medium text-red-900 text-sm">{conflict.title}</div>
+                        <div className="text-xs text-red-700">
+                          {date} • {startTime} - {endTime}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
 
-          {/* Actions - Fixed at bottom */}
-          <div className="flex-shrink-0 flex gap-3 p-4 border-t bg-white">
+                <div className="bg-yellow-100 border border-yellow-300 rounded-md p-4">
+                  <p className="text-sm text-yellow-800 font-medium mb-2">What would you like to do?</p>
+                  
+                  <div className="text-xs text-yellow-700 mb-3 space-y-1">
+                    <div>• <strong>Change Time:</strong> Modify your shoot time to avoid conflicts</div>
+                    <div>• <strong>Schedule Anyway:</strong> Create shoot but skip calendar event (avoids conflicts)</div>
+                    <div>• <strong>Force Schedule:</strong> Create shoot and calendar event (despite conflicts)</div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={handleModifyTime}
+                        className="flex-1 h-10 text-yellow-800 border-yellow-300 hover:bg-yellow-200"
+                        disabled={loading}
+                      >
+                        Change Time
+                      </Button>
+                      <LoadingButton
+                        onClick={handleForceCreate}
+                        loading={loading}
+                        loadingText="Creating shoot..."
+                        className="flex-1 h-10 bg-yellow-600 hover:bg-yellow-700 text-white"
+                      >
+                        Schedule Anyway
+                      </LoadingButton>
+                    </div>
+                    <LoadingButton
+                      onClick={handleForceCalendarCreate}
+                      loading={loading}
+                      loadingText="Force creating..."
+                      className="w-full h-10 bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Force Schedule (Create Calendar Event)
+                    </LoadingButton>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-yellow-300">
+                    <Button
+                      variant="ghost"
+                      onClick={handleClose}
+                      className="w-full text-yellow-700 hover:bg-yellow-200"
+                      disabled={loading}
+                    >
+                      Cancel & Close
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+        </div>
+
+        {/* Actions */}
+        {!showConflictWarning && (
+          <div className="flex gap-3 pt-4 border-t">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsOpen(false)}
-              className="flex-1 h-12 tap-target"
+              onClick={handleClose}
+              className="flex-1"
               disabled={loading}
             >
               Cancel
             </Button>
             <LoadingButton
               onClick={handleSubmit}
-              className="flex-1 h-12"
+              className="flex-1"
               loading={loading}
-              loadingText="Scheduling..."
+              loadingText="Checking conflicts..."
             >
               Schedule Shoot
             </LoadingButton>
           </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+        )}
+      </DialogContent>
+    </Dialog>
 
-    {/* Conflict Confirmation Dialog */}
-    {showConflictDialog && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-              <AlertTriangle className="h-5 w-5 text-yellow-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">Calendar Conflicts Detected</h3>
-            </div>
-          </div>
 
-          <div className="mb-6">
-            <p className="text-sm text-gray-700 mb-4">
-              The following events conflict with your scheduled shoot time:
-            </p>
-            
-            <div className="space-y-3">
-              {detectedConflicts.map((conflict, index) => {
-                const startTime = new Date(conflict.startTime).toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  hour12: true
-                })
-                const endTime = new Date(conflict.endTime).toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                  hour12: true
-                })
-                const date = new Date(conflict.startTime).toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric'
-                })
-                
-                return (
-                  <div key={index} className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <div className="font-semibold text-red-900 mb-1">{conflict.title}</div>
-                        <div className="text-sm text-red-700">
-                          <div>{date}</div>
-                          <div className="font-medium">{startTime} - {endTime}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-6">
-            <p className="text-sm text-yellow-800">
-              <strong>What would you like to do?</strong>
-            </p>
-            <ul className="text-sm text-yellow-700 mt-2 space-y-1">
-              <li>• <strong>Cancel:</strong> Go back and choose a different time</li>
-              <li>• <strong>Schedule Anyway:</strong> Create the shoot but it will not be added to your calendar</li>
-            </ul>
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={handleCancelConflict}
-              className="flex-1"
-              disabled={loading}
-            >
-              Cancel & Change Time
-            </Button>
-            <LoadingButton
-              onClick={handleForceCreate}
-              className="flex-1"
-              loading={loading}
-              loadingText="Scheduling..."
-            >
-              Schedule Anyway
-            </LoadingButton>
-          </div>
-        </div>
-      </div>
-    )}
     </>
   )
 } 

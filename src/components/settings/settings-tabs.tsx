@@ -1,20 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { User, Settings, Zap } from 'lucide-react'
+import { User, Settings, Zap, Shield } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AccountSettings } from './account-settings'
 import { ClientSettingsTab } from './client-settings-tab'
 import { IntegrationsTab } from './integrations-tab'
+import { AdminSettingsTab } from './admin-settings-tab'
 import { AuthUser } from '@/lib/auth/types'
 
 interface SettingsTabsProps {
   user: AuthUser
 }
 
-type TabType = 'account' | 'clients' | 'integrations'
+type TabType = 'account' | 'clients' | 'integrations' | 'admin'
 
-const tabs = [
+const baseTabs = [
   {
     id: 'account' as TabType,
     label: 'Account',
@@ -32,8 +33,18 @@ const tabs = [
   }
 ]
 
+const adminTab = {
+  id: 'admin' as TabType,
+  label: 'Admin',
+  icon: Shield
+}
+
 export const SettingsTabs = ({ user }: SettingsTabsProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('account')
+
+  // Include admin tab only for admin users
+  const tabs = user.role === 'admin' ? [...baseTabs, adminTab] : baseTabs
+  const gridCols = tabs.length === 4 ? 'grid-cols-4' : 'grid-cols-3'
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -43,6 +54,8 @@ export const SettingsTabs = ({ user }: SettingsTabsProps) => {
         return <ClientSettingsTab />
       case 'integrations':
         return <IntegrationsTab user={user} />
+      case 'admin':
+        return user.role === 'admin' ? <AdminSettingsTab /> : <AccountSettings user={user} />
       default:
         return <AccountSettings user={user} />
     }
@@ -50,7 +63,7 @@ export const SettingsTabs = ({ user }: SettingsTabsProps) => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-2 p-1 bg-gray-100 rounded-lg">
+      <div className={cn("grid gap-2 p-1 bg-gray-100 rounded-lg", gridCols)}>
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id

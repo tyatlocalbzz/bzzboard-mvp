@@ -100,6 +100,7 @@ export async function GET(req: NextRequest) {
       attendees: event.attendees || [],
       isRecurring: event.isRecurring,
       conflictDetected: event.conflictDetected,
+      conflictDetails: event.conflictDetails || undefined, // Include conflict details
       syncStatus: event.syncStatus,
       isShootEvent: !!event.shootId,
       shootId: event.shootId || undefined,
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { title, clientName, date, time, duration, location, notes, forceCreate } = body
+    const { title, clientName, date, time, duration, location, notes, forceCreate, forceCalendarCreate } = body
 
     if (!title || !clientName || !date || !time || !duration || !location) {
       return NextResponse.json(
@@ -168,81 +169,101 @@ export async function POST(req: NextRequest) {
     // Calculate end time
     const endTime = new Date(scheduledAt.getTime() + parseInt(duration) * 60 * 1000)
 
-    // Check for Google Calendar integration
+    // Check for Google Calendar integration and conflicts BEFORE creating shoot
     const calendarIntegration = await getIntegration(user.email, 'google-calendar')
+    
+    if (calendarIntegration?.connected && !forceCreate) {
+      try {
+        console.log('🔍 [ShootCreation] Checking for conflicts before creating shoot:', title)
+        
+        // Initialize calendar sync service
+        const calendarSync = new GoogleCalendarSync()
+        
+        // Check for conflicts first
+        const conflictInfo = await calendarSync.checkConflictsForShoot(
+          user.email,
+          scheduledAt,
+          endTime
+        )
+
+        console.log('🔍 [ShootCreation] Conflict check results:', {
+          conflictCount: conflictInfo.conflictingEvents.length,
+          conflicts: conflictInfo.conflictingEvents.map(e => ({
+            title: e.title,
+            start: e.startTime.toISOString(),
+            end: e.endTime.toISOString()
+          }))
+        })
+
+        if (conflictInfo.conflictingEvents.length > 0) {
+          console.log('⚠️ [ShootCreation] Calendar conflicts detected - NOT creating shoot yet')
+          
+          // Format conflict details for better user experience
+          const conflictDetails = conflictInfo.conflictingEvents.map(event => ({
+            title: event.title,
+            startTime: event.startTime.toISOString(),
+            endTime: event.endTime.toISOString()
+          }))
+          
+          // Return conflict information WITHOUT creating the shoot
+          return NextResponse.json({
+            success: false,
+            hasConflicts: true,
+            conflicts: conflictDetails,
+            message: `Cannot schedule shoot - conflicts detected with ${conflictDetails.length} existing event${conflictDetails.length > 1 ? 's' : ''}`,
+            shootData: {
+              title,
+              clientName,
+              date,
+              time,
+              duration: parseInt(duration),
+              location,
+              notes: notes || undefined
+            }
+          })
+        }
+      } catch (error) {
+        console.error('❌ [ShootCreation] Error checking conflicts:', error)
+        // Continue with shoot creation if conflict check fails
+      }
+    }
+
+    // No conflicts detected or forceCreate is true - proceed with shoot creation
+    console.log('✅ [ShootCreation] No conflicts detected or force creating - proceeding with shoot creation')
+
+    // Initialize calendar event variables
     let googleCalendarEventId: string | null = null
     let calendarSyncStatus: 'pending' | 'synced' | 'error' = 'pending'
     let calendarError: string | null = null
 
+    // Create calendar event if integration is connected
     if (calendarIntegration?.connected) {
       try {
         console.log('🗓️ [ShootCreation] Creating Google Calendar event for shoot:', title)
         
         // Initialize calendar sync service
         const calendarSync = new GoogleCalendarSync()
-        
-        // Check for conflicts first (unless force creating)
-        if (!forceCreate) {
-          const conflictInfo = await calendarSync.checkConflictsForShoot(
-            user.email,
-            scheduledAt,
-            endTime
-          )
 
-          console.log('🔍 [ShootCreation] Conflict check results:', {
-            conflictCount: conflictInfo.conflictingEvents.length,
-            conflicts: conflictInfo.conflictingEvents.map(e => ({
-              title: e.title,
-              start: e.startTime.toISOString(),
-              end: e.endTime.toISOString()
-            }))
-          })
-
-          if (conflictInfo.conflictingEvents.length > 0) {
-            console.log('⚠️ [ShootCreation] Calendar conflicts detected:', conflictInfo.conflictingEvents.length)
-            
-            // Format conflict details for better user experience
-            const conflictDetails = conflictInfo.conflictingEvents.map(event => ({
-              title: event.title,
-              startTime: event.startTime.toISOString(),
-              endTime: event.endTime.toISOString()
-            }))
-            
-            // Return conflict information WITHOUT creating the shoot
-            return NextResponse.json({
-              success: false,
-              hasConflicts: true,
-              conflicts: conflictDetails,
-              message: `Cannot schedule shoot - conflicts detected with ${conflictDetails.length} existing event${conflictDetails.length > 1 ? 's' : ''}`,
-              shootData: {
-                title,
-                clientName,
-                date,
-                time,
-                duration: parseInt(duration),
-                location,
-                notes: notes || undefined
-              }
-            })
-          }
+        if (forceCreate && !forceCalendarCreate) {
+          console.log('🚀 [ShootCreation] Force creating shoot - calendar event will NOT be created due to conflicts')
+          calendarSyncStatus = 'error'
+          calendarError = 'Calendar event not created due to scheduling conflicts'
         } else {
-          console.log('🚀 [ShootCreation] Force creating shoot despite potential conflicts')
-        }
+          // No conflicts, create calendar event
+          const calendarEvent = {
+            title: `📸 ${title}`,
+            description: `Content shoot for ${client.name}\n\n${notes || ''}`.trim(),
+            startTime: scheduledAt,
+            endTime: endTime,
+            location: location,
+            attendees: [] // Could be enhanced to include client email
+          }
 
-        // No conflicts, create calendar event
-        const calendarEvent = {
-          title: `📸 ${title}`,
-          description: `Content shoot for ${client.name}\n\n${notes || ''}`.trim(),
-          startTime: scheduledAt,
-          endTime: endTime,
-          location: location,
-          attendees: [] // Could be enhanced to include client email
+          googleCalendarEventId = await calendarSync.createEvent(user.email, calendarEvent)
+          calendarSyncStatus = 'synced'
+          
+          console.log('✅ [ShootCreation] Google Calendar event created:', googleCalendarEventId)
         }
-
-        googleCalendarEventId = await calendarSync.createEvent(user.email, calendarEvent)
-        calendarSyncStatus = 'synced'
-        
-        console.log('✅ [ShootCreation] Google Calendar event created:', googleCalendarEventId)
 
       } catch (error) {
         console.error('❌ [ShootCreation] Failed to create calendar event:', error)
@@ -313,9 +334,18 @@ export async function POST(req: NextRequest) {
 
     // Add success message about calendar integration
     if (googleCalendarEventId) {
-      response.message = 'Shoot created and added to your Google Calendar'
+      if (forceCreate && forceCalendarCreate) {
+        response.message = 'Shoot created and added to Google Calendar (despite conflicts)'
+        response.warning = 'Calendar event created with scheduling conflicts - please review your calendar'
+      } else {
+        response.message = 'Shoot created and added to your Google Calendar'
+      }
     } else if (calendarIntegration?.connected && calendarError) {
-      response.warning = 'Shoot created but failed to add to Google Calendar'
+      if (forceCreate && !forceCalendarCreate) {
+        response.warning = 'Shoot created but not added to Google Calendar due to scheduling conflicts'
+      } else {
+        response.warning = 'Shoot created but failed to add to Google Calendar'
+      }
     } else if (!calendarIntegration?.connected) {
       response.info = 'Shoot created. Connect Google Calendar to automatically add shoots to your calendar.'
     }

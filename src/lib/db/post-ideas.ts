@@ -163,26 +163,48 @@ export const updatePostIdeaStatus = async (
 
 // Delete post idea
 export const deletePostIdea = async (id: number): Promise<{ success: boolean; message: string }> => {
-  // Check if post idea is linked to any shoots
-  const shootLinks = await db
-    .select()
-    .from(shootPostIdeas)
-    .where(eq(shootPostIdeas.postIdeaId, id))
-    .limit(1)
+  try {
+    // Check if post idea exists first
+    const existingPost = await db
+      .select({ id: postIdeas.id })
+      .from(postIdeas)
+      .where(eq(postIdeas.id, id))
+      .limit(1)
 
-  if (shootLinks.length > 0) {
+    if (existingPost.length === 0) {
+      return {
+        success: false,
+        message: 'Post idea not found'
+      }
+    }
+
+    // Check if post idea is linked to any shoots
+    const shootLinks = await db
+      .select()
+      .from(shootPostIdeas)
+      .where(eq(shootPostIdeas.postIdeaId, id))
+      .limit(1)
+
+    if (shootLinks.length > 0) {
+      return {
+        success: false,
+        message: 'Cannot delete post idea that is linked to shoots. Remove from shoots first.'
+      }
+    }
+
+    // Safe to delete
+    await db.delete(postIdeas).where(eq(postIdeas.id, id))
+    
+    return {
+      success: true,
+      message: 'Post idea deleted successfully'
+    }
+  } catch (error) {
+    console.error('Error deleting post idea:', error)
     return {
       success: false,
-      message: 'Cannot delete post idea that is linked to shoots. Remove from shoots first.'
+      message: 'Failed to delete post idea'
     }
-  }
-
-  // Safe to delete
-  const result = await db.delete(postIdeas).where(eq(postIdeas.id, id))
-  
-  return {
-    success: result.length > 0,
-    message: result.length > 0 ? 'Post idea deleted successfully' : 'Post idea not found'
   }
 }
 

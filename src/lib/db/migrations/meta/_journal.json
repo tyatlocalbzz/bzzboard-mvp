@@ -50,6 +50,13 @@
       "when": 1750699596705,
       "tag": "0006_add_expiry_date_to_integrations",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1750802316688,
+      "tag": "0007_conscious_silver_samurai",
+      "breakpoints": true
     }
   ]
 }

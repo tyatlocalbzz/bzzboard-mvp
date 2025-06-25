@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MobileLayout } from "@/components/layout/mobile-layout"
 import { UnifiedEventItem } from "@/components/shoots/unified-event-item"
@@ -40,12 +40,29 @@ export default function ShootsPage() {
     loading, 
     error, 
     refresh,
-    syncCalendar
+    syncCalendar,
+    optimisticDelete
   } = useUnifiedEvents({
     clientName: selectedClient.type === 'all' ? undefined : selectedClient.name,
     filter: eventFilter,
     autoRefresh: true
   })
+
+  // Check for refresh parameter and trigger refresh
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      if (urlParams.get('refresh') === 'true') {
+        // Remove the refresh parameter from URL
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.delete('refresh')
+        router.replace(newUrl.pathname + newUrl.search, { scroll: false })
+        
+        // Trigger data refresh
+        refresh()
+      }
+    }
+  }, [router, refresh])
 
   // Navigate to event details
   const handleEventClick = useCallback((event: UnifiedEvent) => {
@@ -57,6 +74,53 @@ export default function ShootsPage() {
       toast.info(`Calendar Event: ${event.title}`)
     }
   }, [router])
+
+  // Handle delete with optimistic updates
+  const handleDelete = useCallback(async (eventId: string, eventType: 'shoot' | 'calendar') => {
+    if (eventType !== 'shoot') {
+      toast.error('Only shoots can be deleted from this view')
+      return
+    }
+
+    try {
+      // Extract numeric ID from the prefixed format (e.g., "shoot-11" -> "11")
+      const numericId = eventId.startsWith('shoot-') ? eventId.replace('shoot-', '') : eventId
+      
+      // Optimistically remove from UI immediately
+      optimisticDelete(eventId, eventType)
+      toast.success('Shoot deleted successfully!')
+
+      // Call the actual delete API with numeric ID
+      const response = await fetch(`/api/shoots/${numericId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete shoot')
+      }
+
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to delete shoot')
+      }
+
+      // Show additional feedback if available
+      if (data.calendarEventRemoved) {
+        toast.info('Calendar event removed from Google Calendar')
+      }
+      
+      if (data.recoveryNote) {
+        toast.info(data.recoveryNote, { duration: 5000 })
+      }
+
+    } catch (error) {
+      // If delete failed, refresh to restore the correct state
+      console.error('Delete failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to delete shoot')
+      refresh() // Restore the correct state
+    }
+  }, [optimisticDelete, refresh])
 
   // Sort events chronologically (what's happening next)
   const sortedEvents = useMemo(() => {
@@ -189,7 +253,7 @@ export default function ShootsPage() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <ScheduleShootForm>
+          <ScheduleShootForm onSuccess={refresh}>
             <Button size="sm" className="h-8 px-3 text-xs">
               <Camera className="h-3 w-3 mr-1" />
               Schedule
@@ -258,6 +322,7 @@ export default function ShootsPage() {
                   <UnifiedEventItem
                     event={event}
                     onClick={() => handleEventClick(event)}
+                    onDelete={event.type === 'shoot' ? handleDelete : undefined}
                   />
                   
                   {/* Add separator between events, but not after the last one */}
@@ -303,7 +368,7 @@ export default function ShootsPage() {
                       {emptyStateProps.actionLabel}
                     </Button>
                   ) : (
-                    <ScheduleShootForm>
+                    <ScheduleShootForm onSuccess={refresh}>
                       <Button className="tap-target">
                         <Camera className="h-4 w-4 mr-2" />
                         {emptyStateProps.actionLabel}

@@ -6,12 +6,21 @@ import type {
   PostIdea, 
   Shoot, 
   ActiveShootData, 
-  PostIdeaData, 
   UploadedFile, 
   UploadProgress, 
   UploadRequest,
   DriveFolder 
 } from '@/lib/types/shoots'
+
+// Extended PostIdeaData with notes field
+interface PostIdeaData {
+  title: string
+  platforms: string[]
+  contentType: 'photo' | 'video' | 'reel' | 'story'
+  caption?: string
+  shotList?: string
+  notes?: string
+}
 
 // Real API functions using database
 
@@ -49,9 +58,6 @@ export const shootsApi = {
   },
 
   async fetchActiveShootData(shootId: string): Promise<ActiveShootData> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500))
-    
     console.log('🔍 fetchActiveShootData called with shootId:', shootId)
     
     try {
@@ -84,87 +90,120 @@ export const shootsApi = {
   },
 
   async toggleShot(shotId: number): Promise<void> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 200))
+    // For now, shots are stored as simple strings in the shotList array
+    // We would need to enhance the schema to track individual shot completion
     console.log('Toggling shot:', shotId)
-    // In real implementation, this would update the shot in the database
+    // This would require additional database structure to track shot completion
+    // For MVP, we can implement this as a client-side state management
   },
 
   async editShot(shotId: number, text: string, notes?: string): Promise<void> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 300))
+    // Extract post idea ID and shot index from shotId
+    // This is a simplified approach - in a full implementation, 
+    // we'd need a proper shots table
     console.log('Editing shot:', { shotId, text, notes })
-    // In real implementation, this would update the shot in the database
+    
+    // For now, this would require knowing which post idea the shot belongs to
+    // and updating the shotList array at the specific index
+    throw new Error('Shot editing requires post idea context - use updatePostIdea API instead')
   },
 
   async addShot(postIdeaId: number, text: string, notes?: string): Promise<Shot> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 300))
+    const response = await fetch(`/api/posts/${postIdeaId}/shots`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        notes
+      })
+    })
     
-    // Create new shot
-    const newShot: Shot = {
-      id: Math.floor(Math.random() * 1000000), // Mock ID generation
-      text,
-      completed: false,
-      postIdeaId,
-      notes
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to add shot')
     }
     
-    console.log('Adding shot:', newShot)
-    // In real implementation, this would save to database and return the created shot
-    return newShot
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to add shot')
+    }
+    
+    return data.shot
   },
 
   async addPostIdea(shootId: string, postIdeaData: PostIdeaData): Promise<PostIdea> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 400))
-    
-    // Generate consistent IDs
-    const baseId = Math.floor(Math.random() * 1000000)
-    
-    // Parse shot list into individual shots
-    const shots: Shot[] = []
-    if (postIdeaData.shotList) {
-      const shotLines = postIdeaData.shotList
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-      
-      shotLines.forEach((shotText, index) => {
-        shots.push({
-          id: baseId + index + 1000, // Mock ID generation
-          text: shotText,
-          completed: false,
-          postIdeaId: baseId, // Will be updated with real post idea ID
-          notes: undefined
-        })
+    const response = await fetch('/api/posts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: postIdeaData.title,
+        platforms: postIdeaData.platforms,
+        contentType: postIdeaData.contentType,
+        caption: postIdeaData.caption,
+        shotList: postIdeaData.shotList || [],
+                 notes: postIdeaData.notes || undefined,
+        shootId: shootId // Include shoot ID to auto-assign
       })
-    }
-    
-    const newPostIdea: PostIdea = {
-      id: baseId, // Mock ID generation
-      title: postIdeaData.title,
-      platforms: postIdeaData.platforms,
-      contentType: postIdeaData.contentType,
-      shots,
-      caption: postIdeaData.caption
-    }
-    
-    // Update shot postIdeaId references
-    newPostIdea.shots.forEach(shot => {
-      shot.postIdeaId = newPostIdea.id
     })
     
-    console.log('Adding post idea:', newPostIdea)
-    // In real implementation, this would save to database and return the created post idea
-    return newPostIdea
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to create post idea')
+    }
+    
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to create post idea')
+    }
+    
+    // Transform database response to frontend format
+    const postIdea = data.postIdea
+    const shots: Shot[] = (postIdea.shotList || []).map((shotText: string, index: number) => ({
+      id: index,
+      text: shotText,
+      completed: false,
+      postIdeaId: postIdea.id,
+      notes: undefined
+    }))
+    
+    return {
+      id: postIdea.id,
+      title: postIdea.title,
+      platforms: postIdea.platforms,
+      contentType: postIdea.contentType,
+      shots,
+      caption: postIdea.caption
+    }
   },
 
   async endShoot(shootId: string): Promise<void> {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500))
-    console.log('Ending shoot:', shootId)
-    // In real implementation, this would update the shoot status to 'completed'
+    console.log('🏁 [shootsApi.endShoot] Ending shoot:', shootId)
+    
+    const response = await fetch(`/api/shoots/${shootId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'completed',
+        action: 'complete'
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('❌ [shootsApi.endShoot] Failed to end shoot:', errorData)
+      throw new Error(errorData.error || 'Failed to end shoot')
+    }
+
+    const result = await response.json()
+    console.log('✅ [shootsApi.endShoot] Shoot ended successfully:', result)
   },
 
   // Upload-related functions
@@ -181,112 +220,59 @@ export const shootsApi = {
       hasProgressCallback: !!onProgress
     })
 
-    // Simulate upload progress
-    if (onProgress) {
-      console.log('📊 [shootsApi.uploadFile] Simulating upload progress...')
-      const totalBytes = request.file.size
-      for (let uploadedBytes = 0; uploadedBytes <= totalBytes; uploadedBytes += Math.floor(totalBytes / 10)) {
-        const percentage = Math.round((uploadedBytes / totalBytes) * 100)
-        const progressData = {
-          uploadedBytes,
-          totalBytes,
-          percentage,
-          status: uploadedBytes === totalBytes ? 'completed' : 'uploading'
-        } as UploadProgress
-        
-        console.log(`📈 [shootsApi.uploadFile] Progress: ${percentage}% (${uploadedBytes}/${totalBytes} bytes)`)
-        onProgress(progressData)
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-      console.log('✅ [shootsApi.uploadFile] Progress simulation completed')
-    }
-
-    // Simulate API call to upload endpoint
-    console.log('📦 [shootsApi.uploadFile] Preparing FormData...')
     const formData = new FormData()
     formData.append('file', request.file)
-    
     if (request.postIdeaId) {
       formData.append('postIdeaId', request.postIdeaId.toString())
-      console.log('🎯 [shootsApi.uploadFile] Added postIdeaId:', request.postIdeaId)
     }
     if (request.shootId) {
       formData.append('shootId', request.shootId.toString())
-      console.log('📸 [shootsApi.uploadFile] Added shootId:', request.shootId)
     }
     if (request.notes) {
       formData.append('notes', request.notes)
-      console.log('📝 [shootsApi.uploadFile] Added notes:', `${request.notes.length} characters`)
     }
-
-    console.log('🚀 [shootsApi.uploadFile] Sending request to /api/uploads...')
-    const startTime = Date.now()
 
     const response = await fetch('/api/uploads', {
       method: 'POST',
       body: formData
     })
 
-    const endTime = Date.now()
-    const duration = endTime - startTime
-    console.log('⏱️  [shootsApi.uploadFile] API request completed in:', `${duration}ms`)
-
-    console.log('📊 [shootsApi.uploadFile] Response status:', {
-      ok: response.ok,
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries())
-    })
-
     if (!response.ok) {
-      console.error('❌ [shootsApi.uploadFile] Upload failed')
-      const errorText = await response.text()
-      console.error('🔍 [shootsApi.uploadFile] Error response:', errorText)
-      throw new Error('Upload failed')
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to upload file')
     }
 
-    console.log('✅ [shootsApi.uploadFile] Upload successful - parsing response...')
-    const result = await response.json()
-    console.log('📄 [shootsApi.uploadFile] Upload result:', {
-      success: result.success,
-      fileName: result.file?.fileName,
-      fileSize: result.file?.fileSize,
-      driveFileId: result.file?.driveFileId,
-      webViewLink: result.file?.webViewLink,
-      uploadDestination: result.uploadDestination,
-      folderStructure: result.folderStructure
-    })
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to upload file')
+    }
 
-    console.log('🎉 [shootsApi.uploadFile] File upload completed successfully!')
-    return result.file
+    return data.uploadedFile
   },
 
   async getUploadedFiles(shootId?: number, postIdeaId?: number): Promise<UploadedFile[]> {
     const params = new URLSearchParams()
     if (shootId) params.append('shootId', shootId.toString())
     if (postIdeaId) params.append('postIdeaId', postIdeaId.toString())
-
-    const response = await fetch(`/api/uploads?${params.toString()}`)
+    
+    const response = await fetch(`/api/uploads?${params}`)
     
     if (!response.ok) {
-      throw new Error('Failed to fetch uploaded files')
+      throw new Error(`Failed to fetch uploaded files: ${response.statusText}`)
     }
-
-    const result = await response.json()
-    return result.files
+    
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch uploaded files')
+    }
+    
+    return data.files || []
   },
 
   async createDriveFolder(clientName: string, shootTitle: string, shootDate: string): Promise<DriveFolder> {
-    console.log('🗂️  [shootsApi.createDriveFolder] Creating Google Drive folder structure...')
-    console.log('📋 [shootsApi.createDriveFolder] Input parameters:', {
-      clientName,
-      shootTitle,
-      shootDate,
-      parsedDate: new Date(shootDate).toISOString()
-    })
-
-    // Real Google Drive folder creation - this will be implemented when Google Drive is connected
-    const response = await fetch('/api/shoots/create-drive-folder', {
+    const response = await fetch('/api/integrations/google-drive/folders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -299,22 +285,41 @@ export const shootsApi = {
     })
 
     if (!response.ok) {
-      throw new Error('Failed to create Google Drive folder')
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to create folder')
     }
 
     const data = await response.json()
     
     if (!data.success) {
-      throw new Error(data.error || 'Failed to create Google Drive folder')
+      throw new Error(data.error || 'Failed to create folder')
     }
 
-    console.log('✅ [shootsApi.createDriveFolder] Folder creation completed!')
     return data.folder
   },
 
   async shareDriveFolder(folderId: string): Promise<string> {
-    // Mock sharing - replace with real Google Drive API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-    return `https://drive.google.com/drive/folders/${folderId}?usp=sharing`
+    const response = await fetch('/api/integrations/google-drive/share', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        folderId
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to share folder')
+    }
+
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to share folder')
+    }
+
+    return data.shareUrl
   }
 } 

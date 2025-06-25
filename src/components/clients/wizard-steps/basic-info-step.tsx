@@ -62,8 +62,8 @@ export const BasicInfoStep = ({ data, onUpdate, onValidChange, showValidation = 
       case 'website':
         return getValidationError(clientValidation.website(data.website || ''), showValidation || touchedFields[field])
       default:
-        return undefined
-    }
+    return undefined
+  }
   }
 
   return (

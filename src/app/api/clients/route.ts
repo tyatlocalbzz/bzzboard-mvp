@@ -14,11 +14,11 @@ export async function GET() {
     // Get all clients as ClientData format (with string IDs)
     const clients = await getAllClientsAsClientData()
 
-    return NextResponse.json({
+    return NextResponse.json({ 
       success: true,
-      clients
+      clients 
     })
-
+    
   } catch (error) {
     console.error('Get clients error:', error)
     return NextResponse.json(

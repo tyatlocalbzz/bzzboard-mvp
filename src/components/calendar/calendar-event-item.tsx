@@ -185,11 +185,47 @@ export const CalendarEventItem = ({
 
           {/* Conflict warning */}
           {event.conflictDetected && (
-            <div className="flex items-center gap-2 mt-2 p-2 bg-red-100 rounded-md">
-              <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
-              <span className="text-sm text-red-800">
-                Scheduling conflict detected
-              </span>
+            <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+              <div className="flex items-start gap-2 mb-2">
+                <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="text-sm font-medium text-red-800">
+                    Scheduling conflict detected
+                  </span>
+                  {event.conflictDetails && event.conflictDetails.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-red-700 font-medium">
+                        Conflicts with:
+                      </p>
+                      {event.conflictDetails.map((conflict, index) => {
+                        const startTime = new Date(conflict.startTime).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        })
+                        const endTime = new Date(conflict.endTime).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        })
+                        const date = new Date(conflict.startTime).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                        
+                        return (
+                          <div key={index} className="text-xs text-red-700 bg-red-100 rounded px-2 py-1">
+                            <span className="font-medium">{conflict.title}</span>
+                            <span className="text-red-600 ml-1">
+                              ({date} • {startTime} - {endTime})
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </>

@@ -24,11 +24,17 @@ const handleSignIn = async (formData: FormData) => {
     }
 
     // Success - redirect to callback URL or dashboard
+    // The redirect() call will throw NEXT_REDIRECT which is expected behavior
     redirect(callbackUrl)
     
   } catch (error) {
-    console.error('Sign in error:', error)
-    redirect('/auth/signin?error=CredentialsSignin')
+    // Only log actual errors, not NEXT_REDIRECT
+    if (error instanceof Error && !error.message.includes('NEXT_REDIRECT')) {
+      console.error('Sign in error:', error)
+      redirect('/auth/signin?error=CredentialsSignin')
+    }
+    // Re-throw NEXT_REDIRECT errors to let Next.js handle them
+    throw error
   }
 }
 

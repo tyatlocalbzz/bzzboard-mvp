@@ -111,23 +111,111 @@ export const shootsApi = {
 
   // Reschedule a shoot
   async reschedule(id: string, data: RescheduleData) {
-    await new Promise(resolve => setTimeout(resolve, 800))
-    console.log('Rescheduling shoot:', id, data)
-    return { success: true }
+    const scheduledAt = new Date(`${data.date}T${data.time}`)
+    
+    const response = await fetch(`/api/shoots/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        scheduledAt: scheduledAt.toISOString()
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to reschedule shoot')
+    }
+    
+    const result = await response.json()
+    
+    return {
+      success: true,
+      message: result.message || 'Shoot rescheduled successfully'
+    }
   },
 
   // Edit shoot details
   async edit(id: string, data: EditShootData) {
-    await new Promise(resolve => setTimeout(resolve, 800))
-    console.log('Editing shoot:', id, data)
-    return { success: true }
+    const response = await fetch(`/api/shoots/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: data.title,
+        duration: data.duration,
+        location: data.location,
+        notes: data.notes
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to edit shoot')
+    }
+    
+    const result = await response.json()
+    
+    return {
+      success: true,
+      message: result.message || 'Shoot updated successfully'
+    }
+  },
+
+  // End a shoot (mark as completed)
+  async endShoot(id: string) {
+    console.log('🏁 [shootsApi.endShoot] Ending shoot:', id)
+    
+    const response = await fetch(`/api/shoots/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        status: 'completed',
+        action: 'complete'
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('❌ [shootsApi.endShoot] Failed to end shoot:', errorData)
+      throw new Error(errorData.error || 'Failed to end shoot')
+    }
+    
+    const result = await response.json()
+    console.log('✅ [shootsApi.endShoot] Shoot ended successfully:', result)
+    
+    return {
+      success: true,
+      message: result.message || 'Shoot completed successfully'
+    }
   },
 
   // Delete a shoot
   async delete(id: string) {
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    console.log('Deleting shoot:', id)
-    return { success: true }
+    const response = await fetch(`/api/shoots/${id}`, {
+      method: 'DELETE',
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Failed to delete shoot: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to delete shoot')
+    }
+    
+    return {
+      success: true,
+      message: data.message || 'Shoot deleted successfully',
+      calendarEventRemoved: data.calendarEventRemoved,
+      recoveryNote: data.recoveryNote
+    }
   }
 }
 
@@ -135,10 +223,30 @@ export const shootsApi = {
 export const postIdeasApi = {
   // Add a new post idea to a shoot
   async add(shootId: string, data: PostIdeaData) {
-    await new Promise(resolve => setTimeout(resolve, 600))
-    console.log('Adding post idea:', shootId, data)
-    return { 
-      id: Math.floor(Math.random() * 1000000),
+    const response = await fetch('/api/posts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ...data,
+        shootId: shootId // Include shoot ID to auto-assign
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to create post idea')
+    }
+    
+    const result = await response.json()
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create post idea')
+    }
+    
+    return {
+      id: result.postIdea.id,
       ...data,
       shots: [],
       status: 'planned' as const,
@@ -148,42 +256,69 @@ export const postIdeasApi = {
 
   // Edit an existing post idea
   async edit(postIdeaId: string, data: PostIdeaData) {
-    await new Promise(resolve => setTimeout(resolve, 600))
-    console.log('Editing post idea:', postIdeaId, data)
-    return { success: true }
+    const response = await fetch(`/api/posts/${postIdeaId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to update post idea')
+    }
+    
+    const result = await response.json()
+    
+    return {
+      success: result.success,
+      message: result.message || 'Post idea updated successfully'
+    }
   },
 
-  // Toggle post idea status (planned/shot/uploaded)
+  // Toggle post idea status
   async toggleStatus(postIdeaId: number) {
-    await new Promise(resolve => setTimeout(resolve, 400))
-    console.log('Toggling post idea status:', postIdeaId)
-    return { success: true }
-  }
-}
+    // This would need to be implemented based on current status
+    // For now, we'll implement a simple status toggle
+    const response = await fetch(`/api/posts/${postIdeaId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        // Toggle logic would need current status to determine next status
+        status: 'shot' // Simplified for now
+      })
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || 'Failed to toggle post idea status')
+    }
+    
+    const result = await response.json()
+    
+    return {
+      success: result.success,
+      message: result.message || 'Post idea status updated'
+    }
+  },
 
-// Utility functions for date/time formatting
-export const formatUtils = {
+  // Helper functions for display formatting
   formatDate(dateString: string): string {
     const date = new Date(dateString)
-    const today = new Date()
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    
-    const isToday = date.toDateString() === today.toDateString()
-    const isTomorrow = date.toDateString() === tomorrow.toDateString()
-    
-    if (isToday) return 'Today'
-    if (isTomorrow) return 'Tomorrow'
-    
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      year: 'numeric'
     })
   },
 
   formatTime(dateString: string): string {
-    return new Date(dateString).toLocaleTimeString('en-US', {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true
@@ -191,11 +326,15 @@ export const formatUtils = {
   },
 
   formatDuration(minutes: number): string {
-    if (minutes < 60) {
-      return `${minutes}m`
-    }
     const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+    const mins = minutes % 60
+    
+    if (hours === 0) {
+      return `${mins}m`
+    } else if (mins === 0) {
+      return `${hours}h`
+    } else {
+      return `${hours}h ${mins}m`
+    }
   }
 } 

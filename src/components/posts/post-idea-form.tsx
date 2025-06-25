@@ -1,0 +1,604 @@
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { FormSheet } from '@/components/ui/form-sheet'
+import { LoadingButton } from '@/components/ui/loading-button'
+import { Button } from '@/components/ui/button'
+import { MobileInput } from '@/components/ui/mobile-input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { useAsync } from '@/lib/hooks/use-async'
+import { useFieldValidation } from '@/lib/hooks/use-field-validation'
+import { useClient } from '@/contexts/client-context'
+import { toast } from 'sonner'
+import { useConfiguredPlatformsWithOverride, useAllPlatformsWithStatusAndOverride } from '@/lib/hooks/use-client-platforms'
+import { CheckCircle, Plus, Edit, FileText, Users, X } from 'lucide-react'
+import { CONTENT_TYPE_OPTIONS } from '@/lib/constants/platforms'
+import { shootsApi } from '@/lib/api/shoots'
+import { type PostIdea } from '@/lib/hooks/use-posts'
+import { ClientData } from '@/lib/types/client'
+
+// Unified interfaces
+export interface PostIdeaData {
+  title: string
+  platforms: string[]
+  contentType: 'photo' | 'video' | 'reel' | 'story' | 'carousel'
+  caption?: string
+  shotList?: string[]
+  notes?: string
+  clientName?: string // For standalone post creation
+}
+
+export interface PostIdeaFormProps {
+  // Controlled pattern (recommended)
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  
+  // Trigger pattern (legacy support)
+  trigger?: React.ReactNode
+  
+  // Mode and context
+  mode: 'create' | 'edit' | 'duplicate' | 'quick-add'
+  context?: 'standalone' | 'shoot' // standalone = posts page, shoot = within a shoot
+  
+  // Data
+  shootId?: string
+  postIdea?: PostIdea
+  
+  // Client override for shoot context
+  clientOverride?: ClientData | null
+  
+  // Behavior
+  onSuccess: () => void
+  onCancel?: () => void
+  
+  // UI preferences
+  displayMode?: 'dialog' | 'sheet' | 'form-sheet'
+  title?: string
+  description?: string
+}
+
+// API functions
+const createStandalonePost = async (data: PostIdeaData): Promise<PostIdea> => {
+  const response = await fetch('/api/posts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  
+  if (!response.ok) {
+    const errorData = await response.json()
+    throw new Error(errorData.error || 'Failed to create post')
+  }
+  
+  const result = await response.json()
+  return result.post
+}
+
+const updatePost = async (postId: number, data: PostIdeaData): Promise<PostIdea> => {
+  const response = await fetch(`/api/posts/${postId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  
+  if (!response.ok) {
+    const errorData = await response.json()
+    throw new Error(errorData.error || 'Failed to update post')
+  }
+  
+  const result = await response.json()
+  return result.post
+}
+
+const addPostToShoot = async (shootId: string, data: PostIdeaData): Promise<PostIdea> => {
+  // Convert PostIdeaData to the format expected by shootsApi.addPostIdea
+  // Map carousel to photo for shoots API compatibility
+  const contentType = data.contentType === 'carousel' ? 'photo' : data.contentType as 'photo' | 'video' | 'reel' | 'story'
+  
+  const shootPostData = {
+    title: data.title,
+    platforms: data.platforms,
+    contentType,
+    caption: data.caption,
+    shotList: data.shotList?.join('\n') || '', // Convert array to newline-separated string
+    notes: data.notes
+  }
+  
+  const result = await shootsApi.addPostIdea(shootId, shootPostData)
+  
+  // Convert the result back to PostIdea format
+  return {
+    id: result.id,
+    title: result.title,
+    platforms: result.platforms,
+    contentType: result.contentType,
+    caption: result.caption,
+    shotList: result.shots.map(shot => shot.text),
+    notes: data.notes,
+    status: 'planned',
+    client: null, // Will be populated by the API response
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+}
+
+export const PostIdeaForm = ({
+  open,
+  onOpenChange,
+  trigger,
+  mode,
+  context = 'standalone',
+  shootId,
+  postIdea,
+  clientOverride,
+  onSuccess,
+  onCancel,
+  displayMode = 'dialog',
+  title,
+  description
+}: PostIdeaFormProps) => {
+  // State management - support both controlled and uncontrolled patterns
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = open !== undefined
+  const isOpen = isControlled ? open : internalOpen
+  
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(postIdea?.platforms || [])
+  const [selectedContentType, setSelectedContentType] = useState<PostIdeaData['contentType']>(postIdea?.contentType || 'photo')
+  const [selectedClient, setSelectedClient] = useState(postIdea?.client?.name || '')
+  const [shotList, setShotList] = useState<string[]>(postIdea?.shotList || [''])
+  const [caption, setCaption] = useState(postIdea?.caption || '')
+  const [notes, setNotes] = useState(postIdea?.notes || '')
+
+  const { selectedClient: contextClient, clients } = useClient()
+  
+  // Get all platforms and filter based on context
+  // Use clientOverride when provided (shoot context) to show the shoot's client platforms
+  const configuredPlatforms = useConfiguredPlatformsWithOverride(clientOverride)
+  const allPlatformsWithStatus = useAllPlatformsWithStatusAndOverride(clientOverride)
+  
+  // Choose appropriate platforms based on context
+  const platforms = context === 'shoot' || mode === 'quick-add' 
+    ? configuredPlatforms // Only show configured platforms for shoot context
+    : allPlatformsWithStatus // Show all platforms with status for standalone posts
+
+  // API hooks
+  const { loading: createLoading, execute: executeCreate } = useAsync(createStandalonePost)
+  const { loading: updateLoading, execute: executeUpdate } = useAsync(updatePost)
+  const { loading: addToShootLoading, execute: executeAddToShoot } = useAsync(addPostToShoot)
+  
+  const loading = createLoading || updateLoading || addToShootLoading
+
+  // Field validation
+  const titleField = useFieldValidation({
+    fieldName: 'title',
+    initialValue: mode === 'duplicate' ? `${postIdea?.title} (Copy)` : (postIdea?.title || ''),
+    validateOnChange: true,
+    validateOnBlur: true,
+    showValidation: isOpen
+  })
+
+  // Get available clients for standalone context
+  const availableClients = clients.filter(client => client.type === 'client')
+
+  // Handle open/close state changes
+  const handleOpenChange = (newOpen: boolean) => {
+    if (isControlled) {
+      onOpenChange?.(newOpen)
+    } else {
+      setInternalOpen(newOpen)
+    }
+    
+    if (!newOpen) {
+      onCancel?.()
+    }
+  }
+
+  // Initialize form data
+  useEffect(() => {
+    if (postIdea && mode === 'edit') {
+      setSelectedClient(postIdea.client?.name || '')
+    } else if (!postIdea && contextClient.type === 'client') {
+      setSelectedClient(contextClient.name)
+    }
+  }, [postIdea, mode, contextClient])
+
+  // Platform handling
+  const togglePlatform = (platformName: string) => {
+    setSelectedPlatforms(prev => 
+      prev.includes(platformName) 
+        ? prev.filter(p => p !== platformName)
+        : [...prev, platformName]
+    )
+  }
+
+  // Shot list handling
+  const addShotItem = () => {
+    setShotList(prev => [...prev, ''])
+  }
+
+  const updateShotItem = (index: number, value: string) => {
+    setShotList(prev => prev.map((item, i) => i === index ? value : item))
+  }
+
+  const removeShotItem = (index: number) => {
+    if (shotList.length > 1) {
+      setShotList(prev => prev.filter((_, i) => i !== index))
+    }
+  }
+
+  // Form validation
+  const validateForm = (): string | null => {
+    const titleValidation = titleField.validate()
+    if (!titleValidation.valid) {
+      return titleValidation.error || 'Please enter a valid title'
+    }
+
+    if (selectedPlatforms.length === 0) {
+      return 'Please select at least one platform'
+    }
+
+    if (context === 'standalone' && !selectedClient) {
+      return 'Please select a client'
+    }
+
+    return null
+  }
+
+  // Form submission
+  const handleSubmit = async () => {
+    const validationError = validateForm()
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+
+    const formData: PostIdeaData = {
+      title: titleField.value,
+      platforms: selectedPlatforms,
+      contentType: selectedContentType,
+      caption: caption || undefined,
+      shotList: shotList.filter(shot => shot.trim() !== ''),
+      notes: notes || undefined,
+      clientName: context === 'standalone' ? selectedClient : undefined
+    }
+
+    try {
+      if (mode === 'edit' && postIdea) {
+        await executeUpdate(postIdea.id, formData)
+      } else if (context === 'shoot' && shootId) {
+        await executeAddToShoot(shootId, formData)
+      } else {
+        await executeCreate(formData)
+      }
+
+      if (!loading) {
+        const actionText = mode === 'edit' ? 'updated' : 'created'
+        toast.success(`Post idea ${actionText} successfully!`)
+        handleOpenChange(false)
+        onSuccess()
+      }
+    } catch (error) {
+      console.error('Error submitting form:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to save post idea')
+    }
+  }
+
+  // Dynamic titles and descriptions
+  const getTitle = () => {
+    if (title) return title
+    if (mode === 'edit') return 'Edit Post Idea'
+    if (mode === 'duplicate') return 'Duplicate Post Idea'
+    if (mode === 'quick-add') return 'Quick Add Post'
+    return 'Create Post Idea'
+  }
+
+  const getDescription = () => {
+    if (description) return description
+    if (mode === 'edit') return 'Make changes to your post idea'
+    if (mode === 'duplicate') return 'Create a copy of this post idea'
+    if (mode === 'quick-add') return 'Quickly add a new post idea'
+    return 'Create a new post idea for your content'
+  }
+
+  const getIcon = () => {
+    if (mode === 'edit') return Edit
+    if (mode === 'duplicate') return FileText
+    if (mode === 'quick-add') return Plus
+    return Plus
+  }
+
+  // Render form content
+  const renderFormContent = () => (
+    <div className="space-y-6">
+      {/* Title */}
+      <div className="space-y-2">
+        <Label htmlFor="title">Title *</Label>
+        <MobileInput
+          id="title"
+          name="title"
+          placeholder="Enter post title..."
+          value={titleField.value}
+          onChange={titleField.handleChange}
+          onBlur={titleField.handleBlur}
+          error={titleField.validationResult.error}
+          validationState={titleField.validationResult.state}
+          required
+        />
+      </div>
+
+      {/* Client Selection (only for standalone context) */}
+      {context === 'standalone' && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Client *</Label>
+          <Select value={selectedClient} onValueChange={setSelectedClient} required>
+            <SelectTrigger>
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-gray-500" />
+                <span>{selectedClient || 'Choose a client'}</span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              {availableClients.map((client) => (
+                <SelectItem key={client.id} value={client.name}>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    <span>{client.name}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isOpen && !selectedClient && (
+            <p className="text-sm text-red-600">Please select a client</p>
+          )}
+        </div>
+      )}
+
+      {/* Platforms */}
+      <div className="space-y-3">
+        <Label>Platforms *</Label>
+        <div className="flex flex-wrap gap-2">
+          {platforms.map((platform) => (
+            <button
+              key={platform.name}
+              type="button"
+              onClick={() => togglePlatform(platform.name)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors relative ${
+                selectedPlatforms.includes(platform.name)
+                  ? 'bg-blue-500 text-white'
+                  : platform.isConfigured
+                  ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
+            >
+              <div className="flex items-center gap-1">
+                {platform.name}
+                {platform.isConfigured && (
+                  <CheckCircle className="h-3 w-3" />
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+        {selectedPlatforms.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {selectedPlatforms.map((platform) => (
+              <Badge key={platform} variant="secondary" className="text-xs">
+                {platform}
+              </Badge>
+            ))}
+          </div>
+        )}
+        {isOpen && selectedPlatforms.length === 0 && (
+          <p className="text-sm text-red-600">Please select at least one platform</p>
+        )}
+        <p className="text-xs text-gray-500">
+          Platforms with ✓ have social media handles configured in client settings
+        </p>
+      </div>
+
+      {/* Content Type */}
+      <div className="space-y-2">
+        <Label>Content Type *</Label>
+        <Select value={selectedContentType} onValueChange={(value: PostIdeaData['contentType']) => setSelectedContentType(value)}>
+          <SelectTrigger className="h-12 text-base tap-target">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CONTENT_TYPE_OPTIONS.map((type) => (
+              <SelectItem key={type.value} value={type.value}>
+                {type.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Caption */}
+      <div className="space-y-2">
+        <Label htmlFor="caption">Caption</Label>
+        <Textarea
+          id="caption"
+          name="caption"
+          placeholder="Write your caption..."
+          value={caption}
+          onChange={(e) => setCaption(e.target.value)}
+          rows={3}
+          className="text-base tap-target resize-none"
+        />
+      </div>
+
+      {/* Shot List */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label>Shot List</Label>
+          <button
+            type="button"
+            onClick={addShotItem}
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            + Add Shot
+          </button>
+        </div>
+        <div className="space-y-2">
+          {shotList.map((shot, index) => (
+            <div key={index} className="flex gap-2">
+              <MobileInput
+                placeholder={`Shot ${index + 1}...`}
+                value={shot}
+                onChange={(e) => updateShotItem(index, e.target.value)}
+                className="flex-1"
+                showValidationIcon={false}
+              />
+              {shotList.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeShotItem(index)}
+                  className="px-3 py-2 text-red-600 hover:text-red-700"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div className="space-y-2">
+        <Label htmlFor="notes">Notes</Label>
+        <Textarea
+          id="notes"
+          name="notes"
+          placeholder="Additional notes..."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          className="text-base tap-target resize-none"
+        />
+      </div>
+    </div>
+  )
+
+  // Render based on display mode and pattern
+  if (displayMode === 'form-sheet') {
+    return (
+      <FormSheet
+        trigger={trigger}
+        formContent={renderFormContent()}
+        title={getTitle()}
+        description={getDescription()}
+        icon={getIcon()}
+        isOpen={isOpen}
+        onOpenChange={handleOpenChange}
+        onSubmit={handleSubmit}
+        loading={loading}
+        submitText={mode === 'edit' ? 'Update Post Idea' : 'Create Post Idea'}
+        loadingText={mode === 'edit' ? 'Updating...' : 'Creating...'}
+      />
+    )
+  }
+
+  if (displayMode === 'sheet') {
+    return (
+      <Sheet open={isOpen} onOpenChange={handleOpenChange}>
+        {/* Only render trigger if not controlled */}
+        {!isControlled && trigger && (
+          <SheetTrigger asChild>
+            {trigger}
+          </SheetTrigger>
+        )}
+        <SheetContent side="bottom" className="h-[90vh] max-h-[700px]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              {React.createElement(getIcon(), { className: "h-5 w-5" })}
+              {getTitle()}
+            </SheetTitle>
+            <SheetDescription>
+              {getDescription()}
+            </SheetDescription>
+          </SheetHeader>
+          
+          <div className="flex flex-col h-full px-4 pb-4">
+            <div className="flex-1 space-y-4 overflow-y-auto pt-4">
+              {renderFormContent()}
+            </div>
+
+            <div className="flex gap-3 pt-6 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleOpenChange(false)}
+                className="flex-1 h-12 tap-target"
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <LoadingButton
+                onClick={handleSubmit}
+                className="flex-1 h-12"
+                loading={loading}
+                loadingText={mode === 'edit' ? 'Updating...' : 'Creating...'}
+              >
+                {mode === 'edit' ? 'Update Post Idea' : 'Create Post Idea'}
+              </LoadingButton>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+    )
+  }
+
+  // Default: Dialog mode
+  return (
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      {/* Only render trigger if not controlled */}
+      {!isControlled && trigger && (
+        <DialogTrigger asChild>
+          {trigger}
+        </DialogTrigger>
+      )}
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {React.createElement(getIcon(), { className: "h-5 w-5" })}
+            {getTitle()}
+          </DialogTitle>
+          <DialogDescription>
+            {getDescription()}
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 overflow-y-auto max-h-[60vh] pr-2">
+          {renderFormContent()}
+        </div>
+
+        <div className="flex gap-3 pt-4 border-t">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+            className="flex-1"
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <LoadingButton
+            onClick={handleSubmit}
+            className="flex-1"
+            loading={loading}
+            loadingText={mode === 'edit' ? 'Updating...' : 'Creating...'}
+          >
+            {mode === 'edit' ? 'Update Post Idea' : 'Create Post Idea'}
+          </LoadingButton>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+} 

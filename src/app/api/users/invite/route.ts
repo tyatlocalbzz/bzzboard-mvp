@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: unknown) {
     console.error('Invite user error:', error)
-    
+
     return NextResponse.json(
       { error: 'Failed to invite user' },
       { status: 500 }

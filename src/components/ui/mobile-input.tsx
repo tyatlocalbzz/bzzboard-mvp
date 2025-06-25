@@ -76,21 +76,21 @@ export const MobileInput = React.forwardRef<HTMLInputElement, MobileInputProps>(
           </label>
         )}
         <div className="relative">
-          <Input
-            ref={ref}
-            id={inputId}
-            name={name}
-            className={cn(
-              "h-12 text-base tap-target", // Mobile-optimized height and text size
-              "transition-colors duration-200", // Smooth transitions
+        <Input
+          ref={ref}
+          id={inputId}
+          name={name}
+          className={cn(
+            "h-12 text-base tap-target", // Mobile-optimized height and text size
+            "transition-colors duration-200", // Smooth transitions
               getBorderClass(),
               showValidationIcon && validationState !== 'idle' && "pr-10", // Add padding for icon
-              className
-            )}
+            className
+          )}
             aria-invalid={error || validationState === 'invalid' ? 'true' : 'false'}
-            aria-describedby={getAriaDescribedBy()}
-            {...props}
-          />
+          aria-describedby={getAriaDescribedBy()}
+          {...props}
+        />
           
           {/* Validation Icon */}
           {showValidationIcon && validationState !== 'idle' && (

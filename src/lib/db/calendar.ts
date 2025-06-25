@@ -478,6 +478,64 @@ export async function checkSchedulingConflicts(
 }
 
 /**
+ * Check for conflicts and update event with conflict details
+ * Enhanced version that stores which events are conflicting
+ */
+export async function updateEventConflictStatus(
+  userEmail: string,
+  eventId: string,
+  startTime: Date,
+  endTime: Date,
+  calendarId: string = 'primary'
+): Promise<void> {
+  try {
+    // Find conflicts for this specific event
+    const conflicts = await checkSchedulingConflicts(
+      userEmail,
+      startTime,
+      endTime,
+      eventId, // Exclude the event itself
+      calendarId
+    )
+
+    // Prepare conflict details
+    const conflictDetails = conflicts.map(conflict => ({
+      eventId: conflict.googleEventId,
+      title: conflict.title,
+      startTime: conflict.startTime.toISOString(),
+      endTime: conflict.endTime.toISOString()
+    }))
+
+    // Update the event with conflict information
+    await db
+      .update(calendarEventsCache)
+      .set({
+        conflictDetected: conflicts.length > 0,
+        conflictDetails: conflicts.length > 0 ? conflictDetails : null,
+        syncStatus: conflicts.length > 0 ? 'error' : 'synced',
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(calendarEventsCache.userEmail, userEmail),
+          eq(calendarEventsCache.calendarId, calendarId),
+          eq(calendarEventsCache.googleEventId, eventId)
+        )
+      )
+
+    if (conflicts.length > 0) {
+      console.log(`⚠️ [Calendar DB] Updated event "${eventId}" with ${conflicts.length} conflict(s):`, 
+        conflicts.map(c => c.title).join(', '))
+    } else {
+      console.log(`✅ [Calendar DB] Event "${eventId}" has no conflicts`)
+    }
+
+  } catch (error) {
+    console.error('❌ [Calendar DB] Error updating event conflict status:', error)
+  }
+}
+
+/**
  * Clean up orphaned calendar events (events created for shoots that no longer exist)
  * DRY: Centralized cleanup for stale calendar data
  */

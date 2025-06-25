@@ -8,7 +8,7 @@ interface EmptyStateProps {
   title: string
   description: string
   action?: {
-    label: string
+    label?: string
     onClick?: () => void
     children?: React.ReactNode
   }
@@ -30,11 +30,11 @@ export const EmptyState = ({
       {action && (
         action.children ? (
           action.children
-        ) : (
+        ) : action.label ? (
           <Button onClick={action.onClick} className="tap-target">
             {action.label}
           </Button>
-        )
+        ) : null
       )}
     </div>
   )

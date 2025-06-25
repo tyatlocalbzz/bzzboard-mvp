@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { ClientData, ClientContextType, DEFAULT_CLIENT } from '@/lib/types/client'
 
 // API function to fetch clients
@@ -60,31 +61,49 @@ export const ClientProvider = ({ children }: ClientProviderProps) => {
   const [selectedClient, setSelectedClientState] = useState<ClientData>(DEFAULT_CLIENT)
   const [clients, setClients] = useState<ClientData[]>([DEFAULT_CLIENT])
   const [isMounted, setIsMounted] = useState(false)
+  const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Load clients from API
+  // Load clients from API - only when session is ready
   useEffect(() => {
     const loadClients = async () => {
-      try {
-        const fetchedClients = await fetchClients()
-        
-        // Always include the "All Clients" option as the first item
-        // Filter out any existing "All Clients" entries from API response to avoid duplicates
-        const realClients = fetchedClients.filter(client => client.type !== 'all')
-        const allClients = [DEFAULT_CLIENT, ...realClients]
-        
-        console.log('✅ [ClientContext] Setting clients list:', allClients.map(c => ({ id: c.id, name: c.name, type: c.type })))
-        setClients(allClients)
-      } catch (error) {
-        console.error('Error loading clients:', error)
-        // Keep default clients on error
+      // Don't fetch if session is still loading
+      if (status === 'loading') {
+        console.log('⏳ [ClientContext] Waiting for session to load...')
+        return
+      }
+
+      // Don't fetch if user is not authenticated
+      if (status === 'unauthenticated') {
+        console.log('🔒 [ClientContext] User not authenticated, using default client')
         setClients([DEFAULT_CLIENT])
+        return
+      }
+
+      // Only fetch when user is authenticated
+      if (status === 'authenticated' && session?.user) {
+        console.log('✅ [ClientContext] User authenticated, fetching clients...')
+        try {
+          const fetchedClients = await fetchClients()
+          
+          // Always include the "All Clients" option as the first item
+          // Filter out any existing "All Clients" entries from API response to avoid duplicates
+          const realClients = fetchedClients.filter(client => client.type !== 'all')
+          const allClients = [DEFAULT_CLIENT, ...realClients]
+          
+          console.log('✅ [ClientContext] Setting clients list:', allClients.map(c => ({ id: c.id, name: c.name, type: c.type })))
+          setClients(allClients)
+        } catch (error) {
+          console.error('Error loading clients:', error)
+          // Keep default clients on error
+          setClients([DEFAULT_CLIENT])
+        }
       }
     }
 
     loadClients()
-  }, [])
+  }, [status, session]) // Depend on session status
 
   // Initialize from URL params after mounting
   useEffect(() => {

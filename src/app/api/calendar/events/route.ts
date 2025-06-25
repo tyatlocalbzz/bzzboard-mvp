@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
       attendees: event.attendees || [],
       isRecurring: event.isRecurring,
       conflictDetected: event.conflictDetected,
+      conflictDetails: event.conflictDetails || undefined, // Include conflict details
       syncStatus: event.syncStatus,
       shootId: event.shootId,
       isShootEvent: event.shootId !== null,

@@ -25,9 +25,26 @@ interface ActionItem {
 }
 
 const deleteShoot = async (id: string) => {
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  console.log('Deleting shoot:', id)
-  return { success: true }
+  const response = await fetch(`/api/shoots/${id}`, {
+    method: 'DELETE',
+  })
+  
+  if (!response.ok) {
+    throw new Error(`Failed to delete shoot: ${response.statusText}`)
+  }
+  
+  const data = await response.json()
+  
+  if (!data.success) {
+    throw new Error(data.error || 'Failed to delete shoot')
+  }
+  
+  return {
+    success: true,
+    message: data.message || 'Shoot deleted successfully',
+    calendarEventRemoved: data.calendarEventRemoved,
+    recoveryNote: data.recoveryNote
+  }
 }
 
 const changeShootStatus = async (id: string, newStatus: ShootStatus, action?: string) => {
@@ -80,8 +97,23 @@ export const ShootActions = ({ children, shoot, onSuccess }: ShootActionsProps) 
   const handleDelete = async () => {
     const result = await executeDelete(shoot.id.toString())
     if (result) {
-      toast.success('Shoot deleted successfully!')
-      router.push('/shoots')
+      toast.success(result.message || 'Shoot deleted successfully!')
+      
+      // Show additional info if calendar event was removed
+      if (result.calendarEventRemoved) {
+        toast.info('Calendar event removed from Google Calendar')
+      }
+      
+      // Show recovery note if available
+      if (result.recoveryNote) {
+        toast.info(result.recoveryNote, { duration: 5000 })
+      }
+      
+      // Trigger success callback to refresh data
+      onSuccess()
+      
+      // Navigate to shoots list with refresh parameter
+      router.push('/shoots?refresh=true')
     }
   }
 

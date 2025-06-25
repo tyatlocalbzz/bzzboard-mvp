@@ -20,6 +20,7 @@ interface UseUnifiedEventsReturn {
   calendarEventsCount: number
   refresh: () => Promise<void>
   syncCalendar: () => Promise<void>
+  optimisticDelete: (eventId: string, eventType: 'shoot' | 'calendar') => void
 }
 
 export const useUnifiedEvents = (options: UseUnifiedEventsOptions = {}): UseUnifiedEventsReturn => {
@@ -131,6 +132,15 @@ export const useUnifiedEvents = (options: UseUnifiedEventsOptions = {}): UseUnif
     return () => clearInterval(interval)
   }, [autoRefresh, fetchEvents])
 
+  const optimisticDelete = useCallback((eventId: string, eventType: 'shoot' | 'calendar') => {
+    setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId))
+    if (eventType === 'shoot') {
+      setShootsCount(prevCount => prevCount - 1)
+    } else if (eventType === 'calendar') {
+      setCalendarEventsCount(prevCount => prevCount - 1)
+    }
+  }, [])
+
   return {
     events,
     loading,
@@ -139,6 +149,7 @@ export const useUnifiedEvents = (options: UseUnifiedEventsOptions = {}): UseUnif
     shootsCount,
     calendarEventsCount,
     refresh: fetchEvents,
-    syncCalendar
+    syncCalendar,
+    optimisticDelete
   }
 } 

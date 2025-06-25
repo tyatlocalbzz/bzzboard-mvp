@@ -14,6 +14,12 @@ export interface CalendarEvent {
   }>
   isRecurring: boolean
   conflictDetected: boolean
+  conflictDetails?: Array<{
+    eventId: string
+    title: string
+    startTime: string
+    endTime: string
+  }>
   syncStatus: 'synced' | 'pending' | 'error'
   shootId?: number
   isShootEvent: boolean

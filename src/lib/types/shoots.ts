@@ -29,6 +29,78 @@ export interface Shoot {
   startedAt?: string
   notes?: string
   postIdeasCount?: number
+  
+  // Enhanced Google Calendar integration fields
+  googleCalendarEventId?: string
+  googleCalendarSyncStatus?: string
+  googleCalendarLastSync?: string
+  googleCalendarError?: string
+  googleCalendarHtmlLink?: string
+  googleCalendarEtag?: string
+  googleCalendarUpdated?: string
+  googleCalendarSequence?: number
+  googleCalendarICalUID?: string
+  googleCalendarTimeZone?: string
+  googleCalendarStatus?: string
+  googleCalendarTransparency?: string
+  googleCalendarVisibility?: string
+  googleCalendarAttendees?: Array<{
+    email: string
+    displayName?: string
+    responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted'
+    optional?: boolean
+    organizer?: boolean
+    self?: boolean
+    resource?: boolean
+  }>
+  googleCalendarOrganizer?: {
+    email: string
+    displayName?: string
+    self?: boolean
+  }
+  googleCalendarCreator?: {
+    email: string
+    displayName?: string
+    self?: boolean
+  }
+  googleCalendarRecurrence?: string[]
+  googleCalendarRecurringEventId?: string
+  googleCalendarOriginalStartTime?: string
+  googleCalendarConferenceData?: {
+    entryPoints?: Array<{
+      entryPointType: string
+      uri: string
+      label?: string
+      pin?: string
+    }>
+    conferenceSolution?: {
+      key: { type: string }
+      name: string
+      iconUri?: string
+    }
+    conferenceId?: string
+    signature?: string
+    notes?: string
+  }
+  googleCalendarReminders?: {
+    useDefault?: boolean
+    overrides?: Array<{
+      method: 'email' | 'popup'
+      minutes: number
+    }>
+  }
+  googleCalendarHangoutLink?: string
+  googleCalendarGuestsCanModify?: boolean
+  googleCalendarGuestsCanInviteOthers?: boolean
+  googleCalendarGuestsCanSeeOtherGuests?: boolean
+  googleCalendarColorId?: string
+  googleCalendarLocationEnhanced?: {
+    displayName?: string
+    coordinates?: {
+      latitude: number
+      longitude: number
+    }
+  }
 }
 
 export interface ActiveShootData {
@@ -120,6 +192,12 @@ export interface UnifiedEvent {
   attendees?: CalendarEventAttendee[]
   isRecurring?: boolean
   conflictDetected?: boolean
+  conflictDetails?: Array<{
+    eventId: string
+    title: string
+    startTime: string
+    endTime: string
+  }>
   syncStatus?: 'synced' | 'pending' | 'error'
   isShootEvent?: boolean
   lastModified?: string

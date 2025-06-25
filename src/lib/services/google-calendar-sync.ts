@@ -254,7 +254,7 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
 
   /**
    * Check for conflicts between calendar events and our shoots
-   * DRY: Centralized conflict detection
+   * DRY: Centralized conflict detection with detailed conflict information
    */
   private async detectConflicts(
     userEmail: string,
@@ -265,23 +265,24 @@ export class GoogleCalendarSync extends GoogleCalendarBase {
       const events = await getCachedEvents(userEmail, calendarId)
       let conflictCount = 0
 
-      // Check each event for conflicts (simplified logic)
+      // Import the enhanced conflict detection function
+      const { updateEventConflictStatus } = await import('@/lib/db/calendar')
+
+      // Check each event for conflicts with detailed information
       for (const event of events) {
-        const conflicts = await checkSchedulingConflicts(
+        await updateEventConflictStatus(
           userEmail,
+          event.googleEventId,
           new Date(event.startTime),
           new Date(event.endTime),
-          event.googleEventId,
           calendarId
         )
 
-        if (conflicts.length > 0) {
-          // Mark event as having conflict
-          await upsertCachedEvent({
-            ...event,
-            conflictDetected: true,
-            syncStatus: 'error'
-          })
+        // Check if the event now has conflicts (after update)
+        const updatedEvents = await getCachedEvents(userEmail, calendarId)
+        const updatedEvent = updatedEvents.find(e => e.googleEventId === event.googleEventId)
+        
+        if (updatedEvent?.conflictDetected) {
           conflictCount++
         }
       }

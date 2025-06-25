@@ -7,20 +7,23 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { PostIdeaSection } from '@/components/shoots/post-idea-section'
-import { QuickAddAction } from '@/components/shoots/quick-add-action'
+import { PostIdeaForm } from '@/components/posts/post-idea-form'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { StopCircle, ChevronDown, ChevronRight } from 'lucide-react'
+import { StopCircle, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { useAsync } from '@/lib/hooks/use-async'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
+import { useClient } from '@/contexts/client-context'
+import { ClientData } from '@/lib/types/client'
 import { toast } from 'sonner'
 import { shootsApi } from '@/lib/api/shoots'
-import type { ActiveShootData, PostIdeaData } from '@/lib/types/shoots'
+import type { ActiveShootData } from '@/lib/types/shoots'
 
 export default function ActiveShootPage() {
   const params = useParams()
   const router = useRouter()
   const shootId = params.id as string
   const { elapsedTime, endShoot: endActiveShoot } = useActiveShoot()
+  const { clients } = useClient()
   
   const [activeData, setActiveData] = useState<ActiveShootData | null>(null)
   const [showCompleted, setShowCompleted] = useState(false)
@@ -163,22 +166,6 @@ export default function ActiveShootPage() {
     toast.success('Shot added!')
   }, [])
 
-  const handleAddPostIdea = useCallback(async (postIdeaData: PostIdeaData) => {
-    const newPostIdea = await shootsApi.addPostIdea(shootId, postIdeaData)
-    
-    // Update local state with new post idea
-    setActiveData(prev => {
-      if (!prev) return prev
-      
-      return {
-        ...prev,
-        postIdeas: [...prev.postIdeas, newPostIdea]
-      }
-    })
-    
-    toast.success('Post idea added!')
-  }, [shootId])
-
   const handlePostIdeaClick = useCallback((postIdeaId: number) => {
     // Navigate to post idea details (back to shoot details page with focus on specific post idea)
     router.push(`/shoots/${shootId}#post-idea-${postIdeaId}`)
@@ -199,6 +186,11 @@ export default function ActiveShootPage() {
   const handleCancelEndShoot = useCallback(() => {
     setShowEndDialog(false)
   }, [])
+
+  // Helper function to find client override from shoot's client name
+  const getClientOverride = (clientName: string): ClientData | null => {
+    return clients.find(client => client.name === clientName && client.type === 'client') || null
+  }
 
   // Show loading state
   if (isInitialLoading || !activeData) {
@@ -355,9 +347,27 @@ export default function ActiveShootPage() {
       </div>
 
       {/* Quick Add Post Idea FAB */}
-      <QuickAddAction
-        onAddPostIdea={handleAddPostIdea}
-      />
+      <div className="fixed bottom-20 right-4 z-40">
+        <PostIdeaForm
+          mode="quick-add"
+          context="shoot"
+          shootId={shootId}
+          clientOverride={getClientOverride(activeData.shoot.client)}
+          onSuccess={() => {
+            // Refresh the page data
+            window.location.reload()
+          }}
+          displayMode="dialog"
+          trigger={
+            <Button
+              size="lg"
+              className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <Plus className="h-6 w-6" />
+            </Button>
+          }
+        />
+      </div>
 
       {/* End Shoot Confirmation Dialog */}
       <Dialog open={showEndDialog} onOpenChange={setShowEndDialog}>

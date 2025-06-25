@@ -63,7 +63,7 @@ export const getClientById = async (id: number): Promise<ClientSelect | null> =>
   return result[0] || null
 }
 
-// Get client by name
+// Get single client by name
 export const getClientByName = async (name: string): Promise<ClientSelect | null> => {
   const result = await db
     .select()

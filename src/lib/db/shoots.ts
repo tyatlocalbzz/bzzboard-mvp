@@ -7,13 +7,47 @@ export type NewShoot = typeof shoots.$inferInsert
 export type ShootSelect = typeof shoots.$inferSelect
 export type ShootStatus = 'scheduled' | 'active' | 'completed' | 'cancelled'
 
-export interface ShootWithClient extends ShootSelect {
+// Specific result types that match what queries actually return
+export interface ShootWithClientBasic {
+  id: number
+  title: string
+  clientId: number
+  scheduledAt: Date
+  duration: number
+  location: string | null
+  notes: string | null
+  status: string
+  startedAt: Date | null
+  completedAt: Date | null
+  // Basic Google Calendar integration fields (only what we select)
+  googleCalendarEventId: string | null
+  googleCalendarSyncStatus: string | null
+  googleCalendarLastSync: Date | null
+  googleCalendarError: string | null
+  // Soft delete fields
+  deletedAt: Date | null
+  deletedBy: number | null
+  createdAt: Date
+  updatedAt: Date
+  // Computed fields
   client: {
     id: number
     name: string
   } | null
   postIdeasCount: number
 }
+
+// Full shoot type that includes ALL database fields (for cases where we need everything)
+export interface ShootWithClientFull extends ShootSelect {
+  client: {
+    id: number
+    name: string
+  } | null
+  postIdeasCount: number
+}
+
+// Legacy alias for backward compatibility - points to the basic type
+export type ShootWithClient = ShootWithClientBasic
 
 export interface CreateShootInput {
   title: string
@@ -340,8 +374,40 @@ export const getPostIdeasForShoot = async (shootId: number) => {
   return result
 }
 
-// Add post idea to shoot
+// Check if post idea is already assigned to shoot
+export const isPostIdeaAssignedToShoot = async (shootId: number, postIdeaId: number): Promise<boolean> => {
+  const result = await db
+    .select()
+    .from(shootPostIdeas)
+    .where(and(
+      eq(shootPostIdeas.shootId, shootId),
+      eq(shootPostIdeas.postIdeaId, postIdeaId)
+    ))
+    .limit(1)
+
+  return result.length > 0
+}
+
+// Get post ideas that are already assigned to a specific shoot
+export const getAssignedPostIdeaIds = async (shootId: number): Promise<number[]> => {
+  const result = await db
+    .select({
+      postIdeaId: shootPostIdeas.postIdeaId
+    })
+    .from(shootPostIdeas)
+    .where(eq(shootPostIdeas.shootId, shootId))
+
+  return result.map(row => row.postIdeaId)
+}
+
+// Add post idea to shoot with duplicate check
 export const addPostIdeaToShoot = async (shootId: number, postIdeaId: number): Promise<void> => {
+  // Check if already assigned
+  const isAlreadyAssigned = await isPostIdeaAssignedToShoot(shootId, postIdeaId)
+  if (isAlreadyAssigned) {
+    throw new Error('Post idea is already assigned to this shoot')
+  }
+
   await db.insert(shootPostIdeas).values({
     shootId,
     postIdeaId,

@@ -11,6 +11,7 @@ export interface SessionUser {
   id: string
   email: string
   name: string
+  role: 'admin' | 'user'
 }
 
 // User creation/update types

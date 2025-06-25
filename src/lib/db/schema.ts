@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, integer, json, boolean, pgEnum } from 'drizzle-orm/pg-core'
+import { pgTable, serial, varchar, text, timestamp, integer, json, boolean, pgEnum, unique } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
 // Enums for better type safety
@@ -10,6 +10,36 @@ export const userStatusEnum = pgEnum('user_status', ['active', 'inactive', 'pend
 export const integrationProviderEnum = pgEnum('integration_provider', ['google-drive', 'google-calendar'])
 export const calendarEventStatusEnum = pgEnum('calendar_event_status', ['confirmed', 'tentative', 'cancelled'])
 export const calendarSyncStatusEnum = pgEnum('calendar_sync_status', ['synced', 'pending', 'error'])
+
+// System settings tables
+export const systemPlatforms = pgTable('system_platforms', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 50 }).notNull().unique(),
+  enabled: boolean('enabled').default(true).notNull(),
+  isDefault: boolean('is_default').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+export const systemContentTypes = pgTable('system_content_types', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 50 }).notNull().unique(),
+  value: varchar('value', { length: 50 }).notNull().unique(),
+  enabled: boolean('enabled').default(true).notNull(),
+  isDefault: boolean('is_default').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
+
+export const systemSettings = pgTable('system_settings', {
+  id: serial('id').primaryKey(),
+  key: varchar('key', { length: 100 }).notNull().unique(),
+  value: text('value').notNull(),
+  type: varchar('type', { length: 20 }).default('string').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})
 
 // Users table (for simple authentication)
 export const users = pgTable('users', {
@@ -74,11 +104,91 @@ export const shoots = pgTable('shoots', {
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
   
-  // Google Calendar integration fields
+  // Enhanced Google Calendar integration fields
   googleCalendarEventId: varchar('google_calendar_event_id', { length: 255 }),
   googleCalendarSyncStatus: varchar('google_calendar_sync_status', { length: 50 }), // pending, synced, error
   googleCalendarLastSync: timestamp('google_calendar_last_sync'),
   googleCalendarError: text('google_calendar_error'),
+  
+  // Essential sync fields for 2-way sync
+  googleCalendarHtmlLink: varchar('google_calendar_html_link', { length: 500 }),
+  googleCalendarEtag: varchar('google_calendar_etag', { length: 255 }),
+  googleCalendarUpdated: timestamp('google_calendar_updated'),
+  googleCalendarSequence: integer('google_calendar_sequence').default(0),
+  googleCalendarICalUID: varchar('google_calendar_ical_uid', { length: 255 }),
+  
+  // Timezone and status fields
+  googleCalendarTimeZone: varchar('google_calendar_time_zone', { length: 50 }),
+  googleCalendarStatus: varchar('google_calendar_status', { length: 20 }).default('confirmed'),
+  googleCalendarTransparency: varchar('google_calendar_transparency', { length: 20 }).default('opaque'),
+  googleCalendarVisibility: varchar('google_calendar_visibility', { length: 20 }).default('default'),
+  
+  // Attendee and collaboration fields
+  googleCalendarAttendees: json('google_calendar_attendees').$type<Array<{
+    email: string
+    displayName?: string
+    responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted'
+    optional?: boolean
+    organizer?: boolean
+    self?: boolean
+    resource?: boolean
+  }>>(),
+  googleCalendarOrganizer: json('google_calendar_organizer').$type<{
+    email: string
+    displayName?: string
+    self?: boolean
+  }>(),
+  googleCalendarCreator: json('google_calendar_creator').$type<{
+    email: string
+    displayName?: string
+    self?: boolean
+  }>(),
+  
+  // Recurrence fields
+  googleCalendarRecurrence: json('google_calendar_recurrence').$type<string[]>(),
+  googleCalendarRecurringEventId: varchar('google_calendar_recurring_event_id', { length: 255 }),
+  googleCalendarOriginalStartTime: timestamp('google_calendar_original_start_time'),
+  
+  // Conference and reminder fields
+  googleCalendarConferenceData: json('google_calendar_conference_data').$type<{
+    entryPoints?: Array<{
+      entryPointType: string
+      uri: string
+      label?: string
+      pin?: string
+    }>
+    conferenceSolution?: {
+      key: { type: string }
+      name: string
+      iconUri?: string
+    }
+    conferenceId?: string
+    signature?: string
+    notes?: string
+  }>(),
+  googleCalendarReminders: json('google_calendar_reminders').$type<{
+    useDefault?: boolean
+    overrides?: Array<{
+      method: 'email' | 'popup'
+      minutes: number
+    }>
+  }>(),
+  googleCalendarHangoutLink: varchar('google_calendar_hangout_link', { length: 500 }),
+  
+  // Permission fields
+  googleCalendarGuestsCanModify: boolean('google_calendar_guests_can_modify').default(false),
+  googleCalendarGuestsCanInviteOthers: boolean('google_calendar_guests_can_invite_others').default(false),
+  googleCalendarGuestsCanSeeOtherGuests: boolean('google_calendar_guests_can_see_other_guests').default(true),
+  
+  // Color and enhanced location fields
+  googleCalendarColorId: varchar('google_calendar_color_id', { length: 10 }),
+  googleCalendarLocationEnhanced: json('google_calendar_location_enhanced').$type<{
+    displayName?: string
+    coordinates?: {
+      latitude: number
+      longitude: number
+    }
+  }>(),
   
   // Soft delete fields
   deletedAt: timestamp('deleted_at'),
@@ -95,7 +205,10 @@ export const shootPostIdeas = pgTable('shoot_post_ideas', {
   postIdeaId: integer('post_idea_id').references(() => postIdeas.id).notNull(),
   completed: boolean('completed').default(false).notNull(),
   completedAt: timestamp('completed_at'),
-})
+}, (table) => ({
+  // Unique constraint to prevent duplicate assignments
+  uniqueShootPost: unique().on(table.shootId, table.postIdeaId),
+}))
 
 // Uploaded files table
 export const uploadedFiles = pgTable('uploaded_files', {
@@ -202,6 +315,12 @@ export const calendarEventsCache = pgTable('calendar_events_cache', {
   lastModified: timestamp('last_modified').notNull(),
   syncStatus: calendarSyncStatusEnum('sync_status').default('synced').notNull(),
   conflictDetected: boolean('conflict_detected').default(false).notNull(),
+  conflictDetails: json('conflict_details').$type<Array<{
+    eventId: string
+    title: string
+    startTime: string
+    endTime: string
+  }>>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -288,4 +407,12 @@ export type NewCalendarSyncToken = typeof calendarSyncTokens.$inferInsert
 export type CalendarWebhookChannel = typeof calendarWebhookChannels.$inferSelect
 export type NewCalendarWebhookChannel = typeof calendarWebhookChannels.$inferInsert
 export type CalendarEventCache = typeof calendarEventsCache.$inferSelect
-export type NewCalendarEventCache = typeof calendarEventsCache.$inferInsert 
+export type NewCalendarEventCache = typeof calendarEventsCache.$inferInsert
+
+// System settings types
+export type SystemPlatform = typeof systemPlatforms.$inferSelect
+export type NewSystemPlatform = typeof systemPlatforms.$inferInsert
+export type SystemContentType = typeof systemContentTypes.$inferSelect
+export type NewSystemContentType = typeof systemContentTypes.$inferInsert
+export type SystemSetting = typeof systemSettings.$inferSelect
+export type NewSystemSetting = typeof systemSettings.$inferInsert 

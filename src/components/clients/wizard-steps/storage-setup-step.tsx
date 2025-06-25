@@ -79,7 +79,7 @@ export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
       body: JSON.stringify({
         folderName: folderName.trim(),
         parentId: parentId
-      })
+    })
     })
 
     const data = await response.json()
@@ -157,7 +157,7 @@ export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
               helpText="Subfolder within client root for shoot content"
             />
           )}
-        </div>
+                </div>
       )}
 
       {/* Folder Structure Preview */}
@@ -174,13 +174,13 @@ export const StorageSetupStep = ({ data, onUpdate }: WizardStepProps) => {
             </div>
             <div className={storageSettings.contentFolderPath ? "ml-12" : "ml-8"}>
               ├── 📁 Hero Shot
-            </div>
+          </div>
             <div className={storageSettings.contentFolderPath ? "ml-12" : "ml-8"}>
               └── 📁 Behind Scenes
-            </div>
+                  </div>
             <div className={storageSettings.contentFolderPath ? "ml-8" : "ml-4"}>
               ├── 📁 Contracts (future)
-            </div>
+                </div>
             <div className={storageSettings.contentFolderPath ? "ml-8" : "ml-4"}>
               ├── 📁 Assets (future)
             </div>

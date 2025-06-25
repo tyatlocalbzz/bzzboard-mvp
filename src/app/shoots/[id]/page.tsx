@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+
 import { FormSheet } from "@/components/ui/form-sheet"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
@@ -16,7 +16,7 @@ import { MobileInput } from "@/components/ui/mobile-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Trash2, Play, Upload, CheckCircle, ExternalLink, AlertTriangle } from "lucide-react"
+import { Calendar, Clock, MapPin, Edit, Plus, MoreHorizontal, Users, Trash2, Play, Upload, CheckCircle, ExternalLink, AlertTriangle, Unlink } from "lucide-react"
 import { formatStatusText, getStatusColor, shootStatusManager, ShootStatus } from "@/lib/utils/status"
 import { useAsync } from "@/lib/hooks/use-async"
 import { useFieldValidation } from '@/lib/hooks/use-field-validation'
@@ -25,15 +25,19 @@ import { toast } from "sonner"
 import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
 import Link from 'next/link'
 import type { Shoot as BaseShoot, PostIdea } from '@/lib/types/shoots'
+import { ClientData } from '@/lib/types/client'
+import { PostIdeaForm } from '@/components/posts/post-idea-form'
+import { AddPostChoiceDialog } from '@/components/shoots/add-post-choice-dialog'
+import { AssignExistingPostsDialog } from '@/components/shoots/assign-existing-posts-dialog'
+import { useClient } from '@/contexts/client-context'
+
 
 // Extended shoot type with Google Calendar fields
 interface Shoot extends BaseShoot {
-  googleCalendarEventId?: string | null
-  googleCalendarSyncStatus?: 'pending' | 'synced' | 'error' | null
-  googleCalendarError?: string | null
+  googleCalendarEventId?: string
+  googleCalendarSyncStatus?: 'pending' | 'synced' | 'error'
+  googleCalendarError?: string
 }
-import { useAllPlatformsWithStatus } from '@/lib/hooks/use-client-platforms'
-import { CheckCircle as CheckCircleIcon } from 'lucide-react'
 
 // Additional types for this page
 interface RescheduleData {
@@ -57,15 +61,7 @@ interface ExtendedPostIdea extends PostIdea {
   notes?: string
 }
 
-// Extended PostIdeaData for this page
-interface ExtendedPostIdeaData {
-  title: string
-  platforms: string[]
-  contentType: 'photo' | 'video' | 'reel' | 'story'
-  caption?: string
-  shotList: string[]
-  notes?: string
-}
+
 
 // Real API functions using database
 const fetchShoot = async (id: string): Promise<Shoot> => {
@@ -136,6 +132,7 @@ const deleteShoot = async (id: string) => {
   return {
     success: true,
     message: data.message || 'Shoot deleted successfully',
+    calendarEventRemoved: data.calendarEventRemoved,
     recoveryNote: data.recoveryNote || 'No recovery note provided'
   }
 }
@@ -167,24 +164,6 @@ const changeShootStatus = async (id: string, newStatus: ShootStatus, action?: st
     success: true,
     message: data.message || `Shoot status changed to ${shootStatusManager.getLabel(newStatus)}`
   }
-}
-
-const addPostIdea = async (shootId: string, data: ExtendedPostIdeaData) => {
-  await new Promise(resolve => setTimeout(resolve, 600))
-  console.log('Adding post idea:', shootId, data)
-  return { 
-    id: Math.floor(Math.random() * 1000000),
-    ...data,
-    shots: [], // Empty for this page
-    status: 'planned' as const,
-    completed: false
-  }
-}
-
-const editPostIdea = async (postIdeaId: number, data: ExtendedPostIdeaData) => {
-  await new Promise(resolve => setTimeout(resolve, 600))
-  console.log('Editing post idea:', postIdeaId, data)
-  return { success: true }
 }
 
 const togglePostIdeaStatus = async (postIdeaId: number) => {
@@ -234,8 +213,8 @@ const ShootActions = ({ children, shoot, onSuccess, onOptimisticDelete }: ShootA
           toast.info(result.recoveryNote, { duration: 5000 })
         }
         
-        // Navigate to shoots list
-        router.push('/shoots')
+        // Navigate to shoots list with refresh parameter
+        router.push('/shoots?refresh=true')
       }
     } catch (error) {
       // 5. On failure, let parent component handle rollback
@@ -679,404 +658,45 @@ const RescheduleForm = ({ children, shoot, onSuccess }: RescheduleFormProps) => 
   )
 }
 
-// Add Post Idea Form Component - Following DRY pattern
-interface AddPostIdeaFormProps {
-  children: React.ReactNode
-  shootId: string
-  onSuccess: () => void
-}
-
-const AddPostIdeaForm = ({ children, shootId, onSuccess }: AddPostIdeaFormProps) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
-  const { loading, execute } = useAsync(addPostIdea)
-
-  const platforms = useAllPlatformsWithStatus()
-
-  const togglePlatform = (platform: string) => {
-    setSelectedPlatforms(prev => 
-      prev.includes(platform) 
-        ? prev.filter(p => p !== platform)
-        : [...prev, platform]
-    )
-  }
-
-  const handleSubmit = async (formData: FormData) => {
-    const title = formData.get('title') as string
-    const contentType = formData.get('contentType') as 'photo' | 'video' | 'reel' | 'story'
-    const caption = formData.get('caption') as string
-    const shotListText = formData.get('shotList') as string
-    const notes = formData.get('notes') as string
-
-    // Parse shot list from textarea
-    const shotList = shotListText
-      .split('\n')
-      .map(shot => shot.trim())
-      .filter(shot => shot.length > 0)
-
-    const result = await execute(shootId, {
-      title,
-      platforms: selectedPlatforms,
-      contentType,
-      caption: caption || undefined,
-      shotList,
-      notes: notes || undefined
-    })
-    
-    if (result) {
-      toast.success('Post idea added successfully!')
-      setIsOpen(false)
-      setSelectedPlatforms([])
-      onSuccess()
-    }
-  }
-
-  return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        {children}
-      </SheetTrigger>
-      <SheetContent side="bottom" className="h-[90vh] max-h-[700px]">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Add Post Idea
-          </SheetTitle>
-          <SheetDescription>
-            Create a new post idea for this shoot
-          </SheetDescription>
-        </SheetHeader>
-        
-        <div className="flex flex-col h-full px-4 pb-4">
-          <form action={handleSubmit} className="flex flex-col h-full">
-            <div className="flex-1 space-y-4 overflow-y-auto">
-              <MobileInput
-                name="title"
-                label="Post Title"
-                placeholder="e.g., Product Launch Announcement"
-                required
-              />
-
-              {/* Platform Selection */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Platforms</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {platforms.map((platform) => {
-                    const Icon = platform.icon
-                    const isSelected = selectedPlatforms.includes(platform.name)
-                    return (
-                      <Button
-                        key={platform.name}
-                        type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        className={`h-12 justify-start gap-2 tap-target relative ${
-                          !isSelected && platform.isConfigured 
-                            ? 'border-green-200 bg-green-50 hover:bg-green-100' 
-                            : ''
-                        }`}
-                        onClick={() => togglePlatform(platform.name)}
-                        title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
-                      >
-                        {Icon ? (
-                          <Icon className="h-4 w-4" />
-                        ) : (
-                          <span className="text-xs font-medium w-4 h-4 flex items-center justify-center">
-                            {platform.name.slice(0, 2)}
-                          </span>
-                        )}
-                        {platform.name}
-                        {platform.isConfigured && !isSelected && (
-                          <CheckCircleIcon className="h-3 w-3 absolute top-1 right-1 text-green-600" />
-                        )}
-                      </Button>
-                    )
-                  })}
-                </div>
-                <p className="text-xs text-gray-500">
-                  Platforms with ✓ have social media handles configured
-                </p>
-              </div>
-
-              {/* Content Type */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Content Type</Label>
-                <Select name="contentType" defaultValue="photo" required>
-                  <SelectTrigger className="h-12 text-base tap-target">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="photo">Photo</SelectItem>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="reel">Reel</SelectItem>
-                    <SelectItem value="story">Story</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <MobileInput
-                name="caption"
-                label="Caption (Optional)"
-                placeholder="Write your caption here..."
-              />
-
-              {/* Shot List */}
-              <div className="space-y-2">
-                <Label htmlFor="shotList" className="text-sm font-medium">
-                  Shot List (Optional)
-                </Label>
-                <Textarea
-                  id="shotList"
-                  name="shotList"
-                  placeholder="Enter each shot on a new line..."
-                  className="min-h-[80px] text-base tap-target resize-none"
-                  rows={3}
-                />
-              </div>
-
-              <MobileInput
-                name="notes"
-                label="Notes (Optional)"
-                placeholder="Any additional notes..."
-              />
-            </div>
-
-            <div className="flex gap-3 pt-6 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsOpen(false)}
-                className="flex-1 h-12 tap-target"
-                disabled={loading}
-              >
-                Cancel
-              </Button>
-              <LoadingButton
-                type="submit"
-                className="flex-1 h-12"
-                loading={loading}
-                loadingText="Adding..."
-              >
-                Add Post Idea
-              </LoadingButton>
-            </div>
-          </form>
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-// Edit Post Idea Form Component - Following DRY pattern
-interface EditPostIdeaFormProps {
-  children: React.ReactNode
-  postIdea: ExtendedPostIdea
-  onSuccess: () => void
-}
-
-const EditPostIdeaForm = ({ children, postIdea, onSuccess }: EditPostIdeaFormProps) => {
-  const [isOpen, setIsOpen] = useState(false)
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(postIdea.platforms)
-  const { loading, execute } = useAsync(editPostIdea)
-
-  const platforms = useAllPlatformsWithStatus()
-
-  const togglePlatform = (platform: string) => {
-    setSelectedPlatforms(prev => 
-      prev.includes(platform) 
-        ? prev.filter(p => p !== platform)
-        : [...prev, platform]
-    )
-  }
-
-  const handleSubmit = async (formData: FormData) => {
-    const title = formData.get('title') as string
-    const contentType = formData.get('contentType') as 'photo' | 'video' | 'reel' | 'story'
-    const caption = formData.get('caption') as string
-    const shotListText = formData.get('shotList') as string
-    const notes = formData.get('notes') as string
-
-    // Parse shot list from textarea
-    const shotList = shotListText
-      .split('\n')
-      .map(shot => shot.trim())
-      .filter(shot => shot.length > 0)
-
-    const result = await execute(postIdea.id, {
-      title,
-      platforms: selectedPlatforms,
-      contentType,
-      caption: caption || undefined,
-      shotList,
-      notes: notes || undefined
-    })
-    
-    if (result) {
-      toast.success('Post idea updated successfully!')
-      setIsOpen(false)
-      onSuccess()
-    }
-  }
-
-  const handleOpenChange = (open: boolean) => {
-    setIsOpen(open)
-    if (open) {
-      // Reset to current platforms when opening
-      setSelectedPlatforms(postIdea.platforms)
-    }
-  }
-
-  return (
-    <Sheet open={isOpen} onOpenChange={handleOpenChange}>
-      <SheetTrigger asChild>
-        {children}
-      </SheetTrigger>
-      <SheetContent side="bottom" className="h-[90vh] max-h-[700px]">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Edit className="h-5 w-5" />
-            Edit Post Idea
-          </SheetTitle>
-          <SheetDescription>
-            Update the post idea details
-          </SheetDescription>
-        </SheetHeader>
-        
-        <div className="flex flex-col h-full px-4 pb-4">
-          <form action={handleSubmit} className="flex flex-col h-full">
-            <div className="flex-1 space-y-4 overflow-y-auto">
-              <MobileInput
-                name="title"
-                label="Post Title"
-                defaultValue={postIdea.title}
-                placeholder="e.g., Product Launch Announcement"
-                required
-              />
-
-              {/* Platform Selection */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Platforms</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {platforms.map((platform) => {
-                    const Icon = platform.icon
-                    const isSelected = selectedPlatforms.includes(platform.name)
-                    return (
-                      <Button
-                        key={platform.name}
-                        type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        className={`h-12 justify-start gap-2 tap-target relative ${
-                          !isSelected && platform.isConfigured 
-                            ? 'border-green-200 bg-green-50 hover:bg-green-100' 
-                            : ''
-                        }`}
-                        onClick={() => togglePlatform(platform.name)}
-                        title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
-                      >
-                        {Icon ? (
-                          <Icon className="h-4 w-4" />
-                        ) : (
-                          <span className="text-xs font-medium w-4 h-4 flex items-center justify-center">
-                            {platform.name.slice(0, 2)}
-                          </span>
-                        )}
-                        {platform.name}
-                        {platform.isConfigured && !isSelected && (
-                          <CheckCircleIcon className="h-3 w-3 absolute top-1 right-1 text-green-600" />
-                        )}
-                      </Button>
-                    )
-                  })}
-                </div>
-                <p className="text-xs text-gray-500">
-                  Platforms with ✓ have social media handles configured
-                </p>
-              </div>
-
-              {/* Content Type */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Content Type</Label>
-                <Select name="contentType" defaultValue={postIdea.contentType} required>
-                  <SelectTrigger className="h-12 text-base tap-target">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="photo">Photo</SelectItem>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="reel">Reel</SelectItem>
-                    <SelectItem value="story">Story</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <MobileInput
-                name="caption"
-                label="Caption (Optional)"
-                defaultValue={postIdea.caption || ''}
-                placeholder="Write your caption here..."
-              />
-
-              {/* Shot List */}
-              <div className="space-y-2">
-                <Label htmlFor="shotList" className="text-sm font-medium">
-                  Shot List (Optional)
-                </Label>
-                <Textarea
-                  id="shotList"
-                  name="shotList"
-                  defaultValue={postIdea.shotList.join('\n')}
-                  placeholder="Enter each shot on a new line..."
-                  className="min-h-[80px] text-base tap-target resize-none"
-                  rows={3}
-                />
-              </div>
-
-              <MobileInput
-                name="notes"
-                label="Notes (Optional)"
-                defaultValue={postIdea.notes || ''}
-                placeholder="Any additional notes..."
-              />
-            </div>
-
-            <div className="flex gap-3 pt-6 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsOpen(false)}
-                className="flex-1 h-12 tap-target"
-                disabled={loading}
-              >
-                Cancel
-              </Button>
-              <LoadingButton
-                type="submit"
-                className="flex-1 h-12"
-                loading={loading}
-                loadingText="Updating..."
-              >
-                Update Post Idea
-              </LoadingButton>
-            </div>
-          </form>
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
 // Post Idea Actions Component - DRY pattern for post idea actions
 interface PostIdeaActionsProps {
   postIdea: ExtendedPostIdea
+  shootId: string
   onToggleStatus: () => void
+  onRemoveFromShoot: () => void
 }
 
-const PostIdeaActions = ({ postIdea, onToggleStatus }: PostIdeaActionsProps) => {
+const PostIdeaActions = ({ postIdea, shootId, onToggleStatus, onRemoveFromShoot }: PostIdeaActionsProps) => {
   const { loading, execute } = useAsync(togglePostIdeaStatus)
+  const { loading: removeLoading, execute: executeRemove } = useAsync(async (postId: number, shootId: string) => {
+    const response = await fetch(`/api/posts/${postId}/remove-from-shoot`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ shootId: parseInt(shootId) })
+    })
+
+    if (!response.ok) {
+      const data = await response.json()
+      throw new Error(data.error || 'Failed to remove post from shoot')
+    }
+
+    return await response.json()
+  })
 
   const handleToggleStatus = async () => {
     const result = await execute(postIdea.id)
     if (result) {
       onToggleStatus()
+    }
+  }
+
+  const handleRemoveFromShoot = async () => {
+    const result = await executeRemove(postIdea.id, shootId)
+    if (result?.success) {
+      toast.success(`"${postIdea.title}" removed from shoot`)
+      onRemoveFromShoot()
     }
   }
 
@@ -1097,15 +717,34 @@ const PostIdeaActions = ({ postIdea, onToggleStatus }: PostIdeaActionsProps) => 
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
-        <EditPostIdeaForm postIdea={postIdea} onSuccess={() => {}}>
-          <DropdownMenuItem 
-            className="cursor-pointer"
-            onSelect={(e) => e.preventDefault()}
-          >
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Details
-          </DropdownMenuItem>
-        </EditPostIdeaForm>
+        <PostIdeaForm
+          mode="edit"
+          context="shoot"
+          shootId={shootId}
+          postIdea={{
+            id: postIdea.id,
+            title: postIdea.title,
+            platforms: postIdea.platforms,
+            contentType: postIdea.contentType,
+            caption: postIdea.caption,
+            shotList: postIdea.shotList,
+            notes: postIdea.notes,
+            status: postIdea.status,
+            client: null, // Will be populated by context
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }}
+          onSuccess={onToggleStatus}
+          trigger={
+            <DropdownMenuItem 
+              className="cursor-pointer"
+              onSelect={(e) => e.preventDefault()}
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Details
+            </DropdownMenuItem>
+          }
+        />
         
         <DropdownMenuSeparator />
         
@@ -1121,6 +760,21 @@ const PostIdeaActions = ({ postIdea, onToggleStatus }: PostIdeaActionsProps) => 
           )}
           {getStatusAction()}
         </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        
+        <DropdownMenuItem 
+          onClick={handleRemoveFromShoot}
+          disabled={removeLoading}
+          className="cursor-pointer text-red-600 focus:text-red-600"
+        >
+          {removeLoading ? (
+            <LoadingSpinner size="sm" color="red" className="mr-2" />
+          ) : (
+            <Unlink className="h-4 w-4 mr-2" />
+          )}
+          Remove from Shoot
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -1131,13 +785,21 @@ export default function ShootDetailsPage() {
   const router = useRouter()
   const shootId = params.id as string
   const { startShoot } = useActiveShoot()
+  const { clients } = useClient()
   
   const [shoot, setShoot] = useState<Shoot | null>(null)
   const [postIdeas, setPostIdeas] = useState<ExtendedPostIdea[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showAssignPostsDialog, setShowAssignPostsDialog] = useState(false)
+  const [showCreatePostForm, setShowCreatePostForm] = useState(false)
 
   // Status change functionality using DRY centralized system
   const { loading: statusChangeLoading, execute: executeStatusChange } = useAsync(changeShootStatus)
+
+  // Helper function to find client override from shoot's client name
+  const getClientOverride = (clientName: string): ClientData | null => {
+    return clients.find(client => client.name === clientName && client.type === 'client') || null
+  }
 
   // Load shoot and post ideas
   useEffect(() => {
@@ -1222,6 +884,15 @@ export default function ShootDetailsPage() {
     setShoot(null)
     router.push('/shoots')
   }, [router])
+
+  // Post choice handlers
+  const handleCreateNewPost = () => {
+    setShowCreatePostForm(true)
+  }
+
+  const handleAssignExistingPost = () => {
+    setShowAssignPostsDialog(true)
+  }
 
   // Utility functions
   const formatDate = (dateString: string) => {
@@ -1388,7 +1059,9 @@ export default function ShootDetailsPage() {
                   size="sm"
                   className="h-7 px-2 text-xs"
                   onClick={() => {
-                    const calendarUrl = `https://calendar.google.com/calendar/event?eid=${shoot.googleCalendarEventId}`
+                    // Use the stored htmlLink if available, otherwise fallback to search
+                    const calendarUrl = shoot.googleCalendarHtmlLink || 
+                      `https://calendar.google.com/calendar/u/0/r/week/${new Date().toISOString().split('T')[0].replace(/-/g, '')}?search=${encodeURIComponent(shoot.title)}`
                     window.open(calendarUrl, '_blank')
                   }}
                 >
@@ -1428,12 +1101,15 @@ export default function ShootDetailsPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Post Ideas</h2>
-            <AddPostIdeaForm shootId={shootId} onSuccess={handleRefresh}>
+            <AddPostChoiceDialog 
+              onCreateNew={handleCreateNewPost}
+              onAssignExisting={handleAssignExistingPost}
+            >
               <Button size="sm" className="h-8 px-3 text-xs">
                 <Plus className="h-3 w-3 mr-1" />
                 Add
               </Button>
-            </AddPostIdeaForm>
+            </AddPostChoiceDialog>
           </div>
 
           {postIdeas.length > 0 ? (
@@ -1477,7 +1153,9 @@ export default function ShootDetailsPage() {
                         </Badge>
                         <PostIdeaActions 
                           postIdea={postIdea} 
+                          shootId={shootId}
                           onToggleStatus={handleRefresh}
+                          onRemoveFromShoot={handleRefresh}
                         />
                       </div>
                     </div>
@@ -1523,18 +1201,50 @@ export default function ShootDetailsPage() {
               action={{
                 label: "Add Post Idea",
                 children: (
-                  <AddPostIdeaForm shootId={shootId} onSuccess={handleRefresh}>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Post Idea
-                    </Button>
-                  </AddPostIdeaForm>
+                  <PostIdeaForm
+                    mode="create"
+                    context="shoot"
+                    shootId={params.id as string}
+                    clientOverride={getClientOverride(shoot.client)}
+                    onSuccess={handleRefresh}
+                    displayMode="dialog"
+                    trigger={
+                      <Button className="flex items-center gap-2">
+                        <Plus className="h-4 w-4" />
+                        Add New Post Idea
+                      </Button>
+                    }
+                  />
                 )
               }}
             />
           )}
         </div>
       </div>
+
+      {/* Create Post Form */}
+      <PostIdeaForm
+        open={showCreatePostForm}
+        onOpenChange={setShowCreatePostForm}
+        mode="create"
+        context="shoot"
+        shootId={params.id as string}
+        clientOverride={getClientOverride(shoot.client)}
+        onSuccess={() => {
+          handleRefresh()
+          setShowCreatePostForm(false)
+        }}
+        onCancel={() => setShowCreatePostForm(false)}
+        displayMode="dialog"
+      />
+
+      {/* Assign Existing Posts Dialog */}
+      <AssignExistingPostsDialog
+        open={showAssignPostsDialog}
+        onOpenChange={setShowAssignPostsDialog}
+        shootId={shootId}
+        onSuccess={handleRefresh}
+      />
     </MobileLayout>
   )
 } 

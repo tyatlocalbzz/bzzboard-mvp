@@ -60,9 +60,9 @@ export const AssignToShootDialog = ({
 
       const data = await response.json()
       
-      if (data.success) {
+      if (data.success && data.data?.events) {
         // Transform unified events back to shoots and filter for scheduled/active shoots
-        const shootEvents = data.events
+        const shootEvents = data.data.events
           .filter((event: { type: string; shootStatus: string }) => 
             event.type === 'shoot' && 
             ['scheduled', 'active'].includes(event.shootStatus)

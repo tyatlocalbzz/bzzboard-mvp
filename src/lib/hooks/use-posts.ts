@@ -76,14 +76,25 @@ export const usePosts = (initialFilters: Partial<PostsFilters> = {}) => {
 
   // Transform function to handle both API response formats
   const transform = useCallback((data: unknown) => {
-    const result = data as { posts?: unknown[]; data?: { posts?: unknown[] } }
+    const result = data as { 
+      success?: boolean;
+      posts?: unknown[]; 
+      data?: { posts?: unknown[] } 
+    }
     
-    // Handle both new standardized API format and old format
-    if (result.posts) {
-      return { posts: Array.isArray(result.posts) ? result.posts as PostIdea[] : [] }
-    } else if (result.data && result.data.posts) {
+    // Handle standardized API format: { success: true, data: { posts: [...] } }
+    if (result.success && result.data?.posts) {
       return { posts: Array.isArray(result.data.posts) ? result.data.posts as PostIdea[] : [] }
-    } else {
+    }
+    // Handle legacy format: { posts: [...] }
+    else if (result.posts) {
+      return { posts: Array.isArray(result.posts) ? result.posts as PostIdea[] : [] }
+    } 
+    // Handle direct posts array (fallback)
+    else if (Array.isArray(result)) {
+      return { posts: result as PostIdea[] }
+    }
+    else {
       console.error('Unexpected Posts API response format:', result)
       return { posts: [] }
     }
@@ -113,7 +124,11 @@ export const usePosts = (initialFilters: Partial<PostsFilters> = {}) => {
 
   // Wrapped mutation functions with optimistic updates
   const createPost = useCallback(async (postData: CreatePostData): Promise<PostIdea> => {
-    const result = await createMutation.mutate(postData)
+    const response = await createMutation.mutate(postData)
+    
+    // Handle standardized API response format
+    // useApiMutation already extracts data from { success: true, data: {...} }
+    const result = (response as { post?: PostIdea })?.post || response as PostIdea
     
     // Add to local state
     updateData(prev => prev ? {
@@ -124,7 +139,10 @@ export const usePosts = (initialFilters: Partial<PostsFilters> = {}) => {
   }, [createMutation, updateData])
 
   const updatePost = useCallback(async (id: number, postData: UpdatePostData): Promise<PostIdea> => {
-    const result = await updateMutation.mutate({ ...postData, id })
+    const response = await updateMutation.mutate({ ...postData, id })
+    
+    // Handle standardized API response format
+    const result = (response as { postIdea?: PostIdea })?.postIdea || response as PostIdea
     
     // Update local state
     updateData(prev => prev ? {

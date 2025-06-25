@@ -98,10 +98,6 @@ export default async function SignInPage({
               Sign In
             </Button>
           </form>
-          
-          <div className="mt-6 text-center text-sm text-gray-600">
-            <p>Use: ty@localbzz.com / admin123</p>
-          </div>
         </CardContent>
       </Card>
     </div>

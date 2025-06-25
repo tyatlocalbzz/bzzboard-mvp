@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/auth/session-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
-import { MobileLayout } from "@/components/layout/mobile-layout";
+import { ConditionalLayout } from "@/components/layout/conditional-layout";
 import { ClientProvider } from "@/contexts/client-context";
 import { ActiveShootProvider } from "@/contexts/active-shoot-context";
 import { getSession } from "@/lib/auth/session";
@@ -33,9 +33,9 @@ export default async function RootLayout({
           <ClientProvider>
             <ActiveShootProvider>
               <AuthGuard>
-                <MobileLayout>
+                <ConditionalLayout>
                   {children}
-                </MobileLayout>
+                </ConditionalLayout>
               </AuthGuard>
             </ActiveShootProvider>
           </ClientProvider>

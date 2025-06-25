@@ -233,28 +233,26 @@ export default function PostsPage() {
       </div>
 
       {/* Edit Post Dialog */}
-      {editingPost && (
-        <PostIdeaForm
-          mode="edit"
-          context="standalone"
-          postIdea={editingPost}
-          onSuccess={handleEditSuccess}
-          onCancel={handleCancelEdit}
-          trigger={<span style={{ display: 'none' }} />}
-        />
-      )}
+      <PostIdeaForm
+        mode="edit"
+        context="standalone"
+        postIdea={editingPost || undefined}
+        onSuccess={handleEditSuccess}
+        onCancel={handleCancelEdit}
+        open={!!editingPost}
+        onOpenChange={(open) => !open && setEditingPost(null)}
+      />
 
       {/* Duplicate Post Dialog */}
-      {duplicatingPost && (
-        <PostIdeaForm
-          mode="duplicate"
-          context="standalone"
-          postIdea={duplicatingPost}
-          onSuccess={handleDuplicateSuccess}
-          onCancel={handleCancelDuplicate}
-          trigger={<span style={{ display: 'none' }} />}
-        />
-      )}
+      <PostIdeaForm
+        mode="duplicate"
+        context="standalone"
+        postIdea={duplicatingPost || undefined}
+        onSuccess={handleDuplicateSuccess}
+        onCancel={handleCancelDuplicate}
+        open={!!duplicatingPost}
+        onOpenChange={(open) => !open && setDuplicatingPost(null)}
+      />
 
       {/* Assign to Shoot Dialog */}
       <AssignToShootDialog

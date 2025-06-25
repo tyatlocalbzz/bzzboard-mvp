@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { FormSheet } from '@/components/ui/form-sheet'
@@ -160,18 +160,18 @@ export const PostIdeaForm = ({
 
   const { selectedClient: contextClient, clients } = useClient()
   
-  // Initialize form data based on mode and existing data
-  const getInitialFormData = useCallback((): PostIdeaFormData => ({
-    platforms: postIdea?.platforms || [],
-    contentType: postIdea?.contentType || 'photo',
-    selectedClient: postIdea?.client?.name || (contextClient.type === 'client' ? contextClient.name : ''),
-    shotList: postIdea?.shotList || [''],
-    caption: postIdea?.caption || '',
-    notes: postIdea?.notes || ''
-  }), [postIdea, contextClient])
+  // Create stable initial data to prevent formState recreation
+  const stableInitialData = useMemo(() => ({
+    platforms: [],
+    contentType: 'photo' as const,
+    selectedClient: '',
+    shotList: [''],
+    caption: '',
+    notes: ''
+  }), [])
 
   // Use the form state hook for all form data
-  const formState = useFormState<PostIdeaFormData>(getInitialFormData())
+  const formState = useFormState<PostIdeaFormData>(stableInitialData)
   
   // Get all platforms and filter based on context
   // Use clientOverride when provided (shoot context) to show the shoot's client platforms
@@ -218,10 +218,18 @@ export const PostIdeaForm = ({
   // Initialize/reset form data when opening or when postIdea changes
   useEffect(() => {
     if (isOpen) {
-      const initialData = getInitialFormData()
+      const initialData: PostIdeaFormData = {
+        platforms: postIdea?.platforms || [],
+        contentType: postIdea?.contentType || 'photo',
+        selectedClient: postIdea?.client?.name || (contextClient.type === 'client' ? contextClient.name : ''),
+        shotList: postIdea?.shotList || [''],
+        caption: postIdea?.caption || '',
+        notes: postIdea?.notes || ''
+      }
       formState.reset(initialData)
     }
-  }, [isOpen, postIdea, mode, contextClient, formState, getInitialFormData])
+  }, [isOpen, postIdea, mode, contextClient.type, contextClient.name, formState.reset])
+  // Note: Inline data creation to prevent dependency cycles
 
   // Platform handling
   const togglePlatform = (platformName: string) => {

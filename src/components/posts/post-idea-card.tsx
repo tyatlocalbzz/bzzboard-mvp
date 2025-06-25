@@ -167,17 +167,19 @@ export const PostIdeaCard = ({
         </div>
 
         {/* Platforms */}
-        <div className="flex flex-wrap gap-1">
-          {post.platforms.map((platform) => (
-            <Badge 
-              key={platform} 
-              variant="secondary" 
-              className="text-xs"
-            >
-              {platform}
-            </Badge>
-          ))}
-        </div>
+        {post.platforms && Array.isArray(post.platforms) && post.platforms.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {post.platforms.map((platform) => (
+              <Badge 
+                key={platform} 
+                variant="secondary" 
+                className="text-xs"
+              >
+                {platform}
+              </Badge>
+            ))}
+          </div>
+        )}
 
         {/* Caption Preview */}
         {post.caption && (
@@ -187,7 +189,7 @@ export const PostIdeaCard = ({
         )}
 
         {/* Shot List Count */}
-        {post.shotList && post.shotList.length > 0 && (
+        {post.shotList && Array.isArray(post.shotList) && post.shotList.length > 0 && (
           <div className="flex items-center gap-1 text-sm text-gray-500">
             <FileText className="h-3 w-3" />
             <span>{post.shotList.length} shot{post.shotList.length !== 1 ? 's' : ''}</span>

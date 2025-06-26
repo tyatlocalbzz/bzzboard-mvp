@@ -24,20 +24,21 @@ export const UnifiedEventItem = ({
 }: UnifiedEventItemProps) => {
 
 
+
   // Get event type indicator
   const getEventTypeIndicator = () => {
     if (event.type === 'shoot') {
       return {
         icon: Camera,
-        color: 'text-blue-600',
-        bgColor: 'bg-blue-50',
+        color: 'text-primary',
+        bgColor: 'bg-primary/10',
         label: 'Content Shoot'
       }
     } else {
       return {
         icon: Calendar,
-        color: event.isShootEvent ? 'text-blue-600' : 'text-gray-600',
-        bgColor: event.isShootEvent ? 'bg-blue-50' : 'bg-gray-50',
+        color: event.isShootEvent ? 'text-primary' : 'text-muted-foreground',
+        bgColor: event.isShootEvent ? 'bg-primary/10' : 'bg-muted/50',
         label: event.isShootEvent ? 'Linked Calendar Event' : 'Calendar Event'
       }
     }
@@ -71,9 +72,9 @@ export const UnifiedEventItem = ({
   return (
     <div
       className={cn(
-        "bg-white rounded-lg border p-4 transition-colors",
-        onClick && "cursor-pointer hover:bg-gray-50",
-        event.conflictDetected && "border-red-200 bg-red-50",
+        "bg-card rounded-lg border border-border p-4 transition-colors",
+        onClick && "cursor-pointer hover:bg-accent/50",
+        event.conflictDetected && "border-destructive/20 bg-destructive/5",
         className
       )}
       onClick={onClick}
@@ -90,7 +91,7 @@ export const UnifiedEventItem = ({
               <TypeIcon className={cn("h-3 w-3", typeIndicator.color)} />
             </div>
             
-            <h3 className="font-medium text-gray-900 truncate flex-1">
+            <h3 className="font-medium text-card-foreground truncate flex-1">
               {event.title}
             </h3>
             
@@ -98,17 +99,17 @@ export const UnifiedEventItem = ({
             <div className="flex items-center gap-1 flex-shrink-0">
               {event.isRecurring && (
                 <div title="Recurring Event">
-                  <Repeat className="h-3 w-3 text-gray-500" />
+                  <Repeat className="h-3 w-3 text-muted-foreground" />
                 </div>
               )}
               {event.conflictDetected && (
                 <div title="Scheduling Conflict">
-                  <AlertTriangle className="h-3 w-3 text-red-600" />
+                  <AlertTriangle className="h-3 w-3 text-destructive" />
                 </div>
               )}
               {event.syncStatus === 'error' && (
                 <div title="Sync Error">
-                  <AlertTriangle className="h-3 w-3 text-yellow-600" />
+                  <AlertTriangle className="h-3 w-3 text-yellow-500" />
                 </div>
               )}
             </div>
@@ -116,13 +117,13 @@ export const UnifiedEventItem = ({
           
           {/* Client name for shoots */}
           {event.client && (
-            <div className="text-sm text-gray-600 mb-1">
+            <div className="text-sm text-muted-foreground mb-1">
               {event.client}
             </div>
           )}
           
           {/* Time and duration */}
-          <div className="flex items-center gap-3 text-sm text-gray-600">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
               <span>
@@ -155,7 +156,7 @@ export const UnifiedEventItem = ({
                     e.stopPropagation() // Prevent triggering the card click
                     onDelete(event.id, event.type)
                   }}
-                  className="text-red-600 focus:text-red-600"
+                  className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="mr-2 h-3 w-3" />
                   <span>Delete</span>
@@ -170,7 +171,7 @@ export const UnifiedEventItem = ({
       <div className="space-y-2">
         {/* Location */}
         {event.location && (
-          <div className="flex items-center gap-1 text-sm text-gray-600">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="h-3 w-3 flex-shrink-0" />
             <span className="truncate">{event.location}</span>
           </div>
@@ -178,7 +179,7 @@ export const UnifiedEventItem = ({
 
         {/* Post ideas count for shoots */}
         {event.type === 'shoot' && typeof event.postIdeasCount === 'number' && (
-          <div className="flex items-center gap-1 text-sm text-gray-600">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <Users className="h-3 w-3 flex-shrink-0" />
             <span>
               {event.postIdeasCount} post idea{event.postIdeasCount !== 1 ? 's' : ''}
@@ -188,7 +189,7 @@ export const UnifiedEventItem = ({
 
         {/* Attendees for calendar events */}
         {event.type === 'calendar' && event.attendees && event.attendees.length > 0 && (
-          <div className="flex items-center gap-1 text-sm text-gray-600">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <Users className="h-3 w-3 flex-shrink-0" />
             <span>
               {event.attendees.length} attendee{event.attendees.length !== 1 ? 's' : ''}
@@ -198,30 +199,30 @@ export const UnifiedEventItem = ({
 
         {/* Description for calendar events */}
         {event.type === 'calendar' && event.description && (
-          <p className="text-sm text-gray-600 line-clamp-2">
+          <p className="text-sm text-muted-foreground line-clamp-2">
             {event.description}
           </p>
         )}
 
         {/* Notes */}
         {event.notes && (
-          <div className="p-2 bg-gray-50 rounded text-sm text-gray-600">
-            <strong>Notes:</strong> {event.notes}
+          <div className="p-2 bg-muted/50 rounded text-sm text-muted-foreground">
+            <strong className="text-foreground">Notes:</strong> {event.notes}
           </div>
         )}
 
         {/* Conflict warning */}
         {event.conflictDetected && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
             <div className="flex items-start gap-2 mb-2">
-              <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <span className="text-sm font-medium text-red-800">
+                <span className="text-sm font-medium text-destructive">
                   Scheduling conflict detected
                 </span>
                 {event.conflictDetails && event.conflictDetails.length > 0 && (
                   <div className="mt-2 space-y-1">
-                    <p className="text-xs text-red-700 font-medium">
+                    <p className="text-xs text-destructive/80 font-medium">
                       Conflicts with:
                     </p>
                     {event.conflictDetails.map((conflict, index) => {
@@ -241,9 +242,9 @@ export const UnifiedEventItem = ({
                       })
                       
                       return (
-                        <div key={index} className="text-xs text-red-700 bg-red-100 rounded px-2 py-1">
+                        <div key={index} className="text-xs text-destructive/90 bg-destructive/5 rounded px-2 py-1">
                           <span className="font-medium">{conflict.title}</span>
-                          <span className="text-red-600 ml-1">
+                          <span className="text-destructive/70 ml-1">
                             ({date} • {startTime} - {endTime})
                           </span>
                         </div>

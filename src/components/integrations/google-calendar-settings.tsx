@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, RefreshCw, AlertCircle, Crown } from 'lucide-react'
+import { Calendar, RefreshCw, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import * as CalendarTypes from '@/lib/types/calendar'
 
@@ -128,10 +127,11 @@ export const GoogleCalendarSettings = ({
   if (!isConnected) {
     return (
       <div className="text-center py-8">
-        <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Not Connected</h3>
-        <p className="text-sm text-gray-600">
-          Connect your Google Calendar first.
+        <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-foreground mb-2">Not Connected</h3>
+        <p className="text-sm text-muted-foreground">
+          Connect your Google Calendar to enable automatic scheduling,
+          conflict detection, and seamless calendar management.
         </p>
       </div>
     )
@@ -142,17 +142,20 @@ export const GoogleCalendarSettings = ({
       {loading && (
         <div className="flex items-center justify-center py-8">
           <LoadingSpinner size="md" />
-          <span className="ml-2 text-sm text-gray-600">Loading calendars...</span>
+          <span className="ml-2 text-sm text-muted-foreground">Loading calendars...</span>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <h4 className="text-sm font-medium text-red-900">Error</h4>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            <h4 className="text-sm font-medium text-foreground">Calendar Access Error</h4>
           </div>
-          <p className="text-sm text-red-800 mt-1">{error}</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            We couldn&apos;t load your calendars. This might be due to insufficient permissions
+            or a temporary connection issue.
+          </p>
           <Button
             variant="outline"
             size="sm"
@@ -167,55 +170,40 @@ export const GoogleCalendarSettings = ({
 
       {!loading && !error && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-blue-600" />
-            <h4 className="text-sm font-medium text-gray-900">Select Calendars</h4>
-            <span className="text-xs text-gray-500">
-              ({settings.selectedCalendars.length} of {calendars.length} selected)
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-foreground">Select Calendars</h4>
+            <span className="text-xs text-muted-foreground">
+              Choose which calendars to check for conflicts
             </span>
           </div>
-
-          <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3">
+          
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {calendars.map((calendar) => (
-              <div
+              <label
                 key={calendar.id}
-                className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                className="flex items-center gap-3 p-3 hover:bg-accent rounded-lg transition-colors cursor-pointer"
               >
-                <Checkbox
-                  checked={settings.selectedCalendars.includes(calendar.id)}
-                  onCheckedChange={() => toggleCalendar(calendar.id)}
-                  disabled={calendar.id === 'primary'}
-                />
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900 truncate">
-                      {calendar.name}
-                    </span>
-                    {calendar.primary && (
-                      <div className="flex items-center gap-1">
-                        <Crown className="h-3 w-3 text-yellow-600" />
-                        <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">
-                          Primary
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className="text-xs">
-                      {calendar.accessRole}
-                    </Badge>
-                  </div>
-                </div>
-
-                {calendar.backgroundColor && (
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={settings.selectedCalendars.includes(calendar.id)}
+                    onChange={() => toggleCalendar(calendar.id)}
+                    className="sr-only"
+                  />
                   <div
-                    className="w-4 h-4 rounded-full border border-gray-200 flex-shrink-0"
+                    className="w-4 h-4 rounded-full border border-border flex-shrink-0"
                     style={{ backgroundColor: calendar.backgroundColor }}
                   />
+                </div>
+                <span className="text-sm font-medium text-foreground truncate">
+                  {calendar.name}
+                </span>
+                {calendar.primary && (
+                  <Badge variant="outline" className="text-xs">
+                    Primary
+                  </Badge>
                 )}
-              </div>
+              </label>
             ))}
           </div>
 
@@ -232,12 +220,11 @@ export const GoogleCalendarSettings = ({
 
       {!loading && !error && calendars.length === 0 && (
         <div className="text-center py-8">
-          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Calendars Found</h3>
-          <Button variant="outline" onClick={loadCalendarsAndSettings}>
-            <RefreshCw className="h-3 w-3 mr-1" />
-            Refresh
-          </Button>
+          <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-foreground mb-2">No Calendars Found</h3>
+          <p className="text-sm text-muted-foreground">
+            We couldn&apos;t find any calendars in your Google account.
+          </p>
         </div>
       )}
     </div>

@@ -29,23 +29,23 @@ export const ConflictWarningSection = ({
   }
 
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800/50 rounded-lg p-4">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 flex-shrink-0 mt-0.5" />
         <div className="flex-1">
-          <h4 className="font-medium text-amber-900 mb-2">
+          <h4 className="font-medium text-yellow-900 dark:text-yellow-200 mb-2">
             Calendar Conflicts Detected
           </h4>
-          <p className="text-sm text-amber-800 mb-3">
+          <p className="text-sm text-yellow-800 dark:text-yellow-300 mb-3">
             The following events overlap with your proposed shoot time:
           </p>
           
           {/* Conflict List */}
           <div className="space-y-2 mb-4">
             {conflicts.map((conflict, index) => (
-              <div key={index} className="bg-white rounded p-2 text-sm">
-                <div className="font-medium text-gray-900">{conflict.title}</div>
-                <div className="text-gray-600">
+              <div key={index} className="bg-card border border-border rounded p-2 text-sm">
+                <div className="font-medium text-card-foreground">{conflict.title}</div>
+                <div className="text-muted-foreground">
                   {new Date(conflict.startTime).toLocaleString()} - {new Date(conflict.endTime).toLocaleString()}
                 </div>
               </div>

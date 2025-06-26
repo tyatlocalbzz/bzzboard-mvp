@@ -61,7 +61,7 @@ export const FormSheet = ({
               </div>
             </div>
 
-            <div className="flex-shrink-0 flex gap-3 p-4 border-t bg-white">
+            <div className="flex-shrink-0 flex gap-3 p-4 border-t border-border bg-background">
               <Button
                 type="button"
                 variant="outline"

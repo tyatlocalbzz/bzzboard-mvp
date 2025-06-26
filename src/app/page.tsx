@@ -76,7 +76,7 @@ export default function Dashboard() {
         {/* Today's Shoots */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Today&apos;s Shoots</h2>
+            <h2 className="text-lg font-semibold text-foreground">Today&apos;s Shoots</h2>
             <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
               <Calendar className="h-4 w-4" />
             </Button>
@@ -95,7 +95,7 @@ export default function Dashboard() {
                       { icon: Clock, text: shoot.time },
                       { icon: MapPin, text: shoot.location }
                     ]}
-                    className="bg-gray-50"
+                    className="bg-muted"
                   />
                   {index < todaysShoots.length - 1 && <Separator />}
                 </div>
@@ -119,7 +119,7 @@ export default function Dashboard() {
         {/* Recent Post Ideas */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Post Ideas</h2>
+            <h2 className="text-lg font-semibold text-foreground">Post Ideas</h2>
             <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
               View All
             </Button>
@@ -139,7 +139,7 @@ export default function Dashboard() {
                                 idea.status === "shot" ? "default" : "outline"
                       }
                     ]}
-                    className="bg-gray-50"
+                    className="bg-muted"
                   />
                   {index < recentPostIdeas.length - 1 && <Separator />}
                 </div>
@@ -162,7 +162,7 @@ export default function Dashboard() {
 
         {/* Quick Actions */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+          <h2 className="text-lg font-semibold text-foreground">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
             <ScheduleShootForm onSuccess={() => router.push('/shoots')}>
               <Button className="h-12 flex-col gap-1 text-xs tap-target" variant="outline">

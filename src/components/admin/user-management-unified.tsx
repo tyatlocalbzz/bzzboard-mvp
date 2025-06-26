@@ -232,11 +232,11 @@ export const UserManagementUnified = ({
     return (
       <div className="flex flex-col h-full">
         {/* Mobile Header */}
-        <div className="sticky top-0 z-10 bg-white border-b px-4 py-4">
+        <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Team</h1>
-              <p className="text-sm text-gray-600">
+              <h1 className="text-xl font-semibold text-foreground">Team</h1>
+              <p className="text-sm text-muted-foreground">
                 {stats.total} members • {stats.active} active • {stats.admins} admins
               </p>
             </div>
@@ -251,7 +251,7 @@ export const UserManagementUnified = ({
           {/* Search and filters */}
           <div className="space-y-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search team members..."
                 value={searchQuery}
@@ -265,7 +265,7 @@ export const UserManagementUnified = ({
                 <select
                   value={filterBy}
                   onChange={(e) => setFilterBy(e.target.value as UserFilterOption)}
-                  className="w-full h-10 px-3 rounded-md border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 >
                   <option value="all">All Members</option>
                   <option value="active">Active</option>
@@ -279,7 +279,7 @@ export const UserManagementUnified = ({
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as UserSortOption)}
-                  className="w-full h-10 px-3 rounded-md border border-gray-300 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                 >
                   <option value="name">Sort by Name</option>
                   <option value="email">Sort by Email</option>
@@ -303,11 +303,11 @@ export const UserManagementUnified = ({
               />
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-border">
               {filteredUsers.map((user) => (
                 <div
                   key={user.id}
-                  className="px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                  className="px-4 py-4 hover:bg-accent/50 active:bg-accent transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <div 
@@ -321,18 +321,18 @@ export const UserManagementUnified = ({
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-sm font-medium text-gray-900 truncate">
+                          <p className="text-sm font-medium text-foreground truncate">
                             {user.name}
                           </p>
                           <UserRoleBadge role={user.role} />
                         </div>
-                        <p className="text-xs text-gray-500 truncate mb-1">
+                        <p className="text-xs text-muted-foreground truncate mb-1">
                           {user.email}
                         </p>
                         <div className="flex items-center gap-2">
                           <UserStatusBadge status={user.status} isFirstLogin={user.isFirstLogin} />
-                          <span className="text-xs text-gray-400">•</span>
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-muted-foreground">•</span>
+                          <span className="text-xs text-muted-foreground">
                             {formatLastLogin(user.lastLoginAt, user.isFirstLogin)}
                           </span>
                         </div>

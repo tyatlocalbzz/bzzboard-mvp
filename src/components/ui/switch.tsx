@@ -39,11 +39,11 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         className={cn(
           // Base styles
           'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
           // Checked state
           checked
-            ? 'bg-blue-600 hover:bg-blue-700'
-            : 'bg-gray-200 hover:bg-gray-300',
+            ? 'bg-primary hover:bg-primary/90'
+            : 'bg-input hover:bg-accent',
           // Disabled state
           disabled && 'cursor-not-allowed opacity-50',
           className
@@ -53,7 +53,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         <span
           className={cn(
             // Base thumb styles
-            'pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform',
+            'pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
             // Position based on checked state
             checked ? 'translate-x-5' : 'translate-x-0'
           )}

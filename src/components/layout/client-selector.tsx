@@ -114,9 +114,9 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
           >
             <div className="flex items-center gap-1 min-w-0">
               {contextData.selectedClient.type === 'all' ? (
-                <Users className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                <Users className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               ) : (
-                <Building className="h-3 w-3 text-gray-500 flex-shrink-0" />
+                <Building className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               )}
               <span className="text-xs font-medium truncate">
                 {compact && contextData.selectedClient.name.length > 12 
@@ -125,12 +125,12 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
                 }
               </span>
             </div>
-            <ChevronDown className="h-3 w-3 text-gray-400 flex-shrink-0 ml-1" />
+            <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0 ml-1" />
           </Button>
         </DropdownMenuTrigger>
         
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuLabel className="text-xs font-medium text-gray-500">
+          <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
             Client Context
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -140,19 +140,19 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
               key={client.id}
               onClick={() => handleClientSelect(client)}
               className={`flex items-center justify-between py-2 ${
-                contextData.selectedClient.id === client.id ? 'bg-blue-50 text-blue-700' : ''
+                contextData.selectedClient.id === client.id ? 'bg-primary/10 text-primary' : ''
               }`}
             >
               <div className="flex items-center gap-2 min-w-0">
                 {client.type === 'all' ? (
-                  <Users className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                  <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 ) : (
-                  <Building className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                  <Building className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 )}
                 <div className="min-w-0">
                   <div className="text-sm font-medium truncate">{client.name}</div>
                   {client.type === 'client' && client.activeProjects && (
-                    <div className="text-xs text-gray-600">
+                    <div className="text-xs text-muted-foreground">
                       {client.activeProjects} active project{client.activeProjects !== 1 ? 's' : ''}
                     </div>
                   )}
@@ -160,14 +160,14 @@ export const ClientSelector = ({ compact = false, className }: ClientSelectorPro
               </div>
               
               {contextData.selectedClient.id === client.id && (
-                <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0" />
+                <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0" />
               )}
             </DropdownMenuItem>
           ))}
           
           <DropdownMenuSeparator />
           <DropdownMenuItem 
-            className="text-xs text-blue-600 justify-center cursor-pointer"
+            className="text-xs text-primary justify-center cursor-pointer"
             onClick={() => setShowAddClientWizard(true)}
           >
             <UserPlus className="h-3 w-3 mr-1" />

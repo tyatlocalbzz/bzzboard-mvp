@@ -55,17 +55,15 @@ export const ShotChecklistItem = ({
       {/* Shot text and edit button */}
       <div className="flex items-center justify-between flex-1 min-w-0">
         <div className="flex-1 min-w-0">
-          <label 
-            htmlFor={`shot-${shot.id}`}
-            className={cn(
-              "text-sm cursor-pointer block",
-              shot.completed ? "line-through text-gray-500" : "text-gray-900"
-            )}
+          <span 
+            className={`flex-1 text-sm ${
+              shot.completed ? "line-through text-muted-foreground" : "text-foreground"
+            }`}
           >
             {shot.text}
-          </label>
+          </span>
           {shot.notes && (
-            <div className="text-xs text-gray-500 mt-1 italic">
+            <div className="text-xs text-muted-foreground mt-1 italic">
               {shot.notes}
             </div>
           )}

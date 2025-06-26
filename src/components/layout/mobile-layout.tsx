@@ -7,6 +7,7 @@ import { ClientSelector } from "./client-selector"
 import { ActiveShootTimer } from "./active-shoot-timer"
 import { ErrorBoundary } from "@/components/ui/error-boundary"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ThemeToggleCompact } from "@/components/theme-toggle"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useActiveShoot } from "@/contexts/active-shoot-context"
@@ -18,6 +19,7 @@ interface MobileLayoutProps {
   headerAction?: ReactNode
   showBottomNav?: boolean
   showClientSelector?: boolean
+  showThemeToggle?: boolean
   className?: string
   backHref?: string
   compact?: boolean
@@ -38,6 +40,7 @@ export const MobileLayout = ({
   headerAction, 
   showBottomNav = true,
   showClientSelector = true,
+  showThemeToggle = true,
   className,
   backHref,
   compact = false,
@@ -53,7 +56,7 @@ export const MobileLayout = ({
   const showTimerBanner = isShootActive && !isOnActiveShootPage
 
   return (
-    <div className="min-h-screen bg-gray-50 touch-scroll relative">
+    <div className="min-h-screen bg-background text-foreground touch-scroll relative">
       {/* Active Shoot Timer - Fixed at very top */}
       <ErrorBoundary>
         <ActiveShootTimer />
@@ -61,7 +64,7 @@ export const MobileLayout = ({
 
       {/* Fixed header that accounts for active shoot timer */}
       <header className={cn(
-        "fixed left-0 right-0 z-40 bg-white border-b border-gray-200 safe-area-pt",
+        "fixed left-0 right-0 z-40 bg-background border-b border-border safe-area-pt",
         showTimerBanner ? "top-10" : "top-0"
       )}>
         <div className="px-3 h-12 flex items-center justify-between gap-2">
@@ -70,14 +73,14 @@ export const MobileLayout = ({
             {backHref && (
               <Link 
                 href={backHref}
-                className="flex items-center justify-center w-8 h-8 hover:bg-gray-100 rounded-md transition-colors flex-shrink-0 tap-target"
+                className="flex items-center justify-center w-8 h-8 hover:bg-muted rounded-md transition-colors flex-shrink-0 tap-target"
                 aria-label="Go back"
               >
-                <ArrowLeft className="h-5 w-5 text-gray-600" />
+                <ArrowLeft className="h-5 w-5 text-muted-foreground" />
               </Link>
             )}
             {title && (
-              <h1 className="text-base font-semibold text-gray-900 truncate">
+              <h1 className="text-base font-semibold text-foreground truncate">
                 {title}
               </h1>
             )}
@@ -92,12 +95,13 @@ export const MobileLayout = ({
             </div>
           )}
           
-          {/* Right section: Header Action */}
-          {headerAction && (
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {headerAction}
-            </div>
-          )}
+          {/* Right section: Theme Toggle + Header Action */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {showThemeToggle && (
+              <ThemeToggleCompact />
+            )}
+            {headerAction}
+          </div>
         </div>
       </header>
       

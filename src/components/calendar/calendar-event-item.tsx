@@ -58,20 +58,20 @@ export const CalendarEventItem = ({
   // Get status color
   const getStatusColor = (status: CalendarEvent['status']) => {
     switch (status) {
-      case 'confirmed': return 'bg-green-100 text-green-800'
-      case 'tentative': return 'bg-yellow-100 text-yellow-800'
-      case 'cancelled': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'confirmed': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+      case 'tentative': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+      case 'cancelled': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+      default: return 'bg-muted text-muted-foreground'
     }
   }
 
   // Get sync status color
   const getSyncStatusColor = (syncStatus: CalendarEvent['syncStatus']) => {
     switch (syncStatus) {
-      case 'synced': return 'bg-blue-100 text-blue-800'
-      case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'error': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'synced': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+      case 'error': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+      default: return 'bg-muted text-muted-foreground'
     }
   }
 
@@ -84,9 +84,9 @@ export const CalendarEventItem = ({
   return (
     <div
       className={cn(
-        "bg-white rounded-lg border p-4 transition-colors",
-        onClick && "cursor-pointer hover:bg-gray-50",
-        event.conflictDetected && "border-red-200 bg-red-50",
+        "bg-card rounded-lg border border-border p-4 transition-colors",
+        onClick && "cursor-pointer hover:bg-accent/50",
+        event.conflictDetected && "border-destructive/20 bg-destructive/5",
         className
       )}
       onClick={handleClick}
@@ -96,7 +96,7 @@ export const CalendarEventItem = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <h3 className={cn(
-              "font-medium text-gray-900 truncate",
+              "font-medium text-card-foreground truncate",
               compact ? "text-sm" : "text-base"
             )}>
               {event.title}
@@ -106,24 +106,24 @@ export const CalendarEventItem = ({
             <div className="flex items-center gap-1 flex-shrink-0">
               {event.isShootEvent && (
                 <div title="Content Shoot">
-                  <Camera className="h-3 w-3 text-blue-600" />
+                  <Camera className="h-3 w-3 text-primary" />
                 </div>
               )}
               {event.isRecurring && (
                 <div title="Recurring Event">
-                  <Repeat className="h-3 w-3 text-gray-500" />
+                  <Repeat className="h-3 w-3 text-muted-foreground" />
                 </div>
               )}
               {event.conflictDetected && (
                 <div title="Scheduling Conflict">
-                  <AlertTriangle className="h-3 w-3 text-red-600" />
+                  <AlertTriangle className="h-3 w-3 text-destructive" />
                 </div>
               )}
             </div>
           </div>
           
           {/* Time and date */}
-          <div className="flex items-center gap-3 text-sm text-gray-600">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
               <span>
@@ -160,7 +160,7 @@ export const CalendarEventItem = ({
         <>
           {/* Location */}
           {event.location && (
-            <div className="flex items-center gap-1 text-sm text-gray-600 mb-2">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2">
               <MapPin className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{event.location}</span>
             </div>
@@ -168,7 +168,7 @@ export const CalendarEventItem = ({
 
           {/* Attendees */}
           {event.attendees && event.attendees.length > 0 && (
-            <div className="flex items-center gap-1 text-sm text-gray-600 mb-2">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground mb-2">
               <Users className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">
                 {event.attendees.length} attendee{event.attendees.length !== 1 ? 's' : ''}
@@ -178,23 +178,23 @@ export const CalendarEventItem = ({
 
           {/* Description */}
           {event.description && (
-            <p className="text-sm text-gray-600 line-clamp-2 mt-2">
+            <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
               {event.description}
             </p>
           )}
 
           {/* Conflict warning */}
           {event.conflictDetected && (
-            <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+            <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
               <div className="flex items-start gap-2 mb-2">
-                <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <span className="text-sm font-medium text-red-800">
+                  <span className="text-sm font-medium text-destructive">
                     Scheduling conflict detected
                   </span>
                   {event.conflictDetails && event.conflictDetails.length > 0 && (
                     <div className="mt-2 space-y-1">
-                      <p className="text-xs text-red-700 font-medium">
+                      <p className="text-xs text-destructive/80 font-medium">
                         Conflicts with:
                       </p>
                       {event.conflictDetails.map((conflict, index) => {
@@ -214,9 +214,9 @@ export const CalendarEventItem = ({
                         })
                         
                         return (
-                          <div key={index} className="text-xs text-red-700 bg-red-100 rounded px-2 py-1">
+                          <div key={index} className="text-xs text-destructive/90 bg-destructive/5 rounded px-2 py-1">
                             <span className="font-medium">{conflict.title}</span>
-                            <span className="text-red-600 ml-1">
+                            <span className="text-destructive/70 ml-1">
                               ({date} • {startTime} - {endTime})
                             </span>
                           </div>

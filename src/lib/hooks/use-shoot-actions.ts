@@ -8,7 +8,7 @@ import { ShootStatus } from '@/lib/utils/status'
 import type { Shoot } from '@/lib/types/shoots'
 
 interface UseShootActionsOptions {
-  shoot: Shoot
+  shoot: Shoot | null
   onSuccess?: () => void
   onOptimisticDelete?: () => void
 }
@@ -21,11 +21,13 @@ interface UseShootActionsReturn {
   navigateToActive: () => void
   navigateToUpload: () => void
   isLoading: boolean
+  canPerformActions: boolean
 }
 
 /**
  * Enhanced shoot actions hook using unified API
- * Provides optimized state management and consistent error handling
+ * Provides resilient state management with graceful null handling
+ * Follows modern React patterns for loading states and error boundaries
  */
 export const useShootActions = ({ 
   shoot, 
@@ -39,8 +41,29 @@ export const useShootActions = ({
   const { loading: statusLoading, execute: executeStatusChange } = useAsync(ShootsApi.changeStatus)
   const { loading: deleteLoading, execute: executeDelete } = useAsync(ShootsApi.deleteShoot)
 
-  const startShoot = useCallback(async () => {
-    try {
+  // Helper function to ensure shoot is available before performing actions
+  const withShootGuard = useCallback(<T extends unknown[]>(
+    action: (shoot: Shoot, ...args: T) => Promise<void>,
+    errorMessage: string
+  ) => {
+    return async (...args: T): Promise<void> => {
+      if (!shoot) {
+        console.warn('⚠️ [useShootActions] Action attempted before shoot data loaded')
+        toast.error('Please wait for shoot data to load')
+        return
+      }
+      
+      try {
+        await action(shoot, ...args)
+      } catch (error) {
+        console.error(`❌ [useShootActions] ${errorMessage}:`, error)
+        toast.error(`${errorMessage}. Please try again.`)
+      }
+    }
+  }, [shoot])
+
+  const startShoot = useCallback(
+    withShootGuard(async (shoot: Shoot) => {
       // First change the shoot status to 'active'
       const statusResult = await executeStatusChange(shoot.id.toString(), 'active', 'start')
       if (!statusResult) return
@@ -59,27 +82,23 @@ export const useShootActions = ({
       
       // Navigate to active shoot page
       router.push(`/shoots/${shoot.id}/active`)
-    } catch (error) {
-      console.error('❌ [useShootActions] Start shoot error:', error)
-      toast.error('Failed to start shoot. Please try again.')
-    }
-  }, [shoot, executeStatusChange, startActiveShoot, onSuccess, router])
+    }, 'Failed to start shoot'),
+    [withShootGuard, executeStatusChange, startActiveShoot, onSuccess, router]
+  )
 
-  const completeShoot = useCallback(async () => {
-    try {
+  const completeShoot = useCallback(
+    withShootGuard(async (shoot: Shoot) => {
       const statusResult = await executeStatusChange(shoot.id.toString(), 'completed', 'complete')
       if (!statusResult) return
       
       toast.success('Shoot completed successfully!')
       onSuccess?.()
-    } catch (error) {
-      console.error('❌ [useShootActions] Complete shoot error:', error)
-      toast.error('Failed to complete shoot. Please try again.')
-    }
-  }, [shoot.id, executeStatusChange, onSuccess])
+    }, 'Failed to complete shoot'),
+    [withShootGuard, executeStatusChange, onSuccess]
+  )
 
-  const deleteShoot = useCallback(async () => {
-    try {
+  const deleteShoot = useCallback(
+    withShootGuard(async (shoot: Shoot) => {
       toast.loading('Deleting shoot...', { id: 'delete-shoot' })
       
       // Trigger optimistic delete for immediate UI feedback
@@ -101,33 +120,37 @@ export const useShootActions = ({
         
         router.push('/shoots?refresh=true')
       }
-    } catch (error) {
-      console.error('❌ [useShootActions] Delete error:', error)
-      toast.error('Failed to delete shoot. Please try again.', { id: 'delete-shoot' })
-      onSuccess?.() // Refresh to restore state
-    }
-  }, [shoot, executeDelete, onOptimisticDelete, onSuccess, router])
+    }, 'Failed to delete shoot'),
+    [withShootGuard, executeDelete, onOptimisticDelete, router]
+  )
 
-  const changeStatus = useCallback(async (status: ShootStatus, action?: string) => {
-    try {
+  const changeStatus = useCallback(
+    withShootGuard(async (shoot: Shoot, status: ShootStatus, action?: string) => {
       const result = await executeStatusChange(shoot.id.toString(), status, action)
       if (result?.message) {
         toast.success(result.message)
         onSuccess?.()
       }
-    } catch (error) {
-      console.error('❌ [useShootActions] Change status error:', error)
-      toast.error('Failed to update shoot status. Please try again.')
-    }
-  }, [shoot.id, executeStatusChange, onSuccess])
+    }, 'Failed to update shoot status'),
+    [withShootGuard, executeStatusChange, onSuccess]
+  )
 
+  // Navigation functions with null guards
   const navigateToActive = useCallback(() => {
+    if (!shoot) {
+      toast.error('Please wait for shoot data to load')
+      return
+    }
     router.push(`/shoots/${shoot.id}/active`)
-  }, [shoot.id, router])
+  }, [shoot, router])
 
   const navigateToUpload = useCallback(() => {
+    if (!shoot) {
+      toast.error('Please wait for shoot data to load')
+      return
+    }
     router.push(`/shoots/${shoot.id}/upload`)
-  }, [shoot.id, router])
+  }, [shoot, router])
 
   return {
     startShoot,
@@ -136,6 +159,7 @@ export const useShootActions = ({
     changeStatus,
     navigateToActive,
     navigateToUpload,
-    isLoading: statusLoading || deleteLoading
+    isLoading: statusLoading || deleteLoading,
+    canPerformActions: shoot !== null
   }
 } 

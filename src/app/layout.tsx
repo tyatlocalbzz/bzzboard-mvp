@@ -6,6 +6,7 @@ import { AuthGuard } from "@/components/auth/auth-guard";
 import { ConditionalLayout } from "@/components/layout/conditional-layout";
 import { ClientProvider } from "@/contexts/client-context";
 import { ActiveShootProvider } from "@/contexts/active-shoot-context";
+import { ThemeProvider } from "@/components/theme-provider";
 import { getSession } from "@/lib/auth/session";
 import { Toaster } from "sonner";
 
@@ -27,20 +28,22 @@ export default async function RootLayout({
   const session = await getSession()
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <SessionProvider session={session}>
-          <ClientProvider>
-            <ActiveShootProvider>
-              <AuthGuard>
-                <ConditionalLayout>
-                  {children}
-                </ConditionalLayout>
-              </AuthGuard>
-            </ActiveShootProvider>
-          </ClientProvider>
-        </SessionProvider>
-        <Toaster />
+        <ThemeProvider>
+          <SessionProvider session={session}>
+            <ClientProvider>
+              <ActiveShootProvider>
+                <AuthGuard>
+                  <ConditionalLayout>
+                    {children}
+                  </ConditionalLayout>
+                </AuthGuard>
+              </ActiveShootProvider>
+            </ClientProvider>
+          </SessionProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )

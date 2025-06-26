@@ -137,7 +137,7 @@ export const IntegrationCard = ({
 
   return (
     <div className={cn(
-      'bg-white border border-gray-200 rounded-lg p-4 transition-colors',
+      'bg-card border border-border rounded-lg p-4 transition-colors',
       disabled && 'opacity-60',
       className
     )}>
@@ -147,7 +147,7 @@ export const IntegrationCard = ({
         {/* Content Section */}
         <div className="flex items-start gap-3 flex-1 min-w-0">
           {/* Icon */}
-          <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+          <div className="flex-shrink-0 w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
             {typeof icon === 'string' ? (
               <span className="text-lg">{icon}</span>
             ) : (
@@ -158,17 +158,17 @@ export const IntegrationCard = ({
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-medium text-gray-900 truncate">{name}</h3>
+              <h3 className="font-medium text-foreground truncate">{name}</h3>
               {getStatusIcon()}
             </div>
             
-            <p className="text-sm text-gray-600 mb-2">{description}</p>
+            <p className="text-sm text-muted-foreground mb-2">{description}</p>
             
             {/* Status Details */}
             <div className="flex items-center gap-2 mb-2">
               {getStatusBadge()}
               {connectedEmail && (
-                <span className="text-xs text-gray-500 truncate">
+                <span className="text-xs text-muted-foreground truncate">
                   {connectedEmail}
                 </span>
               )}
@@ -176,14 +176,14 @@ export const IntegrationCard = ({
 
             {/* Error Message */}
             {status === 'error' && error && (
-              <div className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded mb-2">
+              <div className="text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded mb-2">
                 {error}
               </div>
             )}
 
             {/* Last Sync */}
             {status === 'connected' && lastSync && (
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-muted-foreground">
                 Last synced: {formatLastSync(lastSync)}
               </div>
             )}

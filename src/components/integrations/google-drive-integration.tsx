@@ -245,31 +245,31 @@ export const GoogleDriveIntegration = ({
           <div className="space-y-4">
             {/* Permissions List */}
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
                 <FolderOpen className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Browse and view your folders</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Browse and view your folders</p>
+                  <p className="text-xs text-muted-foreground">
                     Access existing folders to choose where to organize your content
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
                 <Zap className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Create folders and upload files</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Create folders and upload files</p>
+                  <p className="text-xs text-muted-foreground">
                     Automatically organize content with folder structure and file uploads
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
                 <Shield className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Read file metadata</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Read file metadata</p>
+                  <p className="text-xs text-muted-foreground">
                     Track upload status and sync information for your content
                   </p>
                 </div>
@@ -277,8 +277,8 @@ export const GoogleDriveIntegration = ({
             </div>
 
             {/* Security Note */}
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-xs text-blue-800">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-xs text-blue-800 dark:text-blue-300">
                 <Shield className="h-3 w-3 inline mr-1" />
                 Buzzboard can browse your folders but only manages files it creates. Your existing files remain untouched.
               </p>

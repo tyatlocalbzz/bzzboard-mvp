@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg'
   className?: string
-  color?: 'current' | 'gray' | 'blue' | 'red'
+  color?: 'current' | 'muted' | 'primary' | 'destructive'
 }
 
 const sizeVariants = {
@@ -15,9 +15,9 @@ const sizeVariants = {
 
 const colorVariants = {
   current: "border-current",
-  gray: "border-gray-900",
-  blue: "border-blue-600",
-  red: "border-red-600"
+  muted: "border-muted-foreground",
+  primary: "border-primary",
+  destructive: "border-destructive"
 }
 
 export const LoadingSpinner = ({ 

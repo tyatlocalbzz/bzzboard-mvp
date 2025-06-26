@@ -24,9 +24,9 @@ export const EmptyState = ({
 }: EmptyStateProps) => {
   return (
     <div className={cn("text-center py-8", className)}>
-      <Icon className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-      <div className="text-sm text-gray-600 mb-1">{title}</div>
-      <div className="text-xs text-gray-500 mb-4">{description}</div>
+      <Icon className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+      <div className="text-sm text-foreground mb-1">{title}</div>
+      <div className="text-xs text-muted-foreground mb-4">{description}</div>
       {action && (
         action.children ? (
           action.children

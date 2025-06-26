@@ -50,8 +50,8 @@ export default function ActiveShootPage() {
   }, [endActiveShoot, router, shootId])
 
   // Use shoot actions hook for ending the shoot
-  const { completeShoot, isLoading: endLoading } = useShootActions({
-    shoot: shoot!,
+  const { completeShoot, isLoading: endLoading, canPerformActions } = useShootActions({
+    shoot: shoot,
     onSuccess: handleSuccess
   })
 
@@ -106,13 +106,21 @@ export default function ActiveShootPage() {
   }, [router, shootId])
 
   const handleEndShootClick = useCallback(() => {
+    if (!canPerformActions) {
+      toast.error('Please wait for shoot data to load')
+      return
+    }
     setShowEndDialog(true)
-  }, [])
+  }, [canPerformActions])
 
   const handleConfirmEndShoot = useCallback(async () => {
+    if (!canPerformActions) {
+      toast.error('Please wait for shoot data to load')
+      return
+    }
     await completeShoot()
     setShowEndDialog(false)
-  }, [completeShoot])
+  }, [completeShoot, canPerformActions])
 
   const handleCancelEndShoot = useCallback(() => {
     setShowEndDialog(false)
@@ -135,8 +143,8 @@ export default function ActiveShootPage() {
       >
         <div className="flex items-center justify-center min-h-[200px]">
           <div className="text-center">
-            <LoadingSpinner size="lg" color="blue" className="mx-auto mb-4" />
-            <p className="text-sm text-gray-600">Loading shoot data...</p>
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground">Loading shoot data...</p>
           </div>
         </div>
       </MobileLayout>
@@ -158,14 +166,14 @@ export default function ActiveShootPage() {
       showClientSelector={false}
       headerAction={
         <div className="flex items-center gap-2">
-          <div className="text-sm font-mono text-gray-600">
+          <div className="text-sm font-mono text-muted-foreground">
             {elapsedTime}
           </div>
           <Button
             variant="destructive"
             size="sm"
             onClick={handleEndShootClick}
-            disabled={endLoading}
+            disabled={endLoading || !canPerformActions} // ✅ Add canPerformActions guard
             className="h-8 px-3 text-xs"
           >
             {endLoading ? (
@@ -182,14 +190,14 @@ export default function ActiveShootPage() {
         {/* Progress Section */}
         <div className="space-y-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-gray-600">Posts Complete</span>
-            <span className="text-sm font-medium text-gray-900">
+            <span className="text-sm text-muted-foreground">Posts Complete</span>
+            <span className="text-sm font-medium text-foreground">
               {completedPosts} of {totalPosts}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
+          <div className="w-full bg-muted rounded-full h-3">
             <div 
-              className="bg-blue-500 h-3 rounded-full transition-all duration-300"
+              className="bg-primary h-3 rounded-full transition-all duration-300"
               style={{ width: `${progressPercentage}%` }}
             />
           </div>
@@ -199,7 +207,7 @@ export default function ActiveShootPage() {
 
         {/* Active Post Ideas */}
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Remaining Shots</h2>
+          <h2 className="text-lg font-semibold text-foreground">Remaining Shots</h2>
           {activePostIdeas.length > 0 ? (
             <div className="space-y-4">
               {activePostIdeas.map((postIdea) => (
@@ -216,13 +224,13 @@ export default function ActiveShootPage() {
             </div>
           ) : (
             <div className="text-center py-8">
-              <div className="text-lg font-medium text-gray-900 mb-2">
+              <div className="text-lg font-medium text-foreground mb-2">
                 🎉 All shots complete!
               </div>
-              <div className="text-sm text-gray-600 mb-4">
+              <div className="text-sm text-muted-foreground mb-4">
                 Great work! You&apos;ve captured all the planned shots.
               </div>
-              <Button onClick={handleEndShootClick} disabled={endLoading}>
+              <Button onClick={handleEndShootClick} disabled={endLoading || !canPerformActions}>
                 {endLoading ? (
                   <>
                     <LoadingSpinner size="sm" color="current" className="mr-2" />
@@ -249,7 +257,7 @@ export default function ActiveShootPage() {
                 className="w-full justify-between p-0 h-auto"
                 onClick={() => setShowCompleted(!showCompleted)}
               >
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-foreground">
                   Completed Post Ideas ({completedPostIdeas.length})
                 </h2>
                 {showCompleted ? (

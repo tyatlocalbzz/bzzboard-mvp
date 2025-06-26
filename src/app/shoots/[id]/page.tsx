@@ -61,8 +61,8 @@ export default function ShootDetailsPage() {
       >
         <div className="flex items-center justify-center min-h-[200px]">
           <div className="text-center">
-            <LoadingSpinner size="lg" color="blue" className="mx-auto mb-4" />
-            <p className="text-sm text-gray-600">Loading shoot data...</p>
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground">Loading shoot data...</p>
           </div>
         </div>
       </MobileLayout>
@@ -137,7 +137,7 @@ export default function ShootDetailsPage() {
       {/* Post Ideas */}
       <div className="px-3 py-3 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Post Ideas</h2>
+          <h2 className="text-lg font-semibold text-foreground">Post Ideas</h2>
           <AddPostChoiceDialog 
             onCreateNew={handleCreateNewPost}
             onAssignExisting={handleAssignExistingPost}
@@ -153,10 +153,10 @@ export default function ShootDetailsPage() {
           <div className="space-y-3">
             {postIdeas.map((postIdea, index) => (
               <div key={postIdea.id}>
-                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="bg-card border border-border rounded-lg p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 truncate">
+                      <h3 className="font-medium text-card-foreground truncate">
                         {postIdea.title}
                       </h3>
                       <div className="flex items-center gap-2 mt-1">
@@ -165,21 +165,21 @@ export default function ShootDetailsPage() {
                             const platformOption = PLATFORM_OPTIONS.find(p => p.name === platform)
                             const Icon = platformOption?.icon
                             return Icon ? (
-                              <Icon key={platform} className="h-3 w-3 text-gray-500" />
+                              <Icon key={platform} className="h-3 w-3 text-muted-foreground" />
                             ) : (
-                              <span key={platform} className="text-xs text-gray-500">
+                              <span key={platform} className="text-xs text-muted-foreground">
                                 {platform.slice(0, 2)}
                               </span>
                             )
                           })}
                           {postIdea.platforms.length > 3 && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-muted-foreground">
                               +{postIdea.platforms.length - 3}
                             </span>
                           )}
                         </div>
-                        <span className="text-xs text-gray-400">•</span>
-                        <span className="text-xs text-gray-500 capitalize">
+                        <span className="text-xs text-muted-foreground">•</span>
+                        <span className="text-xs text-muted-foreground capitalize">
                           {postIdea.contentType}
                         </span>
                       </div>
@@ -200,20 +200,20 @@ export default function ShootDetailsPage() {
                   </div>
 
                   {postIdea.caption && (
-                    <p className="text-sm text-gray-600 mb-3">
+                    <p className="text-sm text-muted-foreground mb-3">
                       {postIdea.caption}
                     </p>
                   )}
 
                   {postIdea.shotList.length > 0 && (
                     <div className="space-y-1">
-                      <h4 className="text-xs font-medium text-gray-700 uppercase tracking-wide">
+                      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Shot List ({postIdea.shotList.length})
                       </h4>
                       <ul className="space-y-1">
                         {postIdea.shotList.map((shot, shotIndex) => (
-                          <li key={shotIndex} className="text-sm text-gray-600 flex items-center gap-2">
-                            <div className="w-1 h-1 bg-gray-400 rounded-full flex-shrink-0" />
+                          <li key={shotIndex} className="text-sm text-muted-foreground flex items-center gap-2">
+                            <div className="w-1 h-1 bg-muted-foreground rounded-full flex-shrink-0" />
                             {shot}
                           </li>
                         ))}
@@ -222,7 +222,7 @@ export default function ShootDetailsPage() {
                   )}
 
                   {postIdea.notes && (
-                    <div className="mt-3 p-2 bg-gray-50 rounded text-sm text-gray-600">
+                    <div className="mt-3 p-2 bg-muted rounded text-sm text-muted-foreground">
                       <strong>Notes:</strong> {postIdea.notes}
                     </div>
                   )}

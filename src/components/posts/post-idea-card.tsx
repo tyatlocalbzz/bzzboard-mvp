@@ -70,10 +70,12 @@ export const PostIdeaCard = ({
         return 'bg-blue-100 text-blue-800'
       case 'shot':
         return 'bg-yellow-100 text-yellow-800'
+      case 'completed':
+        return 'bg-muted text-muted-foreground'
       case 'uploaded':
-        return 'bg-green-100 text-green-800'
+        return 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-muted text-muted-foreground'
     }
   }
 
@@ -91,7 +93,7 @@ export const PostIdeaCard = ({
     <Card
       className={cn(
         "p-4 transition-colors",
-        onClick && "cursor-pointer hover:bg-gray-50",
+        onClick && "cursor-pointer hover:bg-accent",
         className
       )}
       onClick={handleCardClick}
@@ -101,13 +103,13 @@ export const PostIdeaCard = ({
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-medium text-gray-900 truncate">
+              <h3 className="font-medium text-foreground truncate">
                 {post.title}
               </h3>
             </div>
             
             {showClient && post.client && (
-              <div className="flex items-center gap-1 text-sm text-gray-600">
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Users className="h-3 w-3" />
                 <span>{post.client.name}</span>
               </div>
@@ -183,21 +185,21 @@ export const PostIdeaCard = ({
 
         {/* Caption Preview */}
         {post.caption && (
-          <p className="text-sm text-gray-600 line-clamp-2">
+          <p className="text-sm text-muted-foreground line-clamp-2">
             {post.caption}
           </p>
         )}
 
         {/* Shot List Count */}
         {post.shotList && Array.isArray(post.shotList) && post.shotList.length > 0 && (
-          <div className="flex items-center gap-1 text-sm text-gray-500">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <FileText className="h-3 w-3" />
             <span>{post.shotList.length} shot{post.shotList.length !== 1 ? 's' : ''}</span>
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
+        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
           <span>Created {formatDate(post.createdAt)}</span>
           {post.updatedAt !== post.createdAt && (
             <span>Updated {formatDate(post.updatedAt)}</span>

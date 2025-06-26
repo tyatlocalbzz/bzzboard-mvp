@@ -5,7 +5,6 @@ import { StatsCard } from '@/components/ui/stats-card'
 import { MenuItemButton } from '@/components/ui/menu-item'
 import { getRoleColor, getStatusColor } from '@/lib/utils/status'
 import { 
-  Mail, 
   Shield, 
   Key, 
   Users, 
@@ -29,52 +28,63 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">Profile</h2>
+        <h2 className="text-lg font-semibold text-foreground">Profile</h2>
         
-        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-          <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
-            {user.name?.charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold truncate">{user.name}</h3>
-            <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-              <Mail className="h-3 w-3" />
-              <span className="truncate">{user.email}</span>
+        <div className="p-4 bg-card border border-border rounded-lg">
+          <div className="space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="shrink-0">
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                  <span className="text-xl font-semibold text-primary">
+                    {user.name?.charAt(0)?.toUpperCase() || '?'}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex-1 min-w-0 space-y-2">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground truncate">
+                    {user.name}
+                  </h3>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {user.email}
+                  </p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Badge 
+                    variant={getRoleColor(user.role)} 
+                    className="text-xs"
+                  >
+                    <Shield className="h-3 w-3 mr-1" />
+                    {user.role}
+                  </Badge>
+                  
+                  <Badge 
+                    variant={getStatusColor(user.status)} 
+                    className="text-xs"
+                  >
+                    <Activity className="h-3 w-3 mr-1" />
+                    {user.status}
+                  </Badge>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge variant={getRoleColor(user.role)} className="text-xs">
-                <Shield className="h-3 w-3 mr-1" />
-                {user.role.toUpperCase()}
-              </Badge>
-              <Badge variant={getStatusColor(user.status)} className="text-xs">
-                {user.status.toUpperCase()}
-              </Badge>
+
+            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
+              <StatsCard
+                title="Account Type"
+                value={user.role === 'admin' ? 'Administrator' : 'Team Member'}
+                icon={Shield}
+              />
+              
+              <StatsCard
+                title="Member Since"
+                value={new Date(user.createdAt).toLocaleDateString()}
+                icon={Calendar}
+              />
             </div>
           </div>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-3">
-          <StatsCard
-            title="Member Since"
-            value={new Date(user.createdAt).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric' 
-            })}
-            icon={Calendar}
-            color="blue"
-          />
-          <StatsCard
-            title="Last Login"
-            value={user.lastLoginAt 
-              ? new Date(user.lastLoginAt).toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric' 
-                })
-              : 'Never'
-            }
-            icon={Activity}
-            color="green"
-          />
         </div>
       </div>
 
@@ -82,8 +92,8 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
         <>
           <Separator />
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-gray-900">Set Password</h2>
-            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <h2 className="text-lg font-semibold text-foreground">Set Password</h2>
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
               <ChangePasswordForm>
                 <Button className="w-full h-12 tap-target">
                   <Key className="h-4 w-4 mr-2" />
@@ -98,7 +108,7 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
       <Separator />
 
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
+        <h2 className="text-lg font-semibold text-foreground">Settings</h2>
         <div className="space-y-2">
           <EditProfileForm user={{ name: user.name, email: user.email }}>
             <MenuItemButton
@@ -120,7 +130,7 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
         <>
           <Separator />
           <div className="space-y-3">
-            <h2 className="text-lg font-semibold text-gray-900">Admin</h2>
+            <h2 className="text-lg font-semibold text-foreground">Admin</h2>
             <Link href="/admin/users">
               <MenuItemButton
                 icon={Users}
@@ -134,7 +144,7 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
       <Separator />
 
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">More</h2>
+        <h2 className="text-lg font-semibold text-foreground">More</h2>
         <div className="space-y-2">
           <MenuItemButton
             icon={Bell}
@@ -157,7 +167,7 @@ export const AccountSettings = ({ user }: AccountSettingsProps) => {
       <div className="space-y-3">
         <SignOutButton 
           variant="outline" 
-          className="w-full h-12 text-red-600 border-red-200 hover:bg-red-50 tap-target"
+          className="w-full h-12 text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 tap-target"
           showIcon={true}
         />
       </div>

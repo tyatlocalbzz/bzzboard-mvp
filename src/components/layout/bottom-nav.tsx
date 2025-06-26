@@ -55,7 +55,7 @@ export const BottomNav = () => {
   const showActiveShootIndicator = isShootActive && activeShoot
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 safe-area-pb">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t border-border safe-area-pb">
       <div className={cn(
         "grid h-14",
         showActiveShootIndicator ? "grid-cols-5" : "grid-cols-4"
@@ -70,10 +70,10 @@ export const BottomNav = () => {
               href={item.href}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 transition-colors",
-                "min-h-[44px] relative",
+                "min-h-[44px] relative hover:bg-accent/50",
                 active 
-                  ? "text-blue-600" 
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "text-primary" 
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -81,7 +81,7 @@ export const BottomNav = () => {
                 {item.label}
               </span>
               {active && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-600 rounded-full" />
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
               )}
             </Link>
           )
@@ -93,10 +93,11 @@ export const BottomNav = () => {
             onClick={() => router.push(`/shoots/${activeShoot.id}/active`)}
             className={cn(
               "flex flex-col items-center justify-center gap-1 transition-colors",
-              "min-h-[44px] relative bg-red-50",
+              "min-h-[44px] relative hover:bg-destructive/10",
+              "bg-destructive/5 dark:bg-destructive/10",
               pathname.includes(`/shoots/${activeShoot.id}/active`)
-                ? "text-red-600" 
-                : "text-red-500 hover:text-red-700"
+                ? "text-destructive" 
+                : "text-destructive/80 hover:text-destructive"
             )}
           >
             <Play className="h-5 w-5" />
@@ -104,7 +105,7 @@ export const BottomNav = () => {
               Active
             </span>
             {pathname.includes(`/shoots/${activeShoot.id}/active`) && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-red-600 rounded-full" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-destructive rounded-full" />
             )}
           </button>
         )}

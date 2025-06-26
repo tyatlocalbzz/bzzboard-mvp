@@ -308,13 +308,13 @@ export default function UploadContentPage() {
     >
       <div className="px-3 py-3 space-y-6">
         {/* Shoot Info */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-2">
             <Folder className="h-4 w-4 text-blue-500" />
-            <h2 className="font-medium text-gray-900">{shoot.title}</h2>
+            <h2 className="font-medium text-card-foreground">{shoot.title}</h2>
           </div>
-          <p className="text-sm text-gray-600">Client: {getClientName(shoot.client)}</p>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-muted-foreground">Client: {getClientName(shoot.client)}</p>
+          <p className="text-sm text-muted-foreground">
             Date: {new Date(shoot.scheduledAt).toLocaleDateString()}
           </p>
         </div>
@@ -336,13 +336,13 @@ export default function UploadContentPage() {
         {/* Post Ideas Sections */}
         {postIdeaSections.length > 0 ? (
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900">Post Ideas</h3>
+            <h3 className="text-lg font-semibold text-foreground">Post Ideas</h3>
             
             {postIdeaSections.map((section, index) => (
-              <div key={section.id} className="bg-white border border-gray-200 rounded-lg p-4">
+              <div key={section.id} className="bg-card border border-border rounded-lg p-4">
                 <div className="mb-4">
                   <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-medium text-gray-900">{section.title}</h4>
+                    <h4 className="font-medium text-card-foreground">{section.title}</h4>
                     <div className="flex items-center gap-1">
                       {section.platforms.slice(0, 2).map((platform) => (
                         <Badge key={platform} variant="outline" className="text-xs">
@@ -376,13 +376,13 @@ export default function UploadContentPage() {
                     </Label>
                     <div className="space-y-2">
                       {section.files.map((file, fileIndex) => (
-                        <div key={fileIndex} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
+                        <div key={fileIndex} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <span className="text-sm text-foreground truncate flex-1">{file.name}</span>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handlePostIdeaFileRemove(section.id, fileIndex)}
-                            className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                           >
                             <X className="h-3 w-3" />
                           </Button>
@@ -408,6 +408,19 @@ export default function UploadContentPage() {
                   </div>
                 )}
 
+                {/* Uploaded Files */}
+                {section.uploadedFiles.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    <h5 className="text-sm font-medium text-muted-foreground">Uploaded Files:</h5>
+                    {section.uploadedFiles.map((file) => (
+                      <div key={file.id} className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                        <Folder className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        <span className="text-sm text-foreground">{file.fileName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Notes */}
                 <div>
                   <Label htmlFor={`notes-${section.id}`} className="text-sm font-medium mb-2 block">
@@ -430,8 +443,8 @@ export default function UploadContentPage() {
         ) : null}
 
         {/* Miscellaneous Files Section */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h4 className="font-medium text-gray-900 mb-4">Additional Files</h4>
+        <div className="bg-card border border-border rounded-lg p-4">
+          <h4 className="font-medium text-card-foreground mb-4">Additional Files</h4>
           
           <div className="mb-4">
             <Label className="text-sm font-medium mb-2 block">Files</Label>
@@ -450,13 +463,13 @@ export default function UploadContentPage() {
               </Label>
               <div className="space-y-2">
                 {miscFiles.map((file, fileIndex) => (
-                  <div key={fileIndex} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <span className="text-sm text-gray-700 truncate flex-1">{file.name}</span>
+                  <div key={fileIndex} className="flex items-center justify-between p-2 bg-muted rounded">
+                    <span className="text-sm text-foreground truncate flex-1">{file.name}</span>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleMiscFileRemove(fileIndex)}
-                      className="h-6 w-6 p-0 text-gray-400 hover:text-red-500"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-3 w-3" />
                     </Button>

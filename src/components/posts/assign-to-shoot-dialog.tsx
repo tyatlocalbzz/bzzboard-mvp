@@ -125,8 +125,6 @@ export const AssignToShootDialog = ({
     }
   }
 
-
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'scheduled': return 'bg-blue-100 text-blue-800'
@@ -180,12 +178,12 @@ export const AssignToShootDialog = ({
               {shoots.map((shoot) => (
                 <div
                   key={shoot.id}
-                  className="bg-white border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                  className="bg-card border border-border rounded-lg p-4 hover:bg-accent/50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-medium text-gray-900 truncate">
+                        <h3 className="font-medium text-card-foreground truncate">
                           {shoot.title}
                         </h3>
                         <Badge 
@@ -196,7 +194,7 @@ export const AssignToShootDialog = ({
                         </Badge>
                       </div>
                       
-                      <div className="space-y-1 text-sm text-gray-600">
+                      <div className="space-y-1 text-sm text-muted-foreground">
                         <div className="flex items-center gap-2">
                           <Users className="h-3 w-3" />
                           <span>{shoot.client}</span>
@@ -219,7 +217,7 @@ export const AssignToShootDialog = ({
                           <span className="truncate">{shoot.location}</span>
                         </div>
                         
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-muted-foreground">
                           {shoot.postIdeasCount} post idea{shoot.postIdeasCount !== 1 ? 's' : ''}
                         </div>
                       </div>

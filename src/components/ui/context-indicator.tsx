@@ -10,24 +10,24 @@ interface ContextIndicatorProps {
 }
 
 const colorVariants = {
-  blue: "bg-blue-50 border-blue-200 text-blue-700",
-  green: "bg-green-50 border-green-200 text-green-700",
-  purple: "bg-purple-50 border-purple-200 text-purple-700",
-  orange: "bg-orange-50 border-orange-200 text-orange-700"
+  blue: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300",
+  green: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300",
+  purple: "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300",
+  orange: "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 text-orange-700 dark:text-orange-300"
 }
 
 const subtitleColorVariants = {
-  blue: "text-blue-600",
-  green: "text-green-600", 
-  purple: "text-purple-600",
-  orange: "text-orange-600"
+  blue: "text-blue-600 dark:text-blue-400",
+  green: "text-green-600 dark:text-green-400", 
+  purple: "text-purple-600 dark:text-purple-400",
+  orange: "text-orange-600 dark:text-orange-400"
 }
 
 const metadataColorVariants = {
-  blue: "text-blue-500",
-  green: "text-green-500",
-  purple: "text-purple-500", 
-  orange: "text-orange-500"
+  blue: "text-blue-500 dark:text-blue-500",
+  green: "text-green-500 dark:text-green-500",
+  purple: "text-purple-500 dark:text-purple-500", 
+  orange: "text-orange-500 dark:text-orange-500"
 }
 
 export const ContextIndicator = ({

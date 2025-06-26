@@ -105,13 +105,13 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
     <div className="space-y-6">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
             <Zap className="h-4 w-4 text-blue-500" />
-            <span className="text-sm font-medium text-gray-700">
+            <span className="text-sm font-medium text-foreground">
               {connectedCount} of {totalCount} connected
             </span>
             {connectedCount === totalCount && (
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+              <span className="text-xs bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 px-2 py-1 rounded-full">
                 All connected
               </span>
             )}
@@ -134,7 +134,7 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
 
       {/* Google Integrations */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Google Workspace</h2>
+        <h2 className="text-lg font-semibold text-foreground">Google Workspace</h2>
         
         <div className="space-y-3">
           <GoogleDriveIntegration
@@ -155,7 +155,7 @@ export const IntegrationsManager = ({ user }: IntegrationsManagerProps) => {
 
       {/* Future Integrations Placeholder */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Coming Soon</h2>
+        <h2 className="text-lg font-semibold text-foreground">Coming Soon</h2>
         
         <div className="space-y-3">
           <IntegrationCard

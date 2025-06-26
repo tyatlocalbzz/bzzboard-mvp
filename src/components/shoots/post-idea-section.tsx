@@ -56,16 +56,16 @@ export const PostIdeaSection = ({
         {/* Clickable header for post idea details */}
         <Button
           variant="ghost"
-          className="w-full p-3 h-auto justify-start text-left hover:bg-gray-50"
+          className="w-full p-3 h-auto justify-start text-left hover:bg-accent/50"
           onClick={() => onPostIdeaClick(postIdea.id)}
         >
           <div className="flex items-center gap-3 w-full">
             {/* Post idea info */}
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm text-gray-900 truncate">
+              <div className="font-medium text-sm text-foreground truncate">
                 {postIdea.title}
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
                 {/* Platform icons */}
                 <div className="flex items-center gap-1">
                   {postIdea.platforms.slice(0, 3).map((platform) => {
@@ -83,9 +83,9 @@ export const PostIdeaSection = ({
             
             {/* Progress indicator */}
             <div className="flex items-center gap-2 flex-shrink-0">
-              <div className="w-8 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className="w-8 h-2 bg-muted rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-blue-500 transition-all duration-300"
+                  className="h-full bg-primary transition-all duration-300"
                   style={{ width: `${progressPercentage}%` }}
                 />
               </div>
@@ -127,7 +127,7 @@ export const PostIdeaSection = ({
           ))}
           
           {postIdea.shots.length === 0 && (
-            <div className="text-sm text-gray-500 italic py-2">
+            <div className="text-sm text-muted-foreground italic py-2">
               No shots defined for this post idea
             </div>
           )}
@@ -140,7 +140,7 @@ export const PostIdeaSection = ({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full h-8 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    className="w-full h-8 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50"
                   >
                     <Plus className="h-3 w-3 mr-1" />
                     Add Shot

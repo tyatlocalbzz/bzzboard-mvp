@@ -118,7 +118,7 @@ export const PostIdeaActions = ({ postIdea, shootId, onSuccess }: PostIdeaAction
           className="cursor-pointer"
         >
           {toggleLoading ? (
-            <LoadingSpinner size="sm" color="gray" className="mr-2" />
+            <LoadingSpinner size="sm" className="mr-2" />
           ) : (
             <Badge variant="outline" className="mr-2 h-4 w-4 p-0" />
           )}
@@ -133,7 +133,7 @@ export const PostIdeaActions = ({ postIdea, shootId, onSuccess }: PostIdeaAction
           className="cursor-pointer text-red-600 focus:text-red-600"
         >
           {removeLoading ? (
-            <LoadingSpinner size="sm" color="red" className="mr-2" />
+            <LoadingSpinner size="sm" className="mr-2" />
           ) : (
             <Unlink className="h-4 w-4 mr-2" />
           )}

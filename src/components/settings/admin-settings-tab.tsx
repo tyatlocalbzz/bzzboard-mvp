@@ -170,8 +170,8 @@ export const AdminSettingsTab = () => {
       <div className="flex items-center gap-3">
         <Settings className="h-5 w-5 text-blue-600" />
         <div className="flex-1">
-          <h2 className="text-lg font-semibold text-gray-900">Admin Settings</h2>
-          <p className="text-sm text-gray-600">Manage system-wide configuration</p>
+          <h2 className="text-lg font-semibold text-foreground">Admin Settings</h2>
+          <p className="text-sm text-muted-foreground">Manage system-wide configuration</p>
         </div>
         {isRefreshing && (
           <div className="flex items-center gap-2 text-sm text-blue-600">
@@ -184,8 +184,8 @@ export const AdminSettingsTab = () => {
       {/* System Settings */}
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Globe className="h-4 w-4 text-gray-600" />
-          <h3 className="font-medium text-gray-900">System Settings</h3>
+          <Globe className="h-4 w-4 text-muted-foreground" />
+          <h3 className="font-medium text-foreground">System Settings</h3>
         </div>
         
         <div className="space-y-4">
@@ -207,7 +207,7 @@ export const AdminSettingsTab = () => {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               This timezone is used as the default for new users and calendar events
               {isUpdatingTimezone && (
                 <span className="text-blue-600 ml-2">
@@ -223,14 +223,14 @@ export const AdminSettingsTab = () => {
       {/* Platform Management */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-gray-900">Platform Management</h3>
+          <h3 className="font-medium text-foreground">Platform Management</h3>
           <Badge variant="outline" className="text-xs">
             {data?.platforms.filter(p => p.enabled).length} / {data?.platforms.length} enabled
           </Badge>
         </div>
 
         {/* Add new platform */}
-        <div className="flex gap-2 mb-4 p-3 bg-gray-50 rounded-lg">
+        <div className="flex gap-2 mb-4 p-3 bg-muted rounded-lg">
           <Input
             placeholder="Platform name (e.g., Snapchat)"
             value={newPlatformName}
@@ -254,9 +254,9 @@ export const AdminSettingsTab = () => {
         {/* Platform list */}
         <div className="space-y-2">
           {data?.platforms.map((platform) => (
-            <div key={platform.id} className="flex items-center justify-between p-3 border rounded-lg">
+            <div key={platform.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
               <div className="flex items-center gap-3">
-                <span className="font-medium text-gray-900">{platform.name}</span>
+                <span className="font-medium text-foreground">{platform.name}</span>
                 {platform.isDefault && (
                   <Badge variant="secondary" className="text-xs">Default</Badge>
                 )}
@@ -273,7 +273,7 @@ export const AdminSettingsTab = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeletePlatform(platform.id as number, platform.name)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -287,14 +287,14 @@ export const AdminSettingsTab = () => {
       {/* Content Type Management */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-medium text-gray-900">Content Type Management</h3>
+          <h3 className="font-medium text-foreground">Content Type Management</h3>
           <Badge variant="outline" className="text-xs">
             {data?.contentTypes.filter(ct => ct.enabled).length} / {data?.contentTypes.length} enabled
           </Badge>
         </div>
 
         {/* Add new content type */}
-        <div className="grid grid-cols-2 gap-2 mb-4 p-3 bg-gray-50 rounded-lg">
+        <div className="grid grid-cols-2 gap-2 mb-4 p-3 bg-muted rounded-lg">
           <Input
             placeholder="Content type name"
             value={newContentTypeName}
@@ -326,11 +326,11 @@ export const AdminSettingsTab = () => {
         {/* Content type list */}
         <div className="space-y-2">
           {data?.contentTypes.map((contentType) => (
-            <div key={contentType.id} className="flex items-center justify-between p-3 border rounded-lg">
+            <div key={contentType.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
               <div className="flex items-center gap-3">
                 <div>
-                  <span className="font-medium text-gray-900">{contentType.name}</span>
-                  <span className="text-sm text-gray-500 ml-2">({contentType.value})</span>
+                  <span className="font-medium text-foreground">{contentType.name}</span>
+                  <span className="text-sm text-muted-foreground ml-2">({contentType.value})</span>
                 </div>
                 {contentType.isDefault && (
                   <Badge variant="secondary" className="text-xs">Default</Badge>
@@ -348,7 +348,7 @@ export const AdminSettingsTab = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteContentType(contentType.id as number, contentType.name)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -361,7 +361,7 @@ export const AdminSettingsTab = () => {
 
       <Separator />
 
-      <div className="text-xs text-gray-500 text-center">
+      <div className="text-xs text-muted-foreground text-center">
         Changes to platforms and content types will affect all users and existing content.
         <br />
         Default items cannot be deleted but can be disabled.

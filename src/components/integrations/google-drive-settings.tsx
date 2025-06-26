@@ -85,19 +85,16 @@ export const GoogleDriveSettingsComponent = ({
         {/* Preview */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">Current Folder Structure</Label>
-          <div className="p-3 bg-gray-50 rounded-lg text-sm font-mono">
-            <div className="text-gray-600">
-              Selected Client Folder (e.g., /My Drive/Clients/Acme Corp)
-              <br />
-              └── 📁 [2024-01-15] Product Launch
-              <br />
-              &nbsp;&nbsp;&nbsp;&nbsp;├── 📁 Hero Shot
-              <br />
-              &nbsp;&nbsp;&nbsp;&nbsp;└── 📁 Behind Scenes
+          <div className="p-3 bg-muted rounded-lg text-sm font-mono">
+            <div className="text-muted-foreground">
+              Auto-organization enabled
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Files are organized by client and shoot date
             </div>
           </div>
-          <p className="text-xs text-gray-500">
-            Shoot folders are created directly in the client-selected folder. No additional nesting is applied.
+          <p className="text-xs text-muted-foreground">
+            Files will be organized automatically when uploaded
           </p>
         </div>
       </CardContent>

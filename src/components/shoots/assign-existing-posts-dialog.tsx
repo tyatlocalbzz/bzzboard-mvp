@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -191,17 +190,17 @@ export const AssignExistingPostsDialog = ({
               {filteredPosts.map((post) => (
                 <div
                   key={post.id}
-                  className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
+                  className="flex items-start gap-3 p-3 border border-border rounded-lg hover:bg-accent/50 cursor-pointer"
                   onClick={() => handlePostToggle(post.id)}
                 >
                   <Checkbox
                     checked={selectedPostIds.has(post.id)}
                     onCheckedChange={() => handlePostToggle(post.id)}
-                    className="mt-0.5"
+                    className="mt-1"
                   />
                   
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-gray-900 truncate">
+                    <h3 className="font-medium text-foreground truncate">
                       {post.title}
                     </h3>
                     
@@ -211,30 +210,27 @@ export const AssignExistingPostsDialog = ({
                           const platformOption = PLATFORM_OPTIONS.find(p => p.name === platform)
                           const Icon = platformOption?.icon
                           return Icon ? (
-                            <Icon key={platform} className="h-3 w-3 text-gray-500" />
+                            <Icon key={platform} className="h-3 w-3 text-muted-foreground" />
                           ) : (
-                            <span key={platform} className="text-xs text-gray-500">
+                            <span key={platform} className="text-xs text-muted-foreground">
                               {platform.slice(0, 2)}
                             </span>
                           )
                         })}
                         {post.platforms.length > 3 && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-muted-foreground">
                             +{post.platforms.length - 3}
                           </span>
                         )}
                       </div>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className="text-xs text-gray-500 capitalize">
+                      <span className="text-xs text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground capitalize">
                         {post.contentType}
                       </span>
-                      <Badge variant="outline" className="text-xs">
-                        {post.status}
-                      </Badge>
                     </div>
 
                     {post.caption && (
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                      <p className="text-sm text-muted-foreground mt-1 truncate">
                         {post.caption}
                       </p>
                     )}

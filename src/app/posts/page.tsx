@@ -113,8 +113,8 @@ export default function PostsPage() {
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center">
             <div className="text-red-600 mb-2">⚠️</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">Error Loading Posts</h3>
-            <p className="text-sm text-gray-600 mb-4">{error}</p>
+            <h3 className="text-lg font-medium text-foreground mb-1">Error Loading Posts</h3>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
             <Button onClick={fetchPosts} variant="outline">
               Try Again
             </Button>
@@ -127,11 +127,11 @@ export default function PostsPage() {
   return (
     <MobileLayout>
       {/* Header */}
-      <div className="sticky top-0 bg-white z-10 border-b border-gray-200">
+      <div className="sticky top-0 bg-background z-10 border-b border-border">
         <div className="p-4 space-y-4">
           {/* Create Button */}
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-900">Posts</h1>
+            <h1 className="text-xl font-semibold text-foreground">Posts</h1>
             
             <PostIdeaForm 
               mode="create" 
@@ -150,7 +150,7 @@ export default function PostsPage() {
           <div className="flex gap-2">
             {/* Search */}
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search posts..."
                 value={filters.search}
@@ -186,7 +186,7 @@ export default function PostsPage() {
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <LoadingSpinner size="md" />
-            <span className="ml-2 text-sm text-gray-600">Loading posts...</span>
+            <span className="ml-2 text-sm text-muted-foreground">Loading posts...</span>
           </div>
         ) : posts.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-4">

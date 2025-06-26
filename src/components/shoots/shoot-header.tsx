@@ -25,7 +25,7 @@ export const ShootHeader = ({
   onOptimisticDelete,
   showActions = true
 }: ShootHeaderProps) => {
-  const { startShoot, completeShoot, isLoading } = useShootActions({
+  const { startShoot, completeShoot, isLoading, canPerformActions } = useShootActions({
     shoot,
     onSuccess: onRefresh,
     onOptimisticDelete
@@ -39,14 +39,15 @@ export const ShootHeader = ({
   return (
     <>
       {/* Action Button Section */}
-      {showActions && (shoot.status === 'scheduled' || shoot.status === 'active' || shoot.status === 'completed') && (
-        <div className="border-b border-gray-200 bg-white px-3 py-3">
+      {showActions && canPerformActions && (shoot.status === 'scheduled' || shoot.status === 'active' || shoot.status === 'completed') && (
+        <div className="border-b border-border bg-background px-3 py-3">
           {shoot.status === 'scheduled' && (
             <LoadingButton
               onClick={startShoot}
               className="w-full h-12 text-base font-medium"
               loading={isLoading}
               loadingText="Starting..."
+              disabled={!canPerformActions}
             >
               <Play className="h-5 w-5 mr-2" />
               Start Shoot
@@ -58,6 +59,7 @@ export const ShootHeader = ({
               className="w-full h-12 text-base font-medium"
               loading={isLoading}
               loadingText="Completing..."
+              disabled={!canPerformActions}
             >
               <CheckCircle className="h-5 w-5 mr-2" />
               Complete Shoot
@@ -77,34 +79,34 @@ export const ShootHeader = ({
       {/* Shoot Details */}
       <div className="px-3 py-3 space-y-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">{shoot.title}</h1>
+          <h1 className="text-xl font-bold text-foreground">{shoot.title}</h1>
           <Badge variant={getStatusColor(shoot.status)}>
             {formatStatusText(shoot.status)}
           </Badge>
         </div>
 
         <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-2 text-gray-600">
+          <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-4 w-4" />
             <span>{formatDate(formatScheduledAt(shoot.scheduledAt), { weekday: true })} at {formatTime(formatScheduledAt(shoot.scheduledAt))}</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-600">
+          <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4" />
             <span>{formatDuration(shoot.duration)}</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-600">
+          <div className="flex items-center gap-2 text-muted-foreground">
             <MapPin className="h-4 w-4" />
             <span>{shoot.location}</span>
           </div>
-          <div className="flex items-center gap-2 text-gray-600">
+          <div className="flex items-center gap-2 text-muted-foreground">
             <Users className="h-4 w-4" />
             <span>{postIdeasCount} post idea{postIdeasCount !== 1 ? 's' : ''}</span>
           </div>
         </div>
 
         {shoot.notes && (
-          <div className="p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-700">{shoot.notes}</p>
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">{shoot.notes}</p>
           </div>
         )}
       </div>

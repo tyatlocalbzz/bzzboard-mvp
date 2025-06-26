@@ -136,31 +136,31 @@ export const GoogleCalendarIntegration = ({
           <div className="space-y-4">
             {/* Permissions List */}
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
                 <CalendarCheck className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Create and manage events</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Create and manage events</p>
+                  <p className="text-xs text-muted-foreground">
                     Automatically create calendar events for your shoots
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
                 <RefreshCw className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Check availability</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Check availability</p>
+                  <p className="text-xs text-muted-foreground">
                     Prevent double-booking by checking your calendar
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-muted rounded-lg">
                 <Shield className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Read calendar details</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-sm font-medium text-foreground">Read calendar details</p>
+                  <p className="text-xs text-muted-foreground">
                     Sync event updates and modifications
                   </p>
                 </div>
@@ -168,8 +168,8 @@ export const GoogleCalendarIntegration = ({
             </div>
 
             {/* Security Note */}
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-xs text-green-800">
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <p className="text-xs text-green-800 dark:text-green-300">
                 <Shield className="h-3 w-3 inline mr-1" />
                 Buzzboard only accesses your calendar for shoot-related events.
               </p>

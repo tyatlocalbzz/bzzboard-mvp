@@ -44,7 +44,7 @@ export const MobileInput = React.forwardRef<HTMLInputElement, MobileInputProps>(
       
       switch (validationState) {
         case 'validating':
-          return <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />
+          return <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
         case 'valid':
           return <Check className="h-4 w-4 text-green-500" />
         case 'invalid':
@@ -70,7 +70,7 @@ export const MobileInput = React.forwardRef<HTMLInputElement, MobileInputProps>(
         {label && (
           <label 
             htmlFor={inputId}
-            className="text-sm font-medium text-gray-900 block"
+            className="text-sm font-medium text-foreground block"
           >
             {label}
           </label>
@@ -104,7 +104,7 @@ export const MobileInput = React.forwardRef<HTMLInputElement, MobileInputProps>(
         {error && (
           <p 
             id={errorId}
-            className="text-sm text-red-600 flex items-start gap-1"
+            className="text-sm text-red-600 dark:text-red-400 flex items-start gap-1"
             role="alert"
             aria-live="polite"
           >
@@ -119,7 +119,7 @@ export const MobileInput = React.forwardRef<HTMLInputElement, MobileInputProps>(
             id={helperId}
             className={cn(
               "text-sm",
-              validationState === 'valid' ? "text-green-600" : "text-gray-600"
+              validationState === 'valid' ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
             )}
           >
             {helperText}
@@ -128,7 +128,7 @@ export const MobileInput = React.forwardRef<HTMLInputElement, MobileInputProps>(
         
         {/* Success Message for Valid State */}
         {validationState === 'valid' && !error && !helperText && (
-          <p className="text-sm text-green-600 flex items-center gap-1">
+          <p className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
             <Check className="h-3 w-3" />
             Looks good!
           </p>

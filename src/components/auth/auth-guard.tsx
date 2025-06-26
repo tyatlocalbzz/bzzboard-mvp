@@ -146,8 +146,8 @@ export const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
  */
 const AuthLoadingFallback = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <LoadingSpinner size="lg" color="blue" />
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <LoadingSpinner size="lg" color="primary" />
     </div>
   )
 }

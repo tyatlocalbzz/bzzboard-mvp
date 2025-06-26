@@ -333,10 +333,10 @@ export const ClientSettingsTab = () => {
     return (
       <div className="space-y-6">
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
+          <h2 className="text-lg font-semibold text-foreground">Client Settings</h2>
           
           <div className="flex items-center gap-2">
-            <Label className="text-sm font-medium text-gray-700">Select Client:</Label>
+            <Label className="text-sm font-medium text-muted-foreground">Select Client:</Label>
             <ClientSelector className="max-w-[200px]" />
           </div>
         </div>
@@ -354,17 +354,17 @@ export const ClientSettingsTab = () => {
     return (
       <div className="space-y-6">
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
+          <h2 className="text-lg font-semibold text-foreground">Client Settings</h2>
           
           <div className="flex items-center gap-2">
-            <Label className="text-sm font-medium text-gray-700">Client:</Label>
+            <Label className="text-sm font-medium text-muted-foreground">Client:</Label>
             <ClientSelector className="max-w-[200px]" />
           </div>
         </div>
 
         <div className="flex items-center justify-center py-12">
           <LoadingSpinner size="lg" />
-          <span className="ml-3 text-gray-600">Loading...</span>
+          <span className="ml-3 text-muted-foreground">Loading...</span>
         </div>
       </div>
     )
@@ -374,10 +374,10 @@ export const ClientSettingsTab = () => {
     return (
       <div className="space-y-6">
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
+          <h2 className="text-lg font-semibold text-foreground">Client Settings</h2>
           
           <div className="flex items-center gap-2">
-            <Label className="text-sm font-medium text-gray-700">Client:</Label>
+            <Label className="text-sm font-medium text-muted-foreground">Client:</Label>
             <ClientSelector className="max-w-[200px]" />
           </div>
         </div>
@@ -393,10 +393,10 @@ export const ClientSettingsTab = () => {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">Client Settings</h2>
+        <h2 className="text-lg font-semibold text-foreground">Client Settings</h2>
         
         <div className="flex items-center gap-2">
-          <Label className="text-sm font-medium text-gray-700">Client:</Label>
+          <Label className="text-sm font-medium text-muted-foreground">Client:</Label>
           <ClientSelector className="max-w-[200px]" />
         </div>
       </div>

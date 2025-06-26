@@ -50,7 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
               children: (
                 <div className="space-y-4">
                   {process.env.NODE_ENV === 'development' && this.state.error && (
-                    <details className="text-left text-xs text-gray-500 p-2 bg-gray-50 rounded">
+                    <details className="text-left text-xs text-muted-foreground p-2 bg-muted rounded">
                       <summary className="cursor-pointer">Error details</summary>
                       <pre className="mt-2 whitespace-pre-wrap">{this.state.error.message}</pre>
                     </details>

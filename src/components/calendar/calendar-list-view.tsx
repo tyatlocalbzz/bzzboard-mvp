@@ -83,10 +83,10 @@ export const CalendarListView = ({
         {/* Loading skeleton */}
         {[1, 2, 3].map((i) => (
           <div key={i} className="space-y-3">
-            <div className="h-6 bg-gray-200 rounded w-1/3 animate-pulse" />
+            <div className="h-6 bg-muted animate-pulse rounded w-1/3" />
             <div className="space-y-2">
-              <div className="h-20 bg-gray-100 rounded animate-pulse" />
-              <div className="h-20 bg-gray-100 rounded animate-pulse" />
+              <div className="h-20 bg-muted/60 rounded animate-pulse" />
+              <div className="h-20 bg-muted/60 rounded animate-pulse" />
             </div>
           </div>
         ))}
@@ -119,22 +119,22 @@ export const CalendarListView = ({
         return (
           <div key={dateString} className="space-y-3">
             {/* Date Header */}
-            <div className="sticky top-0 bg-gray-50 -mx-3 px-3 py-2 border-b border-gray-200 z-10">
+            <div className="sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 -mx-3 px-3 py-2 border-b border-border z-10">
               <div className="flex items-center gap-3">
-                <div className="flex flex-col items-center justify-center w-12 h-12 bg-white border border-gray-200 rounded-lg">
-                  <span className="text-xs font-medium text-gray-500 uppercase">
+                <div className="flex flex-col items-center justify-center w-12 h-12 bg-card border border-border rounded-lg">
+                  <span className="text-xs font-medium text-muted-foreground uppercase">
                     {getDayOfWeek(dateString)}
                   </span>
-                  <span className="text-lg font-bold text-gray-900">
+                  <span className="text-lg font-bold text-foreground">
                     {date.getDate()}
                   </span>
                 </div>
                 
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-foreground">
                     {formatDateHeader(dateString)}
                   </h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     {dayEvents.length} event{dayEvents.length !== 1 ? 's' : ''}
                     {filter === 'shoots' && dayEvents.some(e => e.isShootEvent) && 
                       ` • ${dayEvents.filter(e => e.isShootEvent).length} shoot${dayEvents.filter(e => e.isShootEvent).length !== 1 ? 's' : ''}`

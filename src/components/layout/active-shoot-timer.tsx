@@ -35,9 +35,9 @@ export const ActiveShootTimer = () => {
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 bg-red-500 text-white safe-area-pt active-shoot-timer animate-slide-down">
+    <div className="fixed top-0 left-0 right-0 bg-destructive text-destructive-foreground safe-area-pt active-shoot-timer animate-slide-down">
       <div 
-        className="flex items-center justify-between cursor-pointer hover:bg-red-600 transition-colors rounded-sm mx-2 px-3 h-full"
+        className="flex items-center justify-between cursor-pointer hover:bg-destructive/90 transition-colors rounded-sm mx-2 px-3 h-full"
         onClick={handleGoToShoot}
       >
         <div className="text-sm font-medium truncate leading-none">

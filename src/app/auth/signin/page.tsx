@@ -201,10 +201,7 @@ export default async function SignInPage({
           )}
 
           {/* Additional Info */}
-          <div className="text-center text-sm text-gray-600 space-y-2">
-            <p>
-              First time user? Ask your admin to send you an invitation.
-            </p>
+          <div className="text-center text-sm text-gray-600">
             <p className="text-xs">
               By signing in, you agree to our terms of service and privacy policy.
             </p>

@@ -147,17 +147,7 @@ export const AuthGuard = ({ children, fallback }: AuthGuardProps) => {
 const AuthLoadingFallback = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center space-y-4">
-        <LoadingSpinner size="lg" />
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Loading Buzzboard
-          </h3>
-          <p className="text-sm text-gray-600">
-            Checking your authentication status...
-          </p>
-        </div>
-      </div>
+      <LoadingSpinner size="lg" color="blue" />
     </div>
   )
 }

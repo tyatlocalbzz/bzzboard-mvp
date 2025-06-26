@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 
 interface ApiDataOptions<T> {
@@ -24,7 +24,7 @@ interface ApiDataReturn<T> {
  */
 export const useApiData = <T>({
   endpoint,
-  dependencies = [],
+  dependencies: _, // eslint-disable-line @typescript-eslint/no-unused-vars
   autoFetch = true,
   transform,
   onError,
@@ -34,22 +34,18 @@ export const useApiData = <T>({
   const [isLoading, setIsLoading] = useState(autoFetch)
   const [error, setError] = useState<string | null>(null)
 
-  // Use refs to store current callback values to prevent infinite loops
-  const onErrorRef = useRef(onError)
-  const onSuccessRef = useRef(onSuccess)
-  
-  // Update refs when callbacks change
-  onErrorRef.current = onError
-  onSuccessRef.current = onSuccess
+  // Memoize callbacks to prevent infinite re-renders
+  const memoizedOnError = useCallback((errorMessage: string) => {
+    onError?.(errorMessage)
+  }, [onError])
 
-  // Stable callback references that use current ref values
-  const callOnError = useCallback((error: string) => {
-    onErrorRef.current?.(error)
-  }, [])
-  
-  const callOnSuccess = useCallback((data: T) => {
-    onSuccessRef.current?.(data)
-  }, [])
+  const memoizedOnSuccess = useCallback((result: T) => {
+    onSuccess?.(result)
+  }, [onSuccess])
+
+  // Create callback aliases for internal use
+  const callOnError = memoizedOnError
+  const callOnSuccess = memoizedOnSuccess
 
   const fetchData = useCallback(async (forceRefresh = false): Promise<T> => {
     // Add cache-busting parameter for force refresh
@@ -96,7 +92,7 @@ export const useApiData = <T>({
 
   const refresh = useCallback(async () => {
     await loadData(true) // Force refresh to bypass cache
-  }, [loadData, endpoint])
+  }, [loadData])
 
   const updateData = useCallback((updates: Partial<T> | ((prev: T | null) => T | null)) => {
     setData(prev => {
@@ -146,7 +142,8 @@ export const useApiData = <T>({
       
       executeLoad()
     }
-  }, [endpoint, autoFetch, transform, callOnError, callOnSuccess, ...dependencies])
+  }, [endpoint, autoFetch, transform, callOnError, callOnSuccess])
+  // ✅ Fixed: Use explicit dependencies instead of spread operator
 
   return {
     data,

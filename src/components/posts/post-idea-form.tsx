@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { FormSheet } from '@/components/ui/form-sheet'
@@ -214,21 +214,26 @@ export const PostIdeaForm = ({
     }
   }
 
-  // Initialize/reset form data when opening or when postIdea changes
+  // Reset form when dialog opens or data changes
+  const resetForm = useCallback(() => {
+    const initialData: PostIdeaFormData = {
+      platforms: postIdea?.platforms || [],
+      contentType: postIdea?.contentType || 'photo',
+      selectedClient: postIdea?.client?.name || (contextClient.type === 'client' ? contextClient.name : ''),
+      shotList: postIdea?.shotList || [''],
+      caption: postIdea?.caption || '',
+      notes: postIdea?.notes || ''
+    }
+    formState.reset(initialData)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postIdea?.platforms, postIdea?.contentType, postIdea?.client?.name, postIdea?.shotList, postIdea?.caption, postIdea?.notes, mode, contextClient.type, contextClient.name, formState.reset])
+  // ✅ formState excluded from deps to prevent infinite loops - safe because we only use formState.reset
+
   useEffect(() => {
     if (isOpen) {
-      const initialData: PostIdeaFormData = {
-        platforms: postIdea?.platforms || [],
-        contentType: postIdea?.contentType || 'photo',
-        selectedClient: postIdea?.client?.name || (contextClient.type === 'client' ? contextClient.name : ''),
-        shotList: postIdea?.shotList || [''],
-        caption: postIdea?.caption || '',
-        notes: postIdea?.notes || ''
-      }
-      formState.reset(initialData)
+      resetForm()
     }
-  }, [isOpen, postIdea, mode, contextClient.type, contextClient.name, formState.reset])
-  // Note: Inline data creation to prevent dependency cycles
+  }, [isOpen, resetForm])
 
   // Platform handling
   const togglePlatform = (platformName: string) => {

@@ -16,10 +16,17 @@ export async function POST() {
       return ApiErrors.internalError('Google OAuth not configured. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to your environment variables.')
     }
 
+    // Ensure NEXTAUTH_URL is set for OAuth callbacks
+    const baseUrl = process.env.NEXTAUTH_URL
+    if (!baseUrl) {
+      console.error('❌ [GoogleDriveConnect] NEXTAUTH_URL environment variable is required for OAuth')
+      return ApiErrors.internalError('OAuth configuration error. Please contact support.')
+    }
+
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/integrations/google-drive/callback`
+      `${baseUrl}/api/integrations/google-drive/callback`
     )
 
     // Define the scopes we're requesting

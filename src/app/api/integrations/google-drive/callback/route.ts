@@ -16,10 +16,17 @@ export async function GET(req: NextRequest) {
       error: error || 'none' 
     })
 
+    // Ensure NEXTAUTH_URL is set for redirects
+    const baseUrl = process.env.NEXTAUTH_URL
+    if (!baseUrl) {
+      console.error('❌ [GoogleDriveCallback] NEXTAUTH_URL environment variable is required')
+      return new NextResponse('OAuth configuration error', { status: 500 })
+    }
+
     if (error || !code || !state) {
       console.log('❌ [GoogleDriveCallback] Invalid callback parameters')
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=${error || 'invalid_request'}`
+        `${baseUrl}/account/integrations?error=${error || 'invalid_request'}`
       )
     }
 
@@ -27,14 +34,14 @@ export async function GET(req: NextRequest) {
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
       console.log('❌ [GoogleDriveCallback] OAuth credentials not configured')
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=oauth_not_configured`
+        `${baseUrl}/account/integrations?error=oauth_not_configured`
       )
     }
 
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/integrations/google-drive/callback`
+      `${baseUrl}/api/integrations/google-drive/callback`
     )
 
     console.log('🔑 [GoogleDriveCallback] Exchanging authorization code for tokens...')
@@ -58,7 +65,7 @@ export async function GET(req: NextRequest) {
     if (!userInfo.data.email) {
       console.log('❌ [GoogleDriveCallback] No email in user info')
       return NextResponse.redirect(
-        `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=no_email`
+        `${baseUrl}/account/integrations?error=no_email`
       )
     }
 
@@ -82,13 +89,18 @@ export async function GET(req: NextRequest) {
 
     // Redirect back to integrations page with success
     return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?success=google-drive`
+      `${baseUrl}/account/integrations?success=google-drive`
     )
     
   } catch (error) {
     console.error('❌ [GoogleDriveCallback] Callback error:', error)
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/account/integrations?error=callback_failed`
-    )
+    const baseUrl = process.env.NEXTAUTH_URL
+    if (baseUrl) {
+      return NextResponse.redirect(
+        `${baseUrl}/account/integrations?error=callback_failed`
+      )
+    } else {
+      return new NextResponse('OAuth configuration error', { status: 500 })
+    }
   }
 } 

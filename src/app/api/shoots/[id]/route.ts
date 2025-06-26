@@ -180,12 +180,7 @@ export async function DELETE(
         await calendarSync.deleteCalendarEvent(user.email!, shoot.googleCalendarEventId)
         console.log('✅ [Shoots API] Calendar event cleaned up during shoot deletion')
       } catch (calendarError) {
-        // Log the specific error type for better debugging
-        if (calendarError instanceof Error && calendarError.message.includes('not connected')) {
-          console.warn('⚠️ [Shoots API] Skipping calendar cleanup - Google Calendar not connected')
-        } else {
-          console.warn('⚠️ [Shoots API] Failed to cleanup calendar event:', calendarError)
-        }
+        console.warn('⚠️ [Shoots API] Failed to cleanup calendar event:', calendarError)
         // Continue with shoot deletion even if calendar cleanup fails
       }
     }

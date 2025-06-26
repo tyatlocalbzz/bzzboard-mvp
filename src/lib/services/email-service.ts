@@ -4,9 +4,9 @@ import { Resend } from 'resend'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export interface EmailConfig {
-  from: string
+  from?: string
   replyTo?: string
-  baseUrl: string
+  baseUrl?: string
 }
 
 export interface InvitationEmailData {
@@ -21,7 +21,7 @@ export interface InvitationEmailData {
  * Handles all email sending functionality for the BzzBoard MVP
  */
 export class EmailService {
-  private config: EmailConfig
+  private config: Required<Pick<EmailConfig, 'from' | 'baseUrl'>> & Pick<EmailConfig, 'replyTo'>
 
   constructor(config?: Partial<EmailConfig>) {
     // Use Resend's default domain for development, custom domain for production
@@ -29,10 +29,18 @@ export class EmailService {
       ? 'BzzBoard <noreply@buzzboard.com>'
       : 'BzzBoard <onboarding@resend.dev>'
     
+    const baseUrl = config?.baseUrl || process.env.NEXTAUTH_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : undefined)
+    
+    // Ensure baseUrl is set for production
+    if (!baseUrl) {
+      console.error('❌ [EmailService] baseUrl is required for email generation')
+      throw new Error('EmailService configuration error: baseUrl is required')
+    }
+
     this.config = {
       from: config?.from || process.env.RESEND_FROM_EMAIL || defaultFrom,
       replyTo: config?.replyTo || process.env.RESEND_REPLY_TO_EMAIL,
-      baseUrl: config?.baseUrl || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+      baseUrl
     }
   }
 

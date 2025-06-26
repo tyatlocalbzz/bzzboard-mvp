@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { formatElapsedTime } from '@/lib/utils/date-time'
 import type { ActiveShoot } from '@/lib/types/shoots'
 
 interface ActiveShootContextType {
@@ -95,20 +96,7 @@ export const ActiveShootProvider = ({ children }: ActiveShootProviderProps) => {
 
     const updateTimer = () => {
       const now = new Date()
-      const startTime = new Date(activeShoot.startedAt)
-      const elapsed = now.getTime() - startTime.getTime()
-      
-      // Prevent negative elapsed time
-      if (elapsed < 0) {
-        setElapsedTime('0:00:00')
-        return
-      }
-      
-      const hours = Math.floor(elapsed / (1000 * 60 * 60))
-      const minutes = Math.floor((elapsed % (1000 * 60 * 60)) / (1000 * 60))
-      const seconds = Math.floor((elapsed % (1000 * 60)) / 1000)
-      
-      setElapsedTime(`${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
+      setElapsedTime(formatElapsedTime(activeShoot.startedAt, now))
     }
 
     // Calculate initial time immediately

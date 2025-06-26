@@ -6,11 +6,7 @@ import {
   getValidatedBody
 } from '@/lib/api/api-helpers'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
-
-interface RestoreShootBody {
-  shootId: number
-  action: string
-}
+import type { RestoreShootBody } from '@/lib/types/shoots'
 
 export async function GET() {
   try {

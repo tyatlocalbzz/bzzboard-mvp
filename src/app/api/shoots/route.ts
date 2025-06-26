@@ -5,21 +5,9 @@ import { getCachedEvents, linkEventToShoot } from '@/lib/db/calendar'
 import { getIntegration } from '@/lib/db/integrations'
 import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
 import { type CalendarEventCache } from '@/lib/db/schema'
-import type { UnifiedEvent, UnifiedEventFilter } from '@/lib/types/shoots'
-import { ApiErrors, ApiSuccess } from '@/lib/api/api-helpers'
+import type { UnifiedEvent, UnifiedEventFilter, CreateShootBody } from '@/lib/types/shoots'
+import { ApiErrors, ApiSuccess, getValidatedBody } from '@/lib/api/api-helpers'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
-
-interface CreateShootBody {
-  title: string
-  clientName: string
-  date: string
-  time: string
-  duration: string
-  location: string
-  notes?: string
-  forceCreate?: boolean
-  forceCalendarCreate?: boolean
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -142,7 +130,7 @@ export async function POST(req: NextRequest) {
     const user = await getCurrentUserForAPI()
     if (!user?.email) return ApiErrors.unauthorized()
 
-    const body: CreateShootBody = await req.json()
+    const body = await getValidatedBody<CreateShootBody>(req)
     const { title, clientName, date, time, duration, location, notes, forceCreate, forceCalendarCreate } = body
 
     // Validation

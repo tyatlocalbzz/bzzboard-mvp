@@ -14,8 +14,9 @@ import { useActiveShoot } from '@/contexts/active-shoot-context'
 import { useClient } from '@/contexts/client-context'
 import { useShootData } from '@/lib/hooks/use-shoot-data'
 import { useShootActions } from '@/lib/hooks/use-shoot-actions'
-import { shootsApi } from '@/lib/api/shoots'
+import { ShootsApi } from '@/lib/api/shoots-unified'
 import { ClientData } from '@/lib/types/client'
+import type { ShootClient } from '@/lib/types/shoots'
 import { toast } from 'sonner'
 
 export default function ActiveShootPage() {
@@ -84,18 +85,18 @@ export default function ActiveShootPage() {
 
   // Handlers for shot management
   const handleShotToggle = useCallback(async (shotId: number) => {
-    await shootsApi.toggleShot(shotId)
+    await ShootsApi.toggleShot(shotId)
     refresh() // Refresh data after toggle
   }, [refresh])
 
   const handleShotEdit = useCallback(async (shotId: number, text: string, notes?: string) => {
-    await shootsApi.editShot(shotId, text, notes)
+    await ShootsApi.editShot(shotId, text, notes)
     refresh() // Refresh data after edit
     toast.success('Shot updated!')
   }, [refresh])
 
   const handleAddShot = useCallback(async (postIdeaId: number, shotText: string, notes?: string) => {
-    await shootsApi.addShot(postIdeaId, shotText, notes)
+    await ShootsApi.addShot(postIdeaId, shotText, notes)
     refresh() // Refresh data after adding
     toast.success('Shot added!')
   }, [refresh])
@@ -144,9 +145,14 @@ export default function ActiveShootPage() {
 
   const progressPercentage = totalPosts > 0 ? (completedPosts / totalPosts) * 100 : 0
 
+  // Helper function to get client name as string
+  const getClientName = (client: string | ShootClient): string => {
+    return typeof client === 'string' ? client : client?.name || 'Unknown Client'
+  }
+
   return (
     <MobileLayout
-      title={shoot.client}
+      title={getClientName(shoot.client)}
       backHref={`/shoots/${shootId}`}
       showBottomNav={true}
       showClientSelector={false}
@@ -279,7 +285,7 @@ export default function ActiveShootPage() {
           mode="quick-add"
           context="shoot"
           shootId={shootId}
-          clientOverride={getClientOverride(shoot.client)}
+          clientOverride={getClientOverride(getClientName(shoot.client))}
           onSuccess={refresh}
           displayMode="dialog"
           trigger={

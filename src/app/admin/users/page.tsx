@@ -2,7 +2,7 @@
 
 import { useRef } from 'react'
 import { MobileLayout } from '@/components/layout/mobile-layout'
-import { UserManagementMobile } from '@/components/admin/user-management-mobile'
+import { UserManagementUnified } from '@/components/admin/user-management-unified'
 import { InviteUserForm } from '@/components/admin/invite-user-form'
 import { Button } from '@/components/ui/button'
 
@@ -21,7 +21,10 @@ export default function AdminUsersPage() {
       showClientSelector={false}
     >
       <div className="flex flex-col h-full">
-        <UserManagementMobile onInviteUser={handleInviteUser} />
+        <UserManagementUnified 
+          onInviteUser={handleInviteUser} 
+          variant="mobile"
+        />
         
         {/* Hidden trigger for mobile-optimized Invite User Form */}
         <InviteUserForm>

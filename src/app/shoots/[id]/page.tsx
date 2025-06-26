@@ -19,6 +19,8 @@ import { AssignExistingPostsDialog } from '@/components/shoots/assign-existing-p
 import { PostIdeaActions } from '@/components/shoots/post-idea-actions'
 import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
 import type { ClientData } from '@/lib/types/client'
+import type { ShootClient } from '@/lib/types/shoots'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 export default function ShootDetailsPage() {
   const params = useParams()
@@ -26,30 +28,29 @@ export default function ShootDetailsPage() {
   const shootId = params.id as string
   const { clients } = useClient()
   
-  const [showAssignPostsDialog, setShowAssignPostsDialog] = useState(false)
   const [showCreatePostForm, setShowCreatePostForm] = useState(false)
+  const [showAssignPostsDialog, setShowAssignPostsDialog] = useState(false)
 
-  // Memoize onError callback to prevent infinite loops
-  const handleError = useCallback((error: string) => {
-    console.error('Failed to load shoot data:', error)
-    router.push('/shoots')
-  }, [router])
-
-  // Use custom hooks for data and actions
-  const { shoot, postIdeas, isLoading, refresh } = useShootData({ 
+  // Use the custom hook for data management
+  const { shoot, postIdeas, isLoading, error, refresh } = useShootData({
     shootId,
-    onError: handleError
+    loadPostIdeas: true
   })
 
-  // Helper function to find client override from shoot's client name
+  const handleCreateNewPost = () => setShowCreatePostForm(true)
+  const handleAssignExistingPost = () => setShowAssignPostsDialog(true)
+  
+  // Helper function to find client override
   const getClientOverride = useCallback((clientName: string): ClientData | null => {
     return clients.find(client => client.name === clientName && client.type === 'client') || null
   }, [clients])
 
-  // Post choice handlers
-  const handleCreateNewPost = () => setShowCreatePostForm(true)
-  const handleAssignExistingPost = () => setShowAssignPostsDialog(true)
+  // Helper function to get client name as string
+  const getClientName = (client: string | ShootClient): string => {
+    return typeof client === 'string' ? client : client?.name || 'Unknown Client'
+  }
 
+  // Show loading state
   if (isLoading) {
     return (
       <MobileLayout 
@@ -58,7 +59,33 @@ export default function ShootDetailsPage() {
         showBottomNav={false}
         loading={true}
       >
-        <div />
+        <div className="flex items-center justify-center min-h-[200px]">
+          <div className="text-center">
+            <LoadingSpinner size="lg" color="blue" className="mx-auto mb-4" />
+            <p className="text-sm text-gray-600">Loading shoot data...</p>
+          </div>
+        </div>
+      </MobileLayout>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <MobileLayout 
+        title="Error"
+        backHref="/shoots"
+        showBottomNav={false}
+      >
+        <EmptyState
+          icon={Calendar}
+          title="Failed to load shoot"
+          description={error}
+          action={{
+            label: "Try Again",
+            onClick: refresh
+          }}
+        />
       </MobileLayout>
     )
   }
@@ -85,7 +112,7 @@ export default function ShootDetailsPage() {
 
   return (
     <MobileLayout
-      title={shoot.client}
+      title={getClientName(shoot.client)}
       backHref="/shoots"
       headerAction={
         <ShootActions 
@@ -217,7 +244,7 @@ export default function ShootDetailsPage() {
                   mode="create"
                   context="shoot"
                   shootId={shootId}
-                  clientOverride={getClientOverride(shoot.client)}
+                  clientOverride={getClientOverride(getClientName(shoot.client))}
                   onSuccess={refresh}
                   displayMode="dialog"
                   trigger={
@@ -240,7 +267,7 @@ export default function ShootDetailsPage() {
         mode="create"
         context="shoot"
         shootId={shootId}
-        clientOverride={getClientOverride(shoot.client)}
+        clientOverride={getClientOverride(getClientName(shoot.client))}
         onSuccess={() => {
           refresh()
           setShowCreatePostForm(false)

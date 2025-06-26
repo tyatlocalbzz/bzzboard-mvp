@@ -9,10 +9,7 @@ import {
   getValidatedBody,
   validateId
 } from '@/lib/api/api-helpers'
-
-interface AssignToShootBody {
-  shootId: string | number
-}
+import type { AssignToShootBody } from '@/lib/types/shoots'
 
 export async function POST(
   request: NextRequest,

@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useAsync } from '@/lib/hooks/use-async'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
-import { shootsApi } from '@/lib/api/shoots-client'
+import { ShootsApi } from '@/lib/api/shoots-unified'
 import { ShootStatus } from '@/lib/utils/status'
 import type { Shoot } from '@/lib/types/shoots'
 
@@ -23,6 +23,10 @@ interface UseShootActionsReturn {
   isLoading: boolean
 }
 
+/**
+ * Enhanced shoot actions hook using unified API
+ * Provides optimized state management and consistent error handling
+ */
 export const useShootActions = ({ 
   shoot, 
   onSuccess, 
@@ -31,42 +35,54 @@ export const useShootActions = ({
   const router = useRouter()
   const { startShoot: startActiveShoot } = useActiveShoot()
   
-  const { loading: statusLoading, execute: executeStatusChange } = useAsync(shootsApi.changeStatus)
-  const { loading: deleteLoading, execute: executeDelete } = useAsync(shootsApi.delete)
+  // Use unified API methods
+  const { loading: statusLoading, execute: executeStatusChange } = useAsync(ShootsApi.changeStatus)
+  const { loading: deleteLoading, execute: executeDelete } = useAsync(ShootsApi.deleteShoot)
 
   const startShoot = useCallback(async () => {
-    // First change the shoot status to 'active'
-    const statusResult = await executeStatusChange(shoot.id.toString(), 'active', 'start')
-    if (!statusResult) return
-    
-    // Then start the active shoot context
-    startActiveShoot({
-      id: shoot.id,
-      title: shoot.title,
-      client: shoot.client,
-      startedAt: new Date().toISOString()
-    })
-    
-    toast.success('Shoot started successfully!')
-    onSuccess?.()
-    
-    // Navigate to active shoot page
-    router.push(`/shoots/${shoot.id}/active`)
+    try {
+      // First change the shoot status to 'active'
+      const statusResult = await executeStatusChange(shoot.id.toString(), 'active', 'start')
+      if (!statusResult) return
+      
+      // Then start the active shoot context
+      const clientName = typeof shoot.client === 'string' ? shoot.client : shoot.client?.name || 'Unknown Client'
+      startActiveShoot({
+        id: shoot.id,
+        title: shoot.title,
+        client: clientName,
+        startedAt: new Date().toISOString()
+      })
+      
+      toast.success('Shoot started successfully!')
+      onSuccess?.()
+      
+      // Navigate to active shoot page
+      router.push(`/shoots/${shoot.id}/active`)
+    } catch (error) {
+      console.error('❌ [useShootActions] Start shoot error:', error)
+      toast.error('Failed to start shoot. Please try again.')
+    }
   }, [shoot, executeStatusChange, startActiveShoot, onSuccess, router])
 
   const completeShoot = useCallback(async () => {
-    const statusResult = await executeStatusChange(shoot.id.toString(), 'completed', 'complete')
-    if (!statusResult) return
-    
-    toast.success('Shoot completed successfully!')
-    onSuccess?.()
+    try {
+      const statusResult = await executeStatusChange(shoot.id.toString(), 'completed', 'complete')
+      if (!statusResult) return
+      
+      toast.success('Shoot completed successfully!')
+      onSuccess?.()
+    } catch (error) {
+      console.error('❌ [useShootActions] Complete shoot error:', error)
+      toast.error('Failed to complete shoot. Please try again.')
+    }
   }, [shoot.id, executeStatusChange, onSuccess])
 
   const deleteShoot = useCallback(async () => {
     try {
       toast.loading('Deleting shoot...', { id: 'delete-shoot' })
       
-      // Trigger optimistic delete
+      // Trigger optimistic delete for immediate UI feedback
       onOptimisticDelete?.()
       
       const result = await executeDelete(shoot.id.toString())
@@ -74,6 +90,7 @@ export const useShootActions = ({
       if (result) {
         toast.success('Shoot deleted successfully!', { id: 'delete-shoot' })
         
+        // Show additional context if calendar event was removed
         if (shoot.googleCalendarEventId) {
           toast.info('Calendar event removed from Google Calendar')
         }
@@ -85,17 +102,22 @@ export const useShootActions = ({
         router.push('/shoots?refresh=true')
       }
     } catch (error) {
-      console.error('Delete error:', error)
+      console.error('❌ [useShootActions] Delete error:', error)
       toast.error('Failed to delete shoot. Please try again.', { id: 'delete-shoot' })
       onSuccess?.() // Refresh to restore state
     }
   }, [shoot, executeDelete, onOptimisticDelete, onSuccess, router])
 
   const changeStatus = useCallback(async (status: ShootStatus, action?: string) => {
-    const result = await executeStatusChange(shoot.id.toString(), status, action)
-    if (result) {
-      toast.success(result.message)
-      onSuccess?.()
+    try {
+      const result = await executeStatusChange(shoot.id.toString(), status, action)
+      if (result?.message) {
+        toast.success(result.message)
+        onSuccess?.()
+      }
+    } catch (error) {
+      console.error('❌ [useShootActions] Change status error:', error)
+      toast.error('Failed to update shoot status. Please try again.')
     }
   }, [shoot.id, executeStatusChange, onSuccess])
 

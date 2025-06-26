@@ -34,16 +34,6 @@ export const useApiData = <T>({
   const [isLoading, setIsLoading] = useState(autoFetch)
   const [error, setError] = useState<string | null>(null)
 
-  console.log('🔗 [useApiData] Hook called:', {
-    endpoint,
-    autoFetch,
-    dependenciesLength: dependencies.length,
-    dependencies: dependencies.map(dep => typeof dep === 'object' ? JSON.stringify(dep) : dep),
-    hasTransform: !!transform,
-    hasOnError: !!onError,
-    hasOnSuccess: !!onSuccess
-  })
-
   // Use refs to store current callback values to prevent infinite loops
   const onErrorRef = useRef(onError)
   const onSuccessRef = useRef(onSuccess)
@@ -54,57 +44,42 @@ export const useApiData = <T>({
 
   // Stable callback references that use current ref values
   const callOnError = useCallback((error: string) => {
-    console.log('❌ [useApiData] Calling onError callback:', error)
     onErrorRef.current?.(error)
   }, [])
   
   const callOnSuccess = useCallback((data: T) => {
-    console.log('✅ [useApiData] Calling onSuccess callback with data:', data)
     onSuccessRef.current?.(data)
   }, [])
 
   const fetchData = useCallback(async (forceRefresh = false): Promise<T> => {
     // Add cache-busting parameter for force refresh
     const url = forceRefresh ? `${endpoint}?_t=${Date.now()}` : endpoint
-    console.log('🌐 [useApiData] Fetching from:', url)
     
     const response = await fetch(url)
-    console.log('🌐 [useApiData] Response status:', response.status, response.statusText)
     
     if (!response.ok) {
       throw new Error(`Failed to fetch data: ${response.statusText}`)
     }
     
     const result = await response.json()
-    console.log('🌐 [useApiData] Raw API response:', result)
     
     if (!result.success) {
       throw new Error(result.error || 'Failed to fetch data')
     }
     
-    console.log('🌐 [useApiData] API data before transform:', result.data)
-    
     // Apply transformation if provided
     const transformedData = transform ? transform(result) : result.data
-    console.log('🌐 [useApiData] Final transformed data:', transformedData)
     
     return transformedData
   }, [endpoint, transform])
 
   const loadData = useCallback(async (forceRefresh = false) => {
-    console.log('🔄 [useApiData] loadData called:', {
-      endpoint,
-      forceRefresh,
-      currentIsLoading: isLoading
-    })
-    
     try {
       setIsLoading(true)
       setError(null)
       
       const result = await fetchData(forceRefresh)
       
-      console.log('✅ [useApiData] Setting data:', result)
       setData(result)
       callOnSuccess(result)
     } catch (err) {
@@ -114,19 +89,16 @@ export const useApiData = <T>({
       callOnError(errorMessage)
       toast.error(errorMessage)
     } finally {
-      console.log('🏁 [useApiData] Setting isLoading to false')
       setIsLoading(false)
     }
-  }, [fetchData, endpoint])
-  // Note: memoizedOnError and memoizedOnSuccess intentionally omitted to prevent infinite loops
+  }, [fetchData, callOnError, callOnSuccess])
+  // Note: isLoading intentionally omitted to prevent stale closure issues
 
   const refresh = useCallback(async () => {
-    console.log('🔄 [useApiData] refresh called for:', endpoint)
     await loadData(true) // Force refresh to bypass cache
-  }, [loadData])
+  }, [loadData, endpoint])
 
   const updateData = useCallback((updates: Partial<T> | ((prev: T | null) => T | null)) => {
-    console.log('🔄 [useApiData] updateData called for:', endpoint)
     setData(prev => {
       if (typeof updates === 'function') {
         return updates(prev)
@@ -136,50 +108,29 @@ export const useApiData = <T>({
   }, [])
 
   useEffect(() => {
-    console.log('🔄 [useApiData] useEffect triggered:', {
-      endpoint,
-      autoFetch,
-      dependenciesLength: dependencies.length,
-      dependencies: dependencies.map(dep => typeof dep === 'object' ? JSON.stringify(dep) : dep)
-    })
-    
     if (autoFetch) {
-      console.log('🚀 [useApiData] Calling loadData from useEffect')
-      
       // Inline the fetch logic to avoid dependency cycles with fetchData
       const executeLoad = async () => {
-        console.log('🔄 [useApiData] executeLoad called:', {
-          endpoint,
-          currentIsLoading: isLoading
-        })
-        
         try {
           setIsLoading(true)
           setError(null)
           
           // Inline fetch logic to avoid fetchData dependency
-          console.log('🌐 [useApiData] Fetching from:', endpoint)
           const response = await fetch(endpoint)
-          console.log('🌐 [useApiData] Response status:', response.status, response.statusText)
           
           if (!response.ok) {
             throw new Error(`Failed to fetch data: ${response.statusText}`)
           }
           
           const apiResult = await response.json()
-          console.log('🌐 [useApiData] Raw API response:', apiResult)
           
           if (!apiResult.success) {
             throw new Error(apiResult.error || 'Failed to fetch data')
           }
           
-          console.log('🌐 [useApiData] API data before transform:', apiResult.data)
-          
           // Apply transformation if provided
           const result = transform ? transform(apiResult) : apiResult.data
-          console.log('🌐 [useApiData] Final transformed data:', result)
           
-          console.log('✅ [useApiData] Setting data:', result)
           setData(result)
           callOnSuccess(result)
         } catch (err) {
@@ -189,26 +140,13 @@ export const useApiData = <T>({
           callOnError(errorMessage)
           toast.error(errorMessage)
         } finally {
-          console.log('🏁 [useApiData] Setting isLoading to false')
           setIsLoading(false)
         }
       }
       
       executeLoad()
-    } else {
-      console.log('⏸️ [useApiData] Skipping loadData (autoFetch is false)')
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFetch, endpoint, ...dependencies])
-  // Note: fetchData and transform removed from dependencies to prevent infinite loops
-
-  console.log('🔗 [useApiData] Returning state:', {
-    endpoint,
-    hasData: !!data,
-    dataLength: Array.isArray(data) ? data.length : 'not-array',
-    isLoading,
-    hasError: !!error
-  })
+  }, [endpoint, autoFetch, transform, callOnError, callOnSuccess, ...dependencies])
 
   return {
     data,

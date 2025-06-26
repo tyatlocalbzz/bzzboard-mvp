@@ -13,10 +13,10 @@ import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useAsync } from '@/lib/hooks/use-async'
-import { shootsApi } from '@/lib/api/shoots'
+import { ShootsApi } from '@/lib/api/shoots-unified'
 import { toast } from 'sonner'
 import { Upload, Folder, FileText, X, AlertCircle } from 'lucide-react'
-import type { Shoot, UploadProgress as UploadProgressType, UploadedFile } from '@/lib/types/shoots'
+import type { Shoot, UploadProgress as UploadProgressType, UploadedFile, ShootClient } from '@/lib/types/shoots'
 
 interface PostIdeaUploadSection {
   id: number
@@ -48,7 +48,12 @@ export default function UploadContentPage() {
   const [miscUploadProgress, setMiscUploadProgress] = useState<{ [fileName: string]: UploadProgressType }>({})
   const [isUploading, setIsUploading] = useState(false)
 
-  const { loading: folderLoading, execute: createFolder } = useAsync(shootsApi.createDriveFolder)
+  const { loading: folderLoading, execute: createFolder } = useAsync(ShootsApi.createDriveFolder)
+
+  // Helper function to get client name as string
+  const getClientName = (client: string | ShootClient): string => {
+    return typeof client === 'string' ? client : client?.name || 'Unknown Client'
+  }
 
   // Load shoot and post ideas data
   useEffect(() => {
@@ -154,17 +159,14 @@ export default function UploadContentPage() {
 
   const uploadFile = async (file: File, postIdeaId?: number) => {
     try {
-      const uploadedFile = await shootsApi.uploadFile(
-        {
-          file,
-          postIdeaId,
-          shootId: parseInt(shootId),
-          notes: postIdeaId 
-            ? postIdeaSections.find(s => s.id === postIdeaId)?.notes 
-            : miscNotes
-        },
-        (progress) => updateUploadProgress(postIdeaId || null, file.name, progress)
-      )
+      const uploadedFile = await ShootsApi.uploadFile({
+        file,
+        postIdeaId,
+        shootId: parseInt(shootId),
+        notes: postIdeaId 
+          ? postIdeaSections.find(s => s.id === postIdeaId)?.notes 
+          : miscNotes
+      })
 
       // Add to uploaded files list
       if (postIdeaId) {
@@ -199,7 +201,7 @@ export default function UploadContentPage() {
     
     try {
       // First, create the Google Drive folder structure
-      const driveFolder = await createFolder(shoot.client, shoot.title, shoot.scheduledAt)
+      const driveFolder = await createFolder(getClientName(shoot.client), shoot.title, new Date(shoot.scheduledAt).toISOString())
       
       if (!driveFolder) {
         throw new Error('Failed to create Drive folder')
@@ -311,7 +313,7 @@ export default function UploadContentPage() {
             <Folder className="h-4 w-4 text-blue-500" />
             <h2 className="font-medium text-gray-900">{shoot.title}</h2>
           </div>
-          <p className="text-sm text-gray-600">Client: {shoot.client}</p>
+          <p className="text-sm text-gray-600">Client: {getClientName(shoot.client)}</p>
           <p className="text-sm text-gray-600">
             Date: {new Date(shoot.scheduledAt).toLocaleDateString()}
           </p>

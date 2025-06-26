@@ -1,18 +1,6 @@
 import { useCallback } from 'react'
 import { useApiData } from './use-api-data'
-import type { Shoot } from '@/lib/types/shoots'
-
-interface ExtendedPostIdea {
-  id: number
-  title: string
-  platforms: string[]
-  contentType: string
-  caption?: string
-  shotList: string[]
-  status: 'planned' | 'shot' | 'uploaded'
-  completed?: boolean
-  notes?: string
-}
+import type { Shoot, ExtendedPostIdea } from '@/lib/types/shoots'
 
 interface ShootDataResponse {
   shoot: Shoot
@@ -37,6 +25,7 @@ interface UseShootDataReturn {
 
 /**
  * Refactored shoot data hook using standardized API pattern
+ * Uses centralized types to eliminate duplication and improve maintainability
  * Eliminates ~80 lines of duplicate code by using the generic useApiData hook
  */
 export const useShootData = ({ 
@@ -81,7 +70,7 @@ export const useShootData = ({
       throw new Error('No shoot data found')
     }
     
-    // Always transform post ideas, but return empty array if not needed
+    // Transform post ideas to match ExtendedPostIdea interface
     // This makes the transform function stable (no dependencies)
     const transformedPostIdeas = (result.postIdeas || []).map((item: unknown) => {
       const postIdea = item as { 
@@ -99,7 +88,7 @@ export const useShootData = ({
         ...postIdea,
         shotList: postIdea.shots?.map((shot: { text: string; completed: boolean }) => shot.text) || [],
         completed: postIdea.shots?.every((shot: { text: string; completed: boolean }) => shot.completed) || false
-      }
+      } as ExtendedPostIdea
     })
     
     const finalResult = {

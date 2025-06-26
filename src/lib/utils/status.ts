@@ -1,10 +1,12 @@
 // Centralized Status Management System
 // This eliminates all DRY violations by providing a single source of truth for status handling
 
+import type { ShootStatus } from '@/lib/types/shoots'
+
 export type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary'
 
 // Status type definitions
-export type ShootStatus = 'scheduled' | 'active' | 'completed' | 'cancelled'
+export type { ShootStatus }
 export type PostIdeaStatus = 'planned' | 'shot' | 'uploaded'
 export type UserStatus = 'active' | 'inactive' | 'pending'
 export type UploadStatus = 'uploading' | 'completed' | 'failed' | 'paused'

@@ -19,7 +19,7 @@ import { toast } from 'sonner'
 import { useConfiguredPlatformsWithOverride, useAllPlatformsWithStatusAndOverride } from '@/lib/hooks/use-client-platforms'
 import { CheckCircle, Plus, Edit, FileText, Users, X } from 'lucide-react'
 import { CONTENT_TYPE_OPTIONS } from '@/lib/constants/platforms'
-import { shootsApi } from '@/lib/api/shoots'
+import { shootsApi } from '@/lib/api/shoots-unified'
 import { type PostIdea } from '@/lib/hooks/use-posts'
 import { ClientData } from '@/lib/types/client'
 
@@ -107,8 +107,7 @@ const updatePost = async (postId: number, data: PostIdeaData): Promise<PostIdea>
 }
 
 const addPostToShoot = async (shootId: string, data: PostIdeaData): Promise<PostIdea> => {
-  // Convert PostIdeaData to the format expected by shootsApi.addPostIdea
-  // Map carousel to photo for shoots API compatibility
+  // Convert carousel to photo for API compatibility
   const contentType = data.contentType === 'carousel' ? 'photo' : data.contentType as 'photo' | 'video' | 'reel' | 'story'
   
   const shootPostData = {
@@ -116,7 +115,7 @@ const addPostToShoot = async (shootId: string, data: PostIdeaData): Promise<Post
     platforms: data.platforms,
     contentType,
     caption: data.caption,
-    shotList: data.shotList?.join('\n') || '', // Convert array to newline-separated string
+    shotList: data.shotList || [],  // Now properly typed as string[]
     notes: data.notes
   }
   
@@ -129,7 +128,7 @@ const addPostToShoot = async (shootId: string, data: PostIdeaData): Promise<Post
     platforms: result.platforms,
     contentType: result.contentType,
     caption: result.caption,
-    shotList: result.shots.map(shot => shot.text),
+    shotList: result.shotList, // Use shotList directly from ExtendedPostIdea
     notes: data.notes,
     status: 'planned',
     client: null, // Will be populated by the API response

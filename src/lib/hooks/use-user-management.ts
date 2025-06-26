@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useApiData, useApiMutation } from './use-api-data'
 import { toast } from 'sonner'
+import { calculateUserStats, type UserStats } from '@/lib/utils/user-utils'
 import type { User } from '@/lib/db/schema'
 
 // Types for user operations
@@ -12,12 +13,6 @@ export interface InviteUserData {
 export interface UpdateUserData {
   name?: string
   email?: string
-}
-
-export interface UserStats {
-  total: number
-  active: number
-  admins: number
 }
 
 export interface UseUserManagementReturn {
@@ -74,12 +69,8 @@ export const useUserManagement = (): UseUserManagementReturn => {
     onError
   })
 
-  // Calculate stats from users data
-  const stats: UserStats = {
-    total: users?.length || 0,
-    active: users?.filter(u => u.status === 'active').length || 0,
-    admins: users?.filter(u => u.role === 'admin').length || 0
-  }
+  // Calculate stats from users data using centralized utility
+  const stats: UserStats = calculateUserStats(users || [])
 
   // Mutation hooks for different operations
   const inviteMutation = useApiMutation<User, InviteUserData>('/api/admin/users/invite', 'POST')

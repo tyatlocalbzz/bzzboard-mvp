@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { Calendar, Clock, MapPin, Users, Play, CheckCircle, Upload } from 'lucide-react'
 import { formatStatusText, getStatusColor } from '@/lib/utils/status'
+import { formatDate, formatTime, formatDuration } from '@/lib/utils/date-time'
 import { useShootActions } from '@/lib/hooks/use-shoot-actions'
 import Link from 'next/link'
 import type { Shoot } from '@/lib/types/shoots'
@@ -30,37 +31,9 @@ export const ShootHeader = ({
     onOptimisticDelete
   })
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffTime = date.getTime() - now.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    if (diffDays === 0) return 'Today'
-    if (diffDays === 1) return 'Tomorrow'
-    if (diffDays === -1) return 'Yesterday'
-    
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long',
-      month: 'short', 
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-    })
-  }
-
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-  }
-
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes}m`
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+  // Helper to ensure scheduledAt is a string for formatting functions
+  const formatScheduledAt = (scheduledAt: string | Date): string => {
+    return typeof scheduledAt === 'string' ? scheduledAt : scheduledAt.toISOString()
   }
 
   return (
@@ -113,7 +86,7 @@ export const ShootHeader = ({
         <div className="space-y-2 text-sm">
           <div className="flex items-center gap-2 text-gray-600">
             <Calendar className="h-4 w-4" />
-            <span>{formatDate(shoot.scheduledAt)} at {formatTime(shoot.scheduledAt)}</span>
+            <span>{formatDate(formatScheduledAt(shoot.scheduledAt), { weekday: true })} at {formatTime(formatScheduledAt(shoot.scheduledAt))}</span>
           </div>
           <div className="flex items-center gap-2 text-gray-600">
             <Clock className="h-4 w-4" />

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { MobileLayout } from "@/components/layout/mobile-layout"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -33,6 +34,7 @@ interface PostIdea {
 
 export default function Dashboard() {
   const { selectedClient } = useClient()
+  const router = useRouter()
 
   // Real shoots data will be loaded from API
   const allShoots = useMemo<DashboardShoot[]>(() => [], [])
@@ -162,7 +164,7 @@ export default function Dashboard() {
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
-            <ScheduleShootForm>
+            <ScheduleShootForm onSuccess={() => router.push('/shoots')}>
               <Button className="h-12 flex-col gap-1 text-xs tap-target" variant="outline">
                 <Calendar className="h-4 w-4" />
                 Schedule Shoot

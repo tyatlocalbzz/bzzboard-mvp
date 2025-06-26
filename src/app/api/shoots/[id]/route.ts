@@ -4,16 +4,7 @@ import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
 import { ApiErrors, ApiSuccess, getValidatedParams, getValidatedBody, validateId } from '@/lib/api/api-helpers'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
 import { getShootById } from '@/lib/db/shoots'
-
-interface ShootUpdateBody {
-  status?: 'scheduled' | 'active' | 'completed' | 'cancelled'
-  action?: 'start' | 'complete'
-  title?: string
-  duration?: number
-  location?: string
-  notes?: string
-  scheduledAt?: string
-}
+import type { ShootUpdateBody } from '@/lib/types/shoots'
 
 export async function GET(
   request: NextRequest,

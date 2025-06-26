@@ -1,14 +1,17 @@
 import { db } from './index'
 import { shoots, clients, postIdeas, shootPostIdeas } from './schema'
 import { eq, desc, asc, and, sql, isNull } from 'drizzle-orm'
+import type { ShootStatus, ShootWithClient, CreateShootInput } from '@/lib/types/shoots'
 
 // Types for database operations
 export type NewShoot = typeof shoots.$inferInsert
 export type ShootSelect = typeof shoots.$inferSelect
-export type ShootStatus = 'scheduled' | 'active' | 'completed' | 'cancelled'
 
-// Specific result types that match what queries actually return
-export interface ShootWithClientBasic {
+// Re-export consolidated types from main types file
+export type { ShootStatus, ShootWithClient, CreateShootInput }
+
+// Type helper to ensure proper typing from database results
+interface DatabaseShootResult {
   id: number
   title: string
   clientId: number
@@ -19,44 +22,23 @@ export interface ShootWithClientBasic {
   status: string
   startedAt: Date | null
   completedAt: Date | null
-  // Basic Google Calendar integration fields (only what we select)
   googleCalendarEventId: string | null
   googleCalendarSyncStatus: string | null
   googleCalendarLastSync: Date | null
   googleCalendarError: string | null
-  // Soft delete fields
   deletedAt: Date | null
   deletedBy: number | null
   createdAt: Date
   updatedAt: Date
-  // Computed fields
-  client: {
-    id: number
-    name: string
-  } | null
+  client: { id: number; name: string } | null
   postIdeasCount: number
 }
 
-// Full shoot type that includes ALL database fields (for cases where we need everything)
-export interface ShootWithClientFull extends ShootSelect {
-  client: {
-    id: number
-    name: string
-  } | null
-  postIdeasCount: number
-}
-
-// Legacy alias for backward compatibility - points to the basic type
-export type ShootWithClient = ShootWithClientBasic
-
-export interface CreateShootInput {
-  title: string
-  clientId: number
-  scheduledAt: Date
-  duration: number
-  location?: string
-  notes?: string
-}
+const transformShootResult = (row: DatabaseShootResult): ShootWithClient => ({
+  ...row,
+  status: row.status as ShootStatus,
+  googleCalendarSyncStatus: row.googleCalendarSyncStatus as 'pending' | 'synced' | 'error' | null
+})
 
 // Get all active (non-deleted) shoots with client information and post ideas count
 export const getAllShoots = async (): Promise<ShootWithClient[]> => {
@@ -95,7 +77,7 @@ export const getAllShoots = async (): Promise<ShootWithClient[]> => {
     .groupBy(shoots.id, clients.id, clients.name)
     .orderBy(desc(shoots.scheduledAt))
 
-  return result
+  return result.map(transformShootResult)
 }
 
 // Get shoots by client ID
@@ -138,7 +120,7 @@ export const getShootsByClient = async (clientId: number): Promise<ShootWithClie
     .groupBy(shoots.id, clients.id, clients.name)
     .orderBy(desc(shoots.scheduledAt))
 
-  return result
+  return result.map(transformShootResult)
 }
 
 // Get single shoot by ID with client information
@@ -181,7 +163,7 @@ export const getShootById = async (id: number): Promise<ShootWithClient | null> 
     .groupBy(shoots.id, clients.id, clients.name)
     .limit(1)
 
-  return result[0] || null
+  return result[0] ? transformShootResult(result[0]) : null
 }
 
 // Create new shoot
@@ -348,7 +330,7 @@ export const getDeletedShoots = async (): Promise<ShootWithClient[]> => {
     .groupBy(shoots.id, clients.id, clients.name)
     .orderBy(desc(shoots.deletedAt))
 
-  return result
+  return result.map(transformShootResult)
 }
 
 // Get post ideas for a shoot with their shot lists

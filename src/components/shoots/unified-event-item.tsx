@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Calendar, Clock, MapPin, Users, Camera, AlertTriangle, Repeat, MoreHorizontal, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatStatusText, getStatusColor } from '@/lib/utils/status'
+import { formatTime, formatDuration } from '@/lib/utils/date-time'
 import type { UnifiedEvent } from '@/lib/types/shoots'
 
 interface UnifiedEventItemProps {
@@ -21,24 +22,7 @@ export const UnifiedEventItem = ({
   onDelete,
   className 
 }: UnifiedEventItemProps) => {
-  // Format time for display
-  const formatTime = (timeString: string) => {
-    return new Date(timeString).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-  }
 
-
-
-  // Format duration
-  const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes}m`
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
-  }
 
   // Get event type indicator
   const getEventTypeIndicator = () => {

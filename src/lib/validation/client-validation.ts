@@ -312,6 +312,9 @@ export const validateField = (
     case 'clientName':
       validator = (v) => clientValidation.requiredText(v, 'Name')
       break
+    case 'title':
+      validator = (v) => clientValidation.requiredText(v, 'Title')
+      break
     case 'primaryContactName':
     case 'contactName':
       validator = (v) => clientValidation.requiredText(v, 'Contact name')

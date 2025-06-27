@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
-import { getPostIdeaById, updatePostIdea, deletePostIdea } from '@/lib/db/post-ideas'
+import { getPostIdeaById, updatePostIdea, deletePostIdeaEnhanced } from '@/lib/db/post-ideas'
 import { 
   ApiErrors, 
   ApiSuccess, 
@@ -16,6 +16,10 @@ interface UpdatePostBody {
   caption?: string
   shotList?: string[]
   notes?: string
+}
+
+interface DeletePostBody {
+  cascade?: boolean
 }
 
 export async function GET(
@@ -128,7 +132,19 @@ export async function DELETE(
     const { id } = await getValidatedParams(params)
     const postIdeaId = validateId(id, 'Post idea')
 
-    const result = await deletePostIdea(postIdeaId)
+    // Check for cascade parameter in request body
+    let cascade = false
+    try {
+      const body = await getValidatedBody<DeletePostBody>(request)
+      cascade = body.cascade || false
+    } catch {
+      // If no body or invalid body, default to false (backward compatibility)
+      cascade = false
+    }
+
+    console.log('🗑️ [Posts API] Delete request:', { postIdeaId, cascade })
+
+    const result = await deletePostIdeaEnhanced(postIdeaId, cascade)
 
     if (!result.success) {
       if (result.message.includes('not found')) {
@@ -137,7 +153,10 @@ export async function DELETE(
       return ApiErrors.badRequest(result.message)
     }
 
-    return ApiSuccess.ok({}, result.message)
+    // Include deleted items info in response for cascade deletes
+    const responseData = result.deletedItems ? { deletedItems: result.deletedItems } : {}
+    
+    return ApiSuccess.ok(responseData, result.message)
 
   } catch (error) {
     console.error('❌ [Posts API] Delete post idea error:', error)

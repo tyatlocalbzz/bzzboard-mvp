@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -34,25 +34,50 @@ export const GoogleDriveSettingsComponent = ({
   const { browseFolders, createFolder: handleCreateFolder } = useFolderBrowser()
   const effectiveBrowseFolders = onBrowseFolders || browseFolders
 
-  const handleSettingChange = (key: keyof GoogleDriveSettings, value: string | boolean | undefined) => {
-    const newSettings = { ...settings, [key]: value }
+  // Debounce timer to prevent rapid settings updates
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null)
+
+  const handleFolderSelect = useCallback((folder: FolderBrowserItem) => {
+    // Update all folder-related settings at once to minimize API calls
+    const newSettings = {
+      ...settings,
+      parentFolderId: folder.id === 'root' ? undefined : folder.id,
+      parentFolderName: folder.id === 'root' ? undefined : folder.name,
+      parentFolderPath: folder.path
+    }
+    
     setSettings(newSettings)
+    
+    // Clear any pending debounced updates
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
+    
+    // Apply changes immediately for folder selection (user expects instant feedback)
     onSettingsChange(newSettings)
-  }
-
-  const handleFolderSelect = (folder: FolderBrowserItem) => {
-    handleSettingChange('parentFolderId', folder.id === 'root' ? undefined : folder.id)
-    handleSettingChange('parentFolderName', folder.id === 'root' ? undefined : folder.name)
-    handleSettingChange('parentFolderPath', folder.path)
     toast.success(`Selected folder: ${folder.name}`)
-  }
+  }, [settings, onSettingsChange])
 
-  const clearParentFolder = () => {
-    handleSettingChange('parentFolderId', undefined)
-    handleSettingChange('parentFolderName', undefined)
-    handleSettingChange('parentFolderPath', undefined)
+  const clearParentFolder = useCallback(() => {
+    // Clear all folder-related settings at once
+    const newSettings = {
+      ...settings,
+      parentFolderId: undefined,
+      parentFolderName: undefined,
+      parentFolderPath: undefined
+    }
+    
+    setSettings(newSettings)
+    
+    // Clear any pending debounced updates
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
+    
+    // Apply changes immediately for clear action
+    onSettingsChange(newSettings)
     toast.success('Cleared parent folder - will use root Drive')
-  }
+  }, [settings, onSettingsChange])
 
   return (
     <Card>

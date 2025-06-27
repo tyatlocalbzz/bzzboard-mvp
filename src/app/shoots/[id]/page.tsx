@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { MobileLayout } from "@/components/layout/mobile-layout"
 import { Separator } from "@/components/ui/separator"
@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { MoreHorizontal, Plus, Calendar } from "lucide-react"
 import { formatStatusText, getStatusColor } from "@/lib/utils/status"
-import { useClient } from '@/contexts/client-context'
 import { useShootData } from '@/lib/hooks/use-shoot-data'
 import { ShootHeader } from '@/components/shoots/shoot-header'
 import { ShootActions } from '@/components/shoots/shoot-actions'
@@ -18,7 +17,6 @@ import { AddPostChoiceDialog } from '@/components/shoots/add-post-choice-dialog'
 import { AssignExistingPostsDialog } from '@/components/shoots/assign-existing-posts-dialog'
 import { PostIdeaActions } from '@/components/shoots/post-idea-actions'
 import { PLATFORM_OPTIONS } from '@/lib/constants/platforms'
-import type { ClientData } from '@/lib/types/client'
 import type { ShootClient } from '@/lib/types/shoots'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
@@ -26,7 +24,6 @@ export default function ShootDetailsPage() {
   const params = useParams()
   const router = useRouter()
   const shootId = params.id as string
-  const { clients } = useClient()
   
   const [showCreatePostForm, setShowCreatePostForm] = useState(false)
   const [showAssignPostsDialog, setShowAssignPostsDialog] = useState(false)
@@ -39,11 +36,6 @@ export default function ShootDetailsPage() {
 
   const handleCreateNewPost = () => setShowCreatePostForm(true)
   const handleAssignExistingPost = () => setShowAssignPostsDialog(true)
-  
-  // Helper function to find client override
-  const getClientOverride = useCallback((clientName: string): ClientData | null => {
-    return clients.find(client => client.name === clientName && client.type === 'client') || null
-  }, [clients])
 
   // Helper function to get client name as string
   const getClientName = (client: string | ShootClient): string => {
@@ -244,7 +236,6 @@ export default function ShootDetailsPage() {
                   mode="create"
                   context="shoot"
                   shootId={shootId}
-                  clientOverride={getClientOverride(getClientName(shoot.client))}
                   onSuccess={refresh}
                   displayMode="dialog"
                   trigger={
@@ -267,7 +258,6 @@ export default function ShootDetailsPage() {
         mode="create"
         context="shoot"
         shootId={shootId}
-        clientOverride={getClientOverride(getClientName(shoot.client))}
         onSuccess={() => {
           refresh()
           setShowCreatePostForm(false)

@@ -32,8 +32,8 @@ export interface ExtendedPostIdea {
   completed?: boolean
 }
 
-// Consolidated shoot status type
-export type ShootStatus = 'scheduled' | 'active' | 'completed' | 'cancelled'
+// Consolidated shoot status type - UPDATED to include 'sent-to-editor'
+export type ShootStatus = 'scheduled' | 'active' | 'completed' | 'sent-to-editor' | 'cancelled'
 
 // Google Calendar attendee type (shared across multiple interfaces)
 export interface GoogleCalendarAttendee {
@@ -192,7 +192,7 @@ export interface ShootWithPostIdeas extends Shoot {
   postIdeas: PostIdea[]
 }
 
-// Upload-related types
+// Upload-related types - ENHANCED with drive links
 export interface UploadedFile {
   id: number
   fileName: string
@@ -204,8 +204,77 @@ export interface UploadedFile {
   uploadedAt: string
   postIdeaId?: number
   shootId?: number
+  // NEW: Drive integration fields
+  driveFolderId?: string
+  driveFileWebViewLink?: string
+  driveFileDownloadLink?: string
 }
 
+// NEW: Enhanced upload file with drive links
+export interface UploadedFileWithLinks extends UploadedFile {
+  driveFolderId: string
+  driveFileWebViewLink: string
+  driveFileDownloadLink: string
+}
+
+// NEW: Post idea with uploaded files
+export interface PostIdeaWithUploads extends ExtendedPostIdea {
+  uploadedFiles: UploadedFileWithLinks[]
+  driveFolderLink?: string
+  fileCount: number
+}
+
+// NEW: Editor communication types
+export interface EditorCommunication {
+  id: number
+  shootId: number
+  editorEmail: string
+  subject: string
+  message: string
+  driveFolderLinks: Array<{
+    postIdeaId?: number
+    postIdeaTitle?: string
+    folderName: string
+    webViewLink: string
+    fileCount: number
+  }>
+  sentAt: string
+  emailMessageId?: string
+  status: 'sent' | 'delivered' | 'failed'
+  createdBy: number
+  createdAt: string
+}
+
+// NEW: Editor notification data for email service
+export interface EditorNotificationData {
+  editorEmail: string
+  editorName?: string
+  shootTitle: string
+  clientName: string
+  shootDate: string
+  location?: string
+  postIdeas: Array<{
+    title: string
+    platforms: string[]
+    contentType: string
+    caption?: string
+    notes?: string
+    driveFolderLink: string
+    fileCount: number
+  }>
+  miscFilesFolderLink?: string
+  miscFilesCount?: number
+  shootNotes?: string
+  senderName: string
+}
+
+// NEW: Send to editor request body
+export interface SendToEditorBody {
+  editorEmail: string
+  customMessage?: string
+}
+
+// Restored missing types
 export interface UploadProgress {
   uploadedBytes: number
   totalBytes: number
@@ -327,4 +396,22 @@ export interface ShootApiResponse {
     endTime: string
   }>
   recoveryNote?: string
+}
+
+// NEW: Enhanced PostIdea interface with uploaded files
+export interface ExtendedPostIdeaWithFiles extends ExtendedPostIdea {
+  uploadedFiles: UploadedFileWithLinks[]
+  driveFolder?: {
+    id: string
+    webViewLink: string
+    path: string
+  }
+  fileCount: number
+}
+
+// NEW: Shoot data response with uploaded files
+export interface ShootDataWithFiles {
+  shoot: Shoot
+  postIdeas: ExtendedPostIdeaWithFiles[]
+  miscFiles: UploadedFileWithLinks[]
 } 

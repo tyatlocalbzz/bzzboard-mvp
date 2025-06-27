@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useClient } from '@/contexts/client-context'
 import { useApiData, useApiMutation } from './use-api-data'
+import type { PostDependencies } from '@/lib/types/client'
 
 export interface PostIdea {
   id: number
@@ -113,7 +114,7 @@ export const usePosts = (initialFilters: Partial<PostsFilters> = {}) => {
     (variables) => `/api/posts/${variables.id}`, 
     'PUT'
   )
-  const deleteMutation = useApiMutation<void, { id: number }>(
+  const deleteMutation = useApiMutation<{ deletedItems?: { shoots: number; files: number } }, { id: number; cascade?: boolean }>(
     (variables) => `/api/posts/${variables.id}`, 
     'DELETE'
   )
@@ -152,14 +153,30 @@ export const usePosts = (initialFilters: Partial<PostsFilters> = {}) => {
     return result
   }, [updateMutation, updateData])
 
-  const deletePost = useCallback(async (id: number): Promise<void> => {
-    await deleteMutation.mutate({ id })
+  const deletePost = useCallback(async (id: number, cascade: boolean = false): Promise<{ deletedItems?: { shoots: number; files: number } }> => {
+    const result = await deleteMutation.mutate({ id, cascade })
     
     // Remove from local state
     updateData(prev => prev ? {
       posts: prev.posts.filter(p => p.id !== id)
     } : null)
+    
+    return result || {}
   }, [deleteMutation, updateData])
+
+  const fetchPostDependencies = useCallback(async (id: number): Promise<PostDependencies | null> => {
+    try {
+      const response = await fetch(`/api/posts/${id}/dependencies`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch dependencies')
+      }
+      const data = await response.json()
+      return data.success ? data.data.dependencies : null
+    } catch (error) {
+      console.error('Error fetching post dependencies:', error)
+      return null
+    }
+  }, [])
 
   const duplicatePost = useCallback(async (originalPost: PostIdea, newClientName?: string): Promise<PostIdea> => {
     const duplicateData: CreatePostData = {
@@ -198,6 +215,7 @@ export const usePosts = (initialFilters: Partial<PostsFilters> = {}) => {
     updatePost,
     duplicatePost,
     deletePost,
+    fetchPostDependencies,
     assignToShoot,
     updateFilters,
     resetFilters,

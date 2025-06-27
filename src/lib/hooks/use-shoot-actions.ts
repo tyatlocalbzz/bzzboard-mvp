@@ -35,7 +35,7 @@ export const useShootActions = ({
   onOptimisticDelete 
 }: UseShootActionsOptions): UseShootActionsReturn => {
   const router = useRouter()
-  const { startShoot: startActiveShoot } = useActiveShoot()
+  const { startShoot: startActiveShoot, endShoot } = useActiveShoot()
   
   // Use unified API methods
   const { loading: statusLoading, execute: executeStatusChange } = useAsync(ShootsApi.changeStatus)
@@ -85,13 +85,19 @@ export const useShootActions = ({
       const statusResult = await executeStatusChange(shoot.id.toString(), 'completed', 'complete')
       if (!statusResult) return
       
+      // Clear the active shoot context to stop the timer and hide the banner
+      endShoot()
+      
       toast.success('Shoot completed successfully!')
       onSuccess?.()
+      
+      // Navigate back to the shoot detail page
+      router.push(`/shoots/${shoot.id}`)
     } catch (error) {
       console.error('❌ [useShootActions] Failed to complete shoot:', error)
       toast.error('Failed to complete shoot. Please try again.')
     }
-  }, [shoot, executeStatusChange, onSuccess])
+  }, [shoot, executeStatusChange, endShoot, onSuccess, router])
 
   const deleteShoot = useCallback(async () => {
     if (!shoot) {

@@ -1,10 +1,11 @@
 import { useCallback } from 'react'
 import { useApiData } from './use-api-data'
-import type { Shoot, ExtendedPostIdea } from '@/lib/types/shoots'
+import type { Shoot, ExtendedPostIdeaWithFiles, UploadedFileWithLinks } from '@/lib/types/shoots'
 
 interface ShootDataResponse {
   shoot: Shoot
-  postIdeas: ExtendedPostIdea[]
+  postIdeas: ExtendedPostIdeaWithFiles[]
+  miscFiles: UploadedFileWithLinks[]
 }
 
 interface UseShootDataOptions {
@@ -15,18 +16,19 @@ interface UseShootDataOptions {
 
 interface UseShootDataReturn {
   shoot: Shoot | null
-  postIdeas: ExtendedPostIdea[]
+  postIdeas: ExtendedPostIdeaWithFiles[]
+  miscFiles: UploadedFileWithLinks[]
   isLoading: boolean
   error: string | null
   refresh: () => Promise<void>
   updateShoot: (updates: Partial<Shoot>) => void
-  updatePostIdea: (id: number, updates: Partial<ExtendedPostIdea>) => void
+  updatePostIdea: (id: number, updates: Partial<ExtendedPostIdeaWithFiles>) => void
 }
 
 /**
- * Refactored shoot data hook using standardized API pattern
- * Uses centralized types to eliminate duplication and improve maintainability
- * Eliminates ~80 lines of duplicate code by using the generic useApiData hook
+ * Enhanced shoot data hook with uploaded files support
+ * Now handles ExtendedPostIdeaWithFiles and miscFiles from the API
+ * Follows standardized API patterns and provides uploaded files data
  */
 export const useShootData = ({ 
   shootId, 
@@ -39,24 +41,37 @@ export const useShootData = ({
   const transform = useCallback((data: unknown) => {
     console.log('🔄 [useShootData] Transform called with data:', data)
     
-    // Handle standardized API response: { success: true, data: { shoot, postIdeas } }
+    // Handle standardized API response: { success: true, data: { shoot, postIdeas, miscFiles } }
     const response = data as { 
       success?: boolean; 
-      data?: { shoot: Shoot; postIdeas?: unknown[] };
+      data?: { 
+        shoot: Shoot; 
+        postIdeas?: ExtendedPostIdeaWithFiles[];
+        miscFiles?: UploadedFileWithLinks[];
+      };
       shoot?: Shoot; 
-      postIdeas?: unknown[] 
+      postIdeas?: ExtendedPostIdeaWithFiles[];
+      miscFiles?: UploadedFileWithLinks[];
     }
     
     // Extract the actual data - handle both formats for compatibility
-    let result: { shoot: Shoot; postIdeas?: unknown[] }
+    let result: { 
+      shoot: Shoot; 
+      postIdeas?: ExtendedPostIdeaWithFiles[];
+      miscFiles?: UploadedFileWithLinks[];
+    }
     
     if (response.success && response.data) {
-      // Standardized format: { success: true, data: { shoot, postIdeas } }
+      // Standardized format: { success: true, data: { shoot, postIdeas, miscFiles } }
       result = response.data
       console.log('🔄 [useShootData] Using standardized format from response.data')
     } else if (response.shoot) {
-      // Legacy format: { shoot, postIdeas }
-      result = { shoot: response.shoot, postIdeas: response.postIdeas }
+      // Legacy format: { shoot, postIdeas, miscFiles }
+      result = { 
+        shoot: response.shoot, 
+        postIdeas: response.postIdeas,
+        miscFiles: response.miscFiles
+      }
       console.log('🔄 [useShootData] Using legacy format from response root')
     } else {
       console.error('❌ [useShootData] Unexpected API response format:', response)
@@ -70,31 +85,12 @@ export const useShootData = ({
       throw new Error('No shoot data found')
     }
     
-    // Transform post ideas to match ExtendedPostIdea interface
-    // This makes the transform function stable (no dependencies)
-    const transformedPostIdeas = (result.postIdeas || []).map((item: unknown) => {
-      const postIdea = item as { 
-        id: number; 
-        title: string; 
-        platforms: string[]; 
-        contentType: string;
-        caption?: string;
-        notes?: string;
-        status: 'planned' | 'shot' | 'uploaded';
-        shots?: { text: string; completed: boolean }[] 
-      }
-      
-      return {
-        ...postIdea,
-        shotList: postIdea.shots?.map((shot: { text: string; completed: boolean }) => shot.text) || [],
-        completed: postIdea.shots?.every((shot: { text: string; completed: boolean }) => shot.completed) || false
-      } as ExtendedPostIdea
-    })
-    
+    // Post ideas are now already in the correct ExtendedPostIdeaWithFiles format
+    // No transformation needed since the API handles this
     const finalResult = {
       shoot: result.shoot,
-      // Filter post ideas based on loadPostIdeas flag in the return, not in transform
-      postIdeas: transformedPostIdeas
+      postIdeas: result.postIdeas || [],
+      miscFiles: result.miscFiles || []
     }
     
     console.log('✅ [useShootData] Transform completed:', finalResult)
@@ -103,7 +99,7 @@ export const useShootData = ({
 
   const { data, isLoading, error, refresh, updateData } = useApiData<ShootDataResponse>({
     endpoint,
-    dependencies: [shootId, loadPostIdeas],
+    dependencies: [shootId], // Remove loadPostIdeas from dependencies to prevent loops
     transform,
     onError: onError // Pass onError directly - useApiData will handle memoization
   })
@@ -116,7 +112,7 @@ export const useShootData = ({
     } : null)
   }, [updateData])
 
-  const updatePostIdea = useCallback((id: number, updates: Partial<ExtendedPostIdea>) => {
+  const updatePostIdea = useCallback((id: number, updates: Partial<ExtendedPostIdeaWithFiles>) => {
     updateData(prev => prev ? {
       ...prev,
       postIdeas: prev.postIdeas.map(idea => 
@@ -128,6 +124,7 @@ export const useShootData = ({
   return {
     shoot: data?.shoot || null,
     postIdeas: loadPostIdeas ? (data?.postIdeas || []) : [],
+    miscFiles: data?.miscFiles || [],
     isLoading,
     error,
     refresh,

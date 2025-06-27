@@ -236,7 +236,37 @@ export const uploadedFiles = pgTable('uploaded_files', {
   mimeType: varchar('mime_type', { length: 100 }),
   googleDriveId: varchar('google_drive_id', { length: 255 }),
   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+  // NEW: Drive integration fields for direct file access
+  driveFolderId: varchar('drive_folder_id', { length: 255 }),
+  driveFileWebViewLink: varchar('drive_file_web_view_link', { length: 500 }),
+  driveFileDownloadLink: varchar('drive_file_download_link', { length: 500 })
 })
+
+// NEW: Editor communications table for tracking email notifications
+export const editorCommunications = pgTable('editor_communications', {
+  id: serial('id').primaryKey(),
+  shootId: integer('shoot_id').references(() => shoots.id, { onDelete: 'cascade' }).notNull(),
+  editorEmail: varchar('editor_email', { length: 255 }).notNull(),
+  subject: varchar('subject', { length: 255 }).notNull(),
+  message: text('message').notNull(),
+  driveFolderLinks: json('drive_folder_links').$type<Array<{
+    postIdeaId?: number
+    postIdeaTitle?: string
+    folderName: string
+    webViewLink: string
+    fileCount: number
+  }>>().notNull(),
+  sentAt: timestamp('sent_at').defaultNow().notNull(),
+  emailMessageId: varchar('email_message_id', { length: 255 }), // Resend message ID
+  status: varchar('status', { length: 50 }).default('sent').notNull(), // sent, delivered, failed
+  createdBy: integer('created_by').references(() => users.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+  // Indexes for performance
+  shootIdIdx: index('idx_editor_communications_shoot_id').on(table.shootId),
+  sentAtIdx: index('idx_editor_communications_sent_at').on(table.sentAt.desc()),
+  createdByIdx: index('idx_editor_communications_created_by').on(table.createdBy),
+}))
 
 // Integrations table
 export const integrations = pgTable('integrations', {

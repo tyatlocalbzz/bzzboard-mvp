@@ -16,12 +16,11 @@ import { useFormState } from '@/lib/hooks/use-form-state'
 import { useFieldValidation } from '@/lib/hooks/use-field-validation'
 import { useClient } from '@/contexts/client-context'
 import { toast } from 'sonner'
-import { useConfiguredPlatformsWithOverride, useAllPlatformsWithStatusAndOverride } from '@/lib/hooks/use-client-platforms'
-import { CheckCircle, Plus, Edit, FileText, Users, X } from 'lucide-react'
+import { useAdminEnabledPlatforms } from '@/lib/hooks/use-client-platforms'
+import { Plus, Edit, FileText, Users, X } from 'lucide-react'
 import { CONTENT_TYPE_OPTIONS } from '@/lib/constants/platforms'
 import { shootsApi } from '@/lib/api/shoots-unified'
 import { type PostIdea } from '@/lib/hooks/use-posts'
-import { ClientData } from '@/lib/types/client'
 
 // Unified interfaces
 export interface PostIdeaData {
@@ -60,9 +59,6 @@ export interface PostIdeaFormProps {
   shootId?: string
   postIdea?: PostIdea
   
-  // Client override for shoot context
-  clientOverride?: ClientData | null
-  
   // Behavior
   onSuccess: () => void
   onCancel?: () => void
@@ -75,38 +71,64 @@ export interface PostIdeaFormProps {
 
 // API functions
 const createStandalonePost = async (data: PostIdeaData): Promise<PostIdea> => {
+  console.log('🔄 [createStandalonePost] Creating standalone post with data:', data)
+  
   const response = await fetch('/api/posts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   })
   
+  console.log('📡 [createStandalonePost] Response status:', response.status)
+  
   if (!response.ok) {
     const errorData = await response.json()
+    console.error('❌ [createStandalonePost] Error response:', errorData)
     throw new Error(errorData.error || 'Failed to create post')
   }
   
   const result = await response.json()
-  return result.post
+  console.log('📥 [createStandalonePost] API result:', result)
+  
+  if (!result.success || !result.data?.post) {
+    throw new Error('API returned unexpected response format')
+  }
+  
+  console.log('✅ [createStandalonePost] Returning post:', result.data.post)
+  return result.data.post
 }
 
 const updatePost = async (postId: number, data: PostIdeaData): Promise<PostIdea> => {
+  console.log('🔄 [updatePost] Updating post with data:', { postId, data })
+  
   const response = await fetch(`/api/posts/${postId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   })
   
+  console.log('📡 [updatePost] Response status:', response.status)
+  
   if (!response.ok) {
     const errorData = await response.json()
+    console.error('❌ [updatePost] Error response:', errorData)
     throw new Error(errorData.error || 'Failed to update post')
   }
   
   const result = await response.json()
-  return result.post
+  console.log('📥 [updatePost] API result:', result)
+  
+  if (!result.success || !result.data?.postIdea) {
+    throw new Error('API returned unexpected response format')
+  }
+  
+  console.log('✅ [updatePost] Returning post:', result.data.postIdea)
+  return result.data.postIdea
 }
 
 const addPostToShoot = async (shootId: string, data: PostIdeaData): Promise<PostIdea> => {
+  console.log('🔄 [addPostToShoot] Starting with data:', { shootId, data })
+  
   // Convert carousel to photo for API compatibility
   const contentType = data.contentType === 'carousel' ? 'photo' : data.contentType as 'photo' | 'video' | 'reel' | 'story'
   
@@ -119,21 +141,36 @@ const addPostToShoot = async (shootId: string, data: PostIdeaData): Promise<Post
     notes: data.notes
   }
   
-  const result = await shootsApi.addPostIdea(shootId, shootPostData)
+  console.log('📤 [addPostToShoot] Calling shootsApi.addPostIdea with:', shootPostData)
   
-  // Convert the result back to PostIdea format
-  return {
-    id: result.id,
-    title: result.title,
-    platforms: result.platforms,
-    contentType: result.contentType,
-    caption: result.caption,
-    shotList: result.shotList, // Use shotList directly from ExtendedPostIdea
-    notes: data.notes,
-    status: 'planned',
-    client: null, // Will be populated by the API response
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+  try {
+    const result = await shootsApi.addPostIdea(shootId, shootPostData)
+    console.log('📥 [addPostToShoot] API result:', result)
+    
+    if (!result) {
+      throw new Error('API returned empty result')
+    }
+    
+    // Convert the result back to PostIdea format
+    const postIdea: PostIdea = {
+      id: result.id,
+      title: result.title,
+      platforms: result.platforms,
+      contentType: result.contentType,
+      caption: result.caption,
+      shotList: result.shotList, // Use shotList directly from ExtendedPostIdea
+      notes: data.notes,
+      status: 'planned',
+      client: null, // Will be populated by the API response
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    
+    console.log('✅ [addPostToShoot] Converted to PostIdea format:', postIdea)
+    return postIdea
+  } catch (error) {
+    console.error('❌ [addPostToShoot] Error:', error)
+    throw error // Re-throw to be handled by the form
   }
 }
 
@@ -145,7 +182,6 @@ export const PostIdeaForm = ({
   context = 'standalone',
   shootId,
   postIdea,
-  clientOverride,
   onSuccess,
   onCancel,
   displayMode = 'dialog',
@@ -172,15 +208,8 @@ export const PostIdeaForm = ({
   // Use the form state hook for all form data
   const formState = useFormState<PostIdeaFormData>(stableInitialData)
   
-  // Get all platforms and filter based on context
-  // Use clientOverride when provided (shoot context) to show the shoot's client platforms
-  const configuredPlatforms = useConfiguredPlatformsWithOverride(clientOverride)
-  const allPlatformsWithStatus = useAllPlatformsWithStatusAndOverride(clientOverride)
-  
-  // Choose appropriate platforms based on context
-  const platforms = context === 'shoot' || mode === 'quick-add' 
-    ? configuredPlatforms // Only show configured platforms for shoot context
-    : allPlatformsWithStatus // Show all platforms with status for standalone posts
+  // ✅ Simplified: Only use admin-enabled platforms everywhere
+  const platforms = useAdminEnabledPlatforms()
 
   // API hooks
   const { loading: createLoading, execute: executeCreate } = useAsync(createStandalonePost)
@@ -269,12 +298,25 @@ export const PostIdeaForm = ({
       return titleValidation.error || 'Please enter a valid title'
     }
 
+    if (!titleField.value.trim()) {
+      return 'Post title is required'
+    }
+
     if (formState.data.platforms.length === 0) {
       return 'Please select at least one platform'
     }
 
+    if (!formState.data.contentType) {
+      return 'Please select a content type'
+    }
+
     if (context === 'standalone' && !formState.data.selectedClient) {
       return 'Please select a client'
+    }
+
+    // Additional validation for shoot context
+    if (context === 'shoot' && !shootId) {
+      return 'Shoot ID is missing - please refresh and try again'
     }
 
     return null
@@ -299,23 +341,38 @@ export const PostIdeaForm = ({
     }
 
     try {
+      console.log('🔄 [PostIdeaForm] Submitting form:', { mode, context, formData })
+      
+      let result
       if (mode === 'edit' && postIdea) {
-        await executeUpdate(postIdea.id, formData)
+        result = await executeUpdate(postIdea.id, formData)
       } else if (context === 'shoot' && shootId) {
-        await executeAddToShoot(shootId, formData)
+        result = await executeAddToShoot(shootId, formData)
       } else {
-        await executeCreate(formData)
+        result = await executeCreate(formData)
       }
 
-      if (!loading) {
+      // Only show success and close dialog if we have a valid result
+      if (result) {
+        const actionText = mode === 'edit' ? 'updated' : 'created'
+        toast.success(`Post idea ${actionText} successfully!`)
+        handleOpenChange(false)
+        onSuccess()
+        console.log('✅ [PostIdeaForm] Form submitted successfully:', result)
+      } else {
+        console.warn('⚠️ [PostIdeaForm] No result returned, but no error thrown')
+        // Still consider it a success if no error was thrown
         const actionText = mode === 'edit' ? 'updated' : 'created'
         toast.success(`Post idea ${actionText} successfully!`)
         handleOpenChange(false)
         onSuccess()
       }
     } catch (error) {
-      console.error('Error submitting form:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to save post idea')
+      console.error('❌ [PostIdeaForm] Error submitting form:', error)
+      // Show specific error message from the API or a generic fallback
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save post idea'
+      toast.error(errorMessage)
+      // Don't close the dialog on error - let user try again
     }
   }
 
@@ -394,7 +451,7 @@ export const PostIdeaForm = ({
         </div>
       )}
 
-      {/* Platforms */}
+      {/* Platforms - Now simplified */}
       <div className="space-y-3">
         <Label>Platforms *</Label>
         <div className="flex flex-wrap gap-2">
@@ -403,21 +460,13 @@ export const PostIdeaForm = ({
               key={platform.name}
               type="button"
               onClick={() => togglePlatform(platform.name)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors relative ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 formState.data.platforms.includes(platform.name)
                   ? 'bg-blue-500 text-white'
-                  : platform.isConfigured
-                  ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
-              title={platform.isConfigured ? `${platform.name} (${platform.handle})` : platform.name}
             >
-              <div className="flex items-center gap-1">
-                {platform.name}
-                {platform.isConfigured && (
-                  <CheckCircle className="h-3 w-3" />
-                )}
-              </div>
+              {platform.name}
             </button>
           ))}
         </div>

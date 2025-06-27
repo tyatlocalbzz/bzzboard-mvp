@@ -60,6 +60,8 @@ class ApiRequest {
     url: string, 
     options: RequestInit = {}
   ): Promise<T> {
+    console.log(`🌐 [ApiRequest] ${options.method || 'GET'} ${url}`)
+    
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
@@ -68,21 +70,27 @@ class ApiRequest {
       ...options,
     })
 
+    console.log(`📡 [ApiRequest] Response: ${response.status} ${response.statusText}`)
+
     if (!response.ok) {
       let errorMessage = `Request failed: ${response.statusText}`
       try {
         const errorData = await response.json()
-        errorMessage = errorData.error || errorMessage
-      } catch {
+        console.error('❌ [ApiRequest] Error response data:', errorData)
+        errorMessage = errorData.error || errorData.message || errorMessage
+      } catch (parseError) {
+        console.error('❌ [ApiRequest] Failed to parse error response:', parseError)
         // If parsing fails, use the default error message
       }
       throw new Error(errorMessage)
     }
 
     const data = await response.json()
+    console.log('📦 [ApiRequest] Response data:', data)
     
+    // Handle standardized API responses
     if ('success' in data && !data.success) {
-      throw new Error(data.error || 'Request failed')
+      throw new Error(data.error || data.message || 'Request failed')
     }
 
     return data
@@ -141,8 +149,27 @@ export const ShootsApi = {
   // -------------------------
 
   async fetchShoot(id: string): Promise<Shoot> {
-    const data = await ApiRequest.get<{ shoot: Shoot }>(`/api/shoots/${id}`)
-    return data.shoot
+    console.log('🔍 [ShootsApi] Fetching shoot:', id)
+    const data = await ApiRequest.get<{ success?: boolean; shoot?: Shoot; data?: { shoot: Shoot } }>(`/api/shoots/${id}`)
+    console.log('📦 [ShootsApi] fetchShoot raw response:', data)
+    
+    // Handle different API response formats
+    let shoot: Shoot | undefined
+    if (data.success && data.data?.shoot) {
+      // Standardized format: { success: true, data: { shoot: {...} } }
+      shoot = data.data.shoot
+    } else if (data.shoot) {
+      // Legacy format: { shoot: {...} }
+      shoot = data.shoot
+    }
+    
+    if (!shoot) {
+      console.error('❌ [ShootsApi] No shoot data found in response:', data)
+      throw new Error('Shoot data not found in API response')
+    }
+    
+    console.log('✅ [ShootsApi] Successfully fetched shoot:', shoot)
+    return shoot
   },
 
   async fetchPostIdeas(shootId: string): Promise<ExtendedPostIdea[]> {
@@ -295,17 +322,100 @@ export const ShootsApi = {
   // -------------------------
 
   async addPostIdea(shootId: string, data: PostIdeaData): Promise<ExtendedPostIdea> {
-    const result = await ApiRequest.post<{ postIdea: { id: number } }>('/api/posts', {
-      ...data,
-      shootId: shootId // Include shoot ID to auto-assign
-    })
-    
-    return {
-      id: result.postIdea.id,
-      ...data,
-      shotList: data.shotList || [],
-      status: 'planned' as const,
-      completed: false
+    try {
+      console.log('🔄 [ShootsApi] Adding post idea to shoot:', { shootId, data })
+      
+      // First, get the shoot data to extract client information
+      let shoot
+      try {
+        shoot = await this.fetchShoot(shootId)
+        console.log('📊 [ShootsApi] Fetched shoot data:', shoot)
+      } catch (fetchError) {
+        console.error('❌ [ShootsApi] Failed to fetch shoot data:', fetchError)
+        throw new Error('Unable to load shoot information. Please refresh the page and try again.')
+      }
+      
+      if (!shoot) {
+        throw new Error('Shoot not found. Please refresh the page and try again.')
+      }
+      
+      const clientName = typeof shoot.client === 'string' ? shoot.client : shoot.client?.name
+      
+      if (!clientName) {
+        console.error('❌ [ShootsApi] No client found in shoot data:', shoot)
+        throw new Error('Unable to determine client for this shoot. Please refresh the page and try again.')
+      }
+      
+      // Prepare the request data with client context
+      const requestData = {
+        ...data,
+        clientName, // Add client context from shoot
+        // Remove shootId - it's not part of the API spec
+      }
+      
+      console.log('📤 [ShootsApi] Sending request data:', requestData)
+      
+      const result = await ApiRequest.post<{ success: boolean; data: { post: { id: number; title: string; platforms: string[]; contentType: string; caption?: string; shotList?: string[]; notes?: string; status?: string } }; error?: string; message?: string }>('/api/posts', requestData)
+      
+      console.log('📥 [ShootsApi] API Response:', result)
+      
+      if (!result.success) {
+        throw new Error(result.error || result.message || 'Failed to create post idea')
+      }
+      
+      if (!result.data?.post) {
+        throw new Error('API response missing post data')
+      }
+      
+            // Now assign the created post to the shoot
+      try {
+        await ApiRequest.post(`/api/posts/${result.data.post.id}/assign-to-shoot`, {
+          shootId: parseInt(shootId)
+        })
+        console.log('✅ [ShootsApi] Post idea assigned to shoot successfully')
+      } catch (assignError) {
+        console.warn('⚠️ [ShootsApi] Failed to assign post to shoot, but post was created:', assignError)
+        // Don't fail the entire operation if assignment fails
+      }
+      
+      // Transform the response to match ExtendedPostIdea interface
+      const extendedPostIdea: ExtendedPostIdea = {
+        id: result.data.post.id,
+        title: result.data.post.title,
+        platforms: result.data.post.platforms,
+        contentType: result.data.post.contentType as 'photo' | 'video' | 'reel' | 'story',
+        caption: result.data.post.caption,
+        shotList: result.data.post.shotList || [],
+        notes: result.data.post.notes,
+        status: (result.data.post.status || 'planned') as 'planned' | 'shot' | 'uploaded',
+        completed: false
+      }
+      
+      console.log('✅ [ShootsApi] Post idea created and transformed:', extendedPostIdea)
+      return extendedPostIdea
+      
+    } catch (error) {
+      console.error('❌ [ShootsApi] Error adding post idea:', error)
+      
+      // Provide specific error messages based on error type
+      if (error instanceof Error) {
+        if (error.message.includes('Client is required')) {
+          throw new Error('Client information is missing. Please try refreshing the page.')
+        }
+        if (error.message.includes('Title is required')) {
+          throw new Error('Post title is required.')
+        }
+        if (error.message.includes('platforms')) {
+          throw new Error('At least one platform must be selected.')
+        }
+        if (error.message.includes('Content type is required')) {
+          throw new Error('Content type must be selected.')
+        }
+        // Re-throw with original message for other specific errors
+        throw error
+      }
+      
+      throw new Error('Failed to add post idea. Please check your connection and try again.')
     }
   },
 
@@ -380,8 +490,43 @@ export const ShootsApi = {
       formData.append('notes', request.notes)
     }
 
-    const data = await ApiRequest.upload<{ uploadedFile: UploadedFile }>('/api/uploads', formData)
-    return data.uploadedFile
+    const data = await ApiRequest.upload<{ 
+      success: boolean; 
+      data: {
+        uploadId: number;
+        fileName: string;
+        fileSize: number;
+        googleDriveFileId: string;
+        folderPath: string;
+        webViewLink: string;
+        shoot: { id: number; title: string };
+        postIdea: { id: number; title: string };
+      }; 
+      message?: string 
+    }>('/api/uploads', formData)
+    
+    console.log('📥 [ShootsApi] Upload API response:', data)
+    
+    // Transform the API response to match UploadedFile interface
+    if (data.success && data.data) {
+      const uploadedFile: UploadedFile = {
+        id: data.data.uploadId,
+        fileName: data.data.fileName,
+        fileSize: data.data.fileSize,
+        mimeType: request.file.type,
+        webViewLink: data.data.webViewLink,
+        webContentLink: data.data.webViewLink, // Use same link for now
+        driveFileId: data.data.googleDriveFileId,
+        uploadedAt: new Date().toISOString(),
+        postIdeaId: request.postIdeaId,
+        shootId: request.shootId
+      }
+      
+      console.log('✅ [ShootsApi] Upload completed, transformed response:', uploadedFile)
+      return uploadedFile
+    } else {
+      throw new Error('Upload failed - invalid API response')
+    }
   },
 
   async getUploadedFiles(shootId?: number, postIdeaId?: number): Promise<UploadedFile[]> {
@@ -402,13 +547,29 @@ export const ShootsApi = {
     shootTitle: string, 
     shootDate: string
   ): Promise<DriveFolder> {
-    const data = await ApiRequest.post<{ folder: DriveFolder }>('/api/integrations/google-drive/folders', {
+    console.log('🗂️ [ShootsApi] Creating Drive folder:', { clientName, shootTitle, shootDate })
+    
+    const data = await ApiRequest.post<{ success: boolean; data: { folder: DriveFolder }; folder?: DriveFolder }>('/api/integrations/google-drive/folders', {
       clientName,
       shootTitle,
       shootDate
     })
 
-    return data.folder
+    console.log('📥 [ShootsApi] Drive folder API response:', data)
+
+    // Handle both standardized and legacy response formats
+    if (data.success && data.data?.folder) {
+      // Standardized format: { success: true, data: { folder: {...} } }
+      console.log('✅ [ShootsApi] Using standardized response format')
+      return data.data.folder
+    } else if (data.folder) {
+      // Legacy format: { folder: {...} }
+      console.log('✅ [ShootsApi] Using legacy response format')
+      return data.folder
+    } else {
+      console.error('❌ [ShootsApi] Invalid response format:', data)
+      throw new Error('Invalid API response format - no folder data found')
+    }
   },
 
   async shareDriveFolder(folderId: string): Promise<string> {

@@ -116,11 +116,9 @@ export const FolderBrowserDialog = ({
   // Effect to load folders when currentFolderId changes
   useEffect(() => {
     if (open && onBrowseFolders && currentFolderId) {
-      console.log('📂 [FolderBrowserDialog] Loading folders for folder ID:', currentFolderId)
-      console.log('📂 [FolderBrowserDialog] Current path before loading:', currentPath)
       loadFolders(currentFolderId)
     }
-  }, [open, currentFolderId, loadFolders, onBrowseFolders, currentPath])
+  }, [open, currentFolderId, loadFolders, onBrowseFolders]) // Removed currentPath dependency to prevent loops
 
   // Create new folder function
   const handleCreateFolder = async () => {
@@ -151,20 +149,10 @@ export const FolderBrowserDialog = ({
   }
 
   const handleFolderSelect = (folder: FolderBrowserItem) => {
-    console.log('📂 [FolderBrowserDialog] Folder clicked:', {
-      id: folder.id,
-      name: folder.name,
-      path: folder.path,
-      isParent: folder.isParent,
-      type: folder.type
-    })
-    
     if (folder.isParent) {
       // Navigate back one level using navigation history
-      console.log('📂 [FolderBrowserDialog] Navigating back one level')
       if (navigationHistory.length > 0) {
         const previousFolder = navigationHistory[navigationHistory.length - 1]
-        console.log('📂 [FolderBrowserDialog] Going back to:', previousFolder)
         setCurrentFolderId(previousFolder.id)
         setCurrentPath(previousFolder.path)
         setCurrentFolderName(previousFolder.name)
@@ -172,16 +160,12 @@ export const FolderBrowserDialog = ({
         setNavigationHistory(prev => prev.slice(0, -1))
       } else {
         // If no history, go to root
-        console.log('📂 [FolderBrowserDialog] No history, going to root')
         setCurrentFolderId('root')
         setCurrentPath('/My Drive')
         setCurrentFolderName('My Drive')
       }
     } else {
       // Navigate into folder or shared drive to see its contents
-      console.log('📂 [FolderBrowserDialog] Navigating into folder:', folder.name, 'ID:', folder.id)
-      console.log('📂 [FolderBrowserDialog] Setting current path to:', folder.path)
-      
       // Add current folder to navigation history before navigating
       const currentFolderName = currentFolderId === 'root' ? 'My Drive' : currentPath.split('/').pop() || 'Unknown'
       const currentFolderInfo = {
@@ -189,7 +173,6 @@ export const FolderBrowserDialog = ({
         name: currentFolderName,
         path: currentPath
       }
-      console.log('📂 [FolderBrowserDialog] Adding to history:', currentFolderInfo)
       setNavigationHistory(prev => [...prev, currentFolderInfo])
       
       // Update current folder and path
@@ -197,11 +180,6 @@ export const FolderBrowserDialog = ({
       setCurrentPath(folder.path)
       setCurrentFolderName(folder.name)
       
-      console.log('📂 [FolderBrowserDialog] Navigation complete:', {
-        newFolderId: folder.id,
-        newPath: folder.path,
-        newFolderName: folder.name
-      })
       // The useEffect will automatically load the folder contents when currentFolderId changes
     }
   }
@@ -225,17 +203,11 @@ export const FolderBrowserDialog = ({
         path: currentPath,
         webViewLink: ''
       }
-      
-      console.log('📂 [FolderBrowserDialog] Selecting current folder:', {
-        id: currentFolderId,
-        name: currentFolderName,
-        path: currentPath
-      })
     }
     
     onFolderSelect(selectedFolder)
     onOpenChange(false)
-    toast.success(`Selected folder: ${selectedFolder.name}`)
+    // Don't show toast here - let the parent component handle success messages
   }
 
   return (

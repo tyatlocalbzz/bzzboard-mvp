@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { updateShootStatus, updateShoot, deleteShoot, getPostIdeasForShoot } from '@/lib/db/shoots'
+import { updateShootStatus, updateShoot, deleteShoot, getPostIdeasWithFilesForShoot, getMiscFilesForShoot } from '@/lib/db/shoots'
 import { GoogleCalendarSync } from '@/lib/services/google-calendar-sync'
 import { ApiErrors, ApiSuccess, getValidatedParams, getValidatedBody, validateId } from '@/lib/api/api-helpers'
 import { getCurrentUserForAPI } from '@/lib/auth/session'
@@ -8,66 +8,111 @@ import type { ShootUpdateBody } from '@/lib/types/shoots'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Authentication
     const user = await getCurrentUserForAPI()
-    if (!user) return ApiErrors.unauthorized()
+    if (!user?.email) return ApiErrors.unauthorized()
 
-    const { id } = await getValidatedParams(params)
-    const shootId = validateId(id, 'shoot')
+    // Parameter validation
+    const params = await getValidatedParams(context.params)
+    const shootId = validateId(params.id, 'Shoot')
 
-    // Get shoot details
+    console.log('🔍 [ShootAPI] GET request for shoot:', shootId)
+
+    // Get shoot data
     const shoot = await getShootById(shootId)
-    if (!shoot) return ApiErrors.notFound('Shoot')
-
-    // Get post ideas for this shoot
-    const postIdeasData = await getPostIdeasForShoot(shootId)
-
-    // Transform post ideas to match frontend expectations
-    const postIdeas = postIdeasData.map(postIdea => ({
-      id: postIdea.id,
-      title: postIdea.title,
-      platforms: postIdea.platforms,
-      contentType: postIdea.contentType,
-      caption: postIdea.caption,
-      status: postIdea.status || 'planned',
-      shotList: postIdea.shotList || [],
-      notes: postIdea.notes,
-      completed: postIdea.completed || false,
-      shots: (postIdea.shotList || []).map((shotText: string, index: number) => ({
-        id: index + 1,
-        text: shotText,
-        completed: postIdea.completed || false,
-        postIdeaId: postIdea.id
-      }))
-    }))
-
-    // Transform shoot data to match frontend expectations
-    const transformedShoot = {
-      id: shoot.id,
-      title: shoot.title,
-      client: shoot.client?.name || 'Unknown Client',
-      scheduledAt: shoot.scheduledAt.toISOString(),
-      duration: shoot.duration,
-      location: shoot.location || '',
-      status: shoot.status,
-      startedAt: shoot.startedAt?.toISOString(),
-      notes: shoot.notes,
-      postIdeasCount: shoot.postIdeasCount,
-      googleCalendarEventId: shoot.googleCalendarEventId,
-      googleCalendarSyncStatus: shoot.googleCalendarSyncStatus,
-      googleCalendarError: shoot.googleCalendarError
+    if (!shoot) {
+      return ApiErrors.notFound('Shoot')
     }
 
-    return ApiSuccess.ok({
-      shoot: transformedShoot,
-      postIdeas
+    console.log('📊 [ShootAPI] Found shoot:', {
+      id: shoot.id,
+      title: shoot.title,
+      status: shoot.status
     })
 
+    // Get post ideas with uploaded files
+    const postIdeasWithFiles = await getPostIdeasWithFilesForShoot(shootId)
+    console.log('📋 [ShootAPI] Found post ideas with files:', {
+      count: postIdeasWithFiles.length,
+      withFiles: postIdeasWithFiles.filter(p => p.uploadedFiles.length > 0).length
+    })
+
+    // Get misc files
+    const miscFiles = await getMiscFilesForShoot(shootId)
+    console.log('📂 [ShootAPI] Found misc files:', miscFiles.length)
+
+    // Transform post ideas to match ExtendedPostIdeaWithFiles interface
+    const enhancedPostIdeas = postIdeasWithFiles.map(postIdea => {
+      const uploadedFiles = postIdea.uploadedFiles || []
+      
+      // Create drive folder info if files exist
+      const driveFolder = uploadedFiles.length > 0 && uploadedFiles[0].driveFolderId ? {
+        id: uploadedFiles[0].driveFolderId,
+        webViewLink: `https://drive.google.com/drive/folders/${uploadedFiles[0].driveFolderId}`,
+        path: `/Client/${postIdea.title}/raw-files`
+      } : undefined
+
+      return {
+        id: postIdea.id,
+        title: postIdea.title,
+        platforms: postIdea.platforms,
+        contentType: postIdea.contentType as 'photo' | 'video' | 'reel' | 'story',
+        caption: postIdea.caption,
+        shotList: postIdea.shotList || [],
+        notes: postIdea.notes,
+        status: postIdea.status as 'planned' | 'shot' | 'uploaded',
+        completed: postIdea.completed || false,
+         uploadedFiles: uploadedFiles.map((file: { 
+          id: number; 
+          fileName: string; 
+          fileSize: number; 
+          mimeType: string; 
+          driveFileWebViewLink?: string; 
+          driveFileDownloadLink?: string; 
+          driveFileId?: string; 
+          uploadedAt?: string | Date;
+          postIdeaId?: number;
+          shootId?: number;
+          driveFolderId?: string;
+        }) => ({
+          ...file,
+          webViewLink: file.driveFileWebViewLink || '',
+          webContentLink: file.driveFileDownloadLink || '',
+          driveFileId: file.driveFileId || '',
+          uploadedAt: typeof file.uploadedAt === 'string' 
+            ? file.uploadedAt 
+            : file.uploadedAt?.toISOString() || new Date().toISOString()
+        })),
+        driveFolder,
+        fileCount: uploadedFiles.length
+      }
+    })
+
+    // Transform misc files
+    const transformedMiscFiles = miscFiles.map(file => ({
+      ...file,
+      webViewLink: file.driveFileWebViewLink || '',
+      webContentLink: file.driveFileDownloadLink || '',
+      driveFileId: file.driveFileId || '',
+      uploadedAt: typeof file.uploadedAt === 'string' 
+        ? file.uploadedAt 
+        : file.uploadedAt?.toISOString() || new Date().toISOString()
+    }))
+
+    console.log('✅ [ShootAPI] Returning enhanced shoot data with files')
+
+    return ApiSuccess.ok({
+      shoot,
+      postIdeas: enhancedPostIdeas,
+      miscFiles: transformedMiscFiles
+    }, 'Shoot data retrieved successfully')
+
   } catch (error) {
-    console.error('❌ [Shoots API] Get shoot error:', error)
-    return ApiErrors.internalError()
+    console.error('❌ [ShootAPI] Error in GET:', error)
+    return ApiErrors.internalError('Failed to fetch shoot data')
   }
 }
 

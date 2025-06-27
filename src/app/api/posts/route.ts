@@ -140,8 +140,11 @@ export async function POST(request: NextRequest) {
       if (error.message.includes('unique')) {
         return ApiErrors.conflict('A post with this title already exists')
       }
+      if (error.message.includes('foreign key') || error.message.includes('constraint')) {
+        return ApiErrors.badRequest('Invalid client reference')
+      }
     }
     
-    return ApiErrors.internalError()
+    return ApiErrors.internalError('Failed to create post idea')
   }
 } 

@@ -1,5 +1,5 @@
 import { db } from './index'
-import { shoots, clients, postIdeas, shootPostIdeas } from './schema'
+import { shoots, clients, postIdeas, shootPostIdeas, uploadedFiles } from './schema'
 import { eq, desc, asc, and, sql, isNull } from 'drizzle-orm'
 import type { ShootStatus, ShootWithClient, CreateShootInput } from '@/lib/types/shoots'
 
@@ -208,6 +208,23 @@ export const updateShootStatus = async (
     .set(updateData)
     .where(eq(shoots.id, id))
     .returning()
+
+  // ✨ AUTOMATIC STATUS UPDATE: When shoot is completed, update post statuses
+  if (updatedShoot && status === 'completed') {
+    try {
+      // Import the function dynamically to avoid circular dependency
+      const { updatePostStatusesOnShootCompletion } = await import('./post-ideas')
+      const result = await updatePostStatusesOnShootCompletion(id)
+      console.log('🎯 [updateShootStatus] Auto-updated post statuses on shoot completion:', {
+        shootId: id,
+        updatedPosts: result.updatedCount,
+        postIds: result.postIds
+      })
+    } catch (error) {
+      console.error('❌ [updateShootStatus] Failed to auto-update post statuses:', error)
+      // Don't fail the shoot status update if post status update fails
+    }
+  }
 
   return updatedShoot || null
 }
@@ -464,4 +481,96 @@ export const getShootByCalendarEventId = async (eventId: string): Promise<ShootS
     console.error('❌ [DB] Error getting shoot by calendar event ID:', error)
     return null
   }
+}
+
+// Get post ideas for a shoot with their uploaded files
+export const getPostIdeasWithFilesForShoot = async (shootId: number) => {
+  const result = await db
+    .select({
+      id: postIdeas.id,
+      title: postIdeas.title,
+      platforms: postIdeas.platforms,
+      contentType: postIdeas.contentType,
+      caption: postIdeas.caption,
+      shotList: postIdeas.shotList,
+      status: postIdeas.status,
+      notes: postIdeas.notes,
+      completed: shootPostIdeas.completed,
+      completedAt: shootPostIdeas.completedAt,
+      // Uploaded files data
+      uploadedFiles: sql<string>`COALESCE(
+        json_agg(
+          CASE 
+            WHEN ${uploadedFiles.id} IS NOT NULL 
+            THEN json_build_object(
+              'id', ${uploadedFiles.id},
+              'fileName', ${uploadedFiles.fileName},
+              'fileSize', ${uploadedFiles.fileSize},
+              'mimeType', ${uploadedFiles.mimeType},
+              'postIdeaId', ${uploadedFiles.postIdeaId},
+              'shootId', ${uploadedFiles.shootId},
+              'driveFolderId', ${uploadedFiles.driveFolderId},
+              'driveFileWebViewLink', ${uploadedFiles.driveFileWebViewLink},
+              'driveFileDownloadLink', ${uploadedFiles.driveFileDownloadLink},
+              'uploadedAt', ${uploadedFiles.uploadedAt},
+              'driveFileId', ${uploadedFiles.googleDriveId}
+            )
+            ELSE NULL
+          END
+        ) FILTER (WHERE ${uploadedFiles.id} IS NOT NULL), 
+        '[]'
+      )`
+    })
+    .from(shootPostIdeas)
+    .innerJoin(postIdeas, eq(shootPostIdeas.postIdeaId, postIdeas.id))
+    .leftJoin(uploadedFiles, and(
+      eq(uploadedFiles.shootId, shootId),
+      eq(uploadedFiles.postIdeaId, postIdeas.id)
+    ))
+    .where(eq(shootPostIdeas.shootId, shootId))
+    .groupBy(
+      postIdeas.id,
+      postIdeas.title,
+      postIdeas.contentType,
+      postIdeas.caption,
+      postIdeas.status,
+      postIdeas.notes,
+      shootPostIdeas.completed,
+      shootPostIdeas.completedAt
+      // Removed JSON columns (platforms, shotList) from GROUP BY
+    )
+    .orderBy(asc(postIdeas.createdAt))
+
+  return result.map(row => ({
+    ...row,
+    uploadedFiles: typeof row.uploadedFiles === 'string' 
+      ? JSON.parse(row.uploadedFiles) 
+      : row.uploadedFiles || []
+  }))
+}
+
+// Get misc files (files without post idea assignment) for a shoot
+export const getMiscFilesForShoot = async (shootId: number) => {
+  const result = await db
+    .select({
+      id: uploadedFiles.id,
+      fileName: uploadedFiles.fileName,
+      fileSize: uploadedFiles.fileSize,
+      mimeType: uploadedFiles.mimeType,
+      postIdeaId: uploadedFiles.postIdeaId,
+      shootId: uploadedFiles.shootId,
+      driveFolderId: uploadedFiles.driveFolderId,
+      driveFileWebViewLink: uploadedFiles.driveFileWebViewLink,
+      driveFileDownloadLink: uploadedFiles.driveFileDownloadLink,
+      uploadedAt: uploadedFiles.uploadedAt,
+      driveFileId: uploadedFiles.googleDriveId
+    })
+    .from(uploadedFiles)
+    .where(and(
+      eq(uploadedFiles.shootId, shootId),
+      isNull(uploadedFiles.postIdeaId)
+    ))
+    .orderBy(asc(uploadedFiles.uploadedAt))
+
+  return result
 } 

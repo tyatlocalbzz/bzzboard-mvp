@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { MobileLayout } from '@/components/layout/mobile-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,14 +16,18 @@ import { usePosts, type PostIdea } from '@/lib/hooks/use-posts'
 import { useClient } from '@/contexts/client-context'
 import { Plus, Search, Filter, FileText } from 'lucide-react'
 import { toast } from 'sonner'
+import type { PostDependencies } from '@/lib/types/client'
 
 export default function PostsPage() {
+  const router = useRouter()
   const { selectedClient } = useClient()
   const [editingPost, setEditingPost] = useState<PostIdea | null>(null)
   const [duplicatingPost, setDuplicatingPost] = useState<PostIdea | null>(null)
   const [deletingPost, setDeletingPost] = useState<PostIdea | null>(null)
   const [assigningPost, setAssigningPost] = useState<PostIdea | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [postDependencies, setPostDependencies] = useState<PostDependencies | null>(null)
+  const [loadingDependencies, setLoadingDependencies] = useState(false)
 
   const {
     posts,
@@ -33,7 +38,8 @@ export default function PostsPage() {
     deletePost,
     duplicatePost,
     assignToShoot,
-    fetchPosts 
+    fetchPosts,
+    fetchPostDependencies
   } = usePosts()
 
   const handleCreateSuccess = () => {
@@ -67,18 +73,45 @@ export default function PostsPage() {
     }
   }
 
-  const handleDelete = (post: PostIdea) => {
+  const handleDelete = async (post: PostIdea) => {
     setDeletingPost(post)
+    
+    // Fetch dependencies for this post
+    try {
+      setLoadingDependencies(true)
+      const dependencies = await fetchPostDependencies(post.id)
+      setPostDependencies(dependencies)
+    } catch (error) {
+      console.error('Error fetching dependencies:', error)
+      setPostDependencies(null)
+    } finally {
+      setLoadingDependencies(false)
+    }
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = async (cascade: boolean = false) => {
     if (!deletingPost) return
 
     try {
       setIsDeleting(true)
-      await deletePost(deletingPost.id)
-      toast.success('Post deleted successfully')
+      const result = await deletePost(deletingPost.id, cascade)
+      
+      if (cascade && result.deletedItems) {
+        const { shoots, files } = result.deletedItems
+        let message = `Post "${deletingPost.title}" deleted successfully`
+        if (shoots > 0 || files > 0) {
+          const details = []
+          if (shoots > 0) details.push(`${shoots} shoot assignment${shoots !== 1 ? 's' : ''}`)
+          if (files > 0) details.push(`${files} file${files !== 1 ? 's' : ''}`)
+          message += ` (also removed ${details.join(' and ')})`
+        }
+        toast.success(message)
+      } else {
+        toast.success('Post deleted successfully')
+      }
+      
       setDeletingPost(null)
+      setPostDependencies(null)
     } catch (error) {
       console.error('Delete error:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to delete post')
@@ -89,10 +122,15 @@ export default function PostsPage() {
 
   const handleDeleteCancel = () => {
     setDeletingPost(null)
+    setPostDependencies(null)
   }
 
   const handleAssignToShoot = (post: PostIdea) => {
     setAssigningPost(post)
+  }
+
+  const handlePostClick = (post: PostIdea) => {
+    router.push(`/posts/${post.id}`)
   }
 
   const handleAssignToShootConfirm = async (postId: number, shootId: number) => {
@@ -225,6 +263,7 @@ export default function PostsPage() {
                 onDuplicate={handleDuplicate}
                 onDelete={handleDelete}
                 onAssignToShoot={handleAssignToShoot}
+                onClick={handlePostClick}
                 showClient={selectedClient.type === 'all'}
               />
             ))}
@@ -268,9 +307,10 @@ export default function PostsPage() {
         onOpenChange={(open) => !open && handleDeleteCancel()}
         onConfirm={handleDeleteConfirm}
         title="Delete Post"
-        description="Are you sure you want to delete this post idea? This action cannot be undone."
+        description="Are you sure you want to delete this post idea?"
         itemName={deletingPost?.title || ''}
-        isLoading={isDeleting}
+        postDependencies={postDependencies || undefined}
+        isLoading={isDeleting || loadingDependencies}
       />
     </MobileLayout>
   )

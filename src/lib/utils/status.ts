@@ -43,7 +43,14 @@ const SHOOT_STATUS_CONFIG: Record<ShootStatus, StatusConfig<ShootStatus>> = {
     color: 'secondary',
     textColor: 'text-green-600',
     bgColor: 'bg-green-50',
-    transitions: []
+    transitions: ['sent-to-editor']
+  },
+  'sent-to-editor': {
+    label: 'Sent to Editor',
+    color: 'outline',
+    textColor: 'text-purple-600',
+    bgColor: 'bg-purple-50',
+    transitions: ['completed']
   },
   cancelled: {
     label: 'Cancelled',

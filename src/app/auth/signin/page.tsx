@@ -5,7 +5,6 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 
 const handleCredentialsSignIn = async (formData: FormData) => {
   'use server'
@@ -99,13 +98,6 @@ export default async function SignInPage({
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-foreground">Welcome back</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to your account to continue
-          </p>
-        </div>
-
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold">Welcome to Buzzboard</CardTitle>
@@ -214,13 +206,6 @@ export default async function SignInPage({
               <p className="text-xs">
                 By signing in, you agree to our terms of service and privacy policy.
               </p>
-            </div>
-
-            <div className="text-center text-sm text-muted-foreground">
-              Need help?{' '}
-              <Link href="/support" className="text-primary hover:text-primary/80">
-                Contact support
-              </Link>
             </div>
           </CardContent>
         </Card>

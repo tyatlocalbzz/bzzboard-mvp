@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import type { EditorNotificationData } from '@/lib/types/shoots'
 
 // Initialize Resend client
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -429,6 +430,245 @@ If you have any questions or need assistance, please reach out to your team.
 ---
 This email was sent by ${data.invitedBy}
 If you didn't request this, please contact your administrator.
+    `.trim()
+  }
+
+  /**
+   * Send editor notification email with content links and details
+   */
+  async sendEditorNotification(data: EditorNotificationData): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      console.log('🚀 [EmailService] Starting editor notification email send process...')
+      
+      this.validateConfig()
+
+      console.log('📧 [EmailService] Preparing editor notification email:', {
+        to: data.editorEmail,
+        shootTitle: data.shootTitle,
+        clientName: data.clientName,
+        postIdeasCount: data.postIdeas.length,
+        senderName: data.senderName
+      })
+
+      const emailPayload = {
+        from: this.config.from,
+        to: data.editorEmail,
+        replyTo: this.config.replyTo,
+        subject: `Content Ready for Editing - ${data.shootTitle}`,
+        html: this.generateEditorNotificationHTML(data),
+        text: this.generateEditorNotificationText(data),
+        tags: [
+          { name: 'type', value: 'editor-notification' },
+          { name: 'client', value: this.sanitizeTagValue(data.clientName) },
+          { name: 'sender', value: this.sanitizeTagValue(data.senderName) }
+        ]
+      }
+
+      console.log('📤 [EmailService] Sending editor notification via Resend API:', {
+        from: emailPayload.from,
+        to: emailPayload.to,
+        subject: emailPayload.subject,
+        tagsCount: emailPayload.tags.length,
+        htmlLength: emailPayload.html.length,
+        textLength: emailPayload.text.length
+      })
+
+      const result = await resend.emails.send(emailPayload)
+
+      console.log('📥 [EmailService] Resend API response:', {
+        success: !result.error,
+        error: result.error,
+        data: result.data
+      })
+
+      if (result.error) {
+        console.error('❌ [EmailService] Resend API returned error:', {
+          error: result.error,
+          message: result.error.message,
+          name: result.error.name
+        })
+        return { success: false, error: result.error.message }
+      }
+
+      console.log('✅ [EmailService] Editor notification sent successfully:', {
+        messageId: result.data?.id,
+        to: data.editorEmail,
+        from: this.config.from
+      })
+
+      return { success: true, messageId: result.data?.id }
+
+    } catch (error) {
+      console.error('❌ [EmailService] Exception caught while sending editor notification:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        data: {
+          editorEmail: data.editorEmail,
+          shootTitle: data.shootTitle,
+          clientName: data.clientName
+        }
+      })
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      }
+    }
+  }
+
+  /**
+   * Generate professional HTML email template for editor notifications
+   */
+  private generateEditorNotificationHTML(data: EditorNotificationData): string {
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    }
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Content Ready for Editing - ${data.shootTitle}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f8f9fa; }
+    .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+    .content { padding: 30px 20px; }
+    .shoot-details { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+    .shoot-details h2 { margin: 0 0 15px 0; color: #495057; font-size: 18px; }
+    .detail-item { margin: 8px 0; }
+    .detail-label { font-weight: 600; color: #495057; }
+    .post-idea { border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; margin: 15px 0; }
+    .post-idea h3 { margin: 0 0 10px 0; color: #343a40; font-size: 16px; }
+    .post-meta { margin: 5px 0; font-size: 14px; color: #6c757d; }
+    .drive-button { display: inline-block; background: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 10px 0; font-weight: 500; }
+    .drive-button:hover { background: #3367d6; }
+    .misc-section { background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 8px; padding: 20px; margin: 20px 0; }
+    .footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; }
+    .platforms { background: #e7f3ff; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin: 2px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎬 Content Ready for Editing</h1>
+      <p>New content delivery from BzzBoard</p>
+    </div>
+    
+    <div class="content">
+      <div class="shoot-details">
+        <h2>Shoot Details</h2>
+        <div class="detail-item"><span class="detail-label">Client:</span> ${data.clientName}</div>
+        <div class="detail-item"><span class="detail-label">Shoot:</span> ${data.shootTitle}</div>
+        <div class="detail-item"><span class="detail-label">Date:</span> ${formatDate(data.shootDate)}</div>
+        ${data.location ? `<div class="detail-item"><span class="detail-label">Location:</span> ${data.location}</div>` : ''}
+        ${data.shootNotes ? `<div class="detail-item"><span class="detail-label">Notes:</span> ${data.shootNotes}</div>` : ''}
+      </div>
+
+      <h2>📱 Post Ideas & Content</h2>
+      <p>All content has been organized by post idea and uploaded to Google Drive. Click the buttons below to access each folder.</p>
+
+      ${data.postIdeas.map(idea => `
+        <div class="post-idea">
+          <h3>${idea.title}</h3>
+          <div class="post-meta">
+            <strong>Platforms:</strong> 
+            ${idea.platforms.map(platform => `<span class="platforms">${platform}</span>`).join(' ')}
+          </div>
+          <div class="post-meta"><strong>Content Type:</strong> ${idea.contentType}</div>
+          ${idea.caption ? `<div class="post-meta"><strong>Caption:</strong> "${idea.caption}"</div>` : ''}
+          ${idea.notes ? `<div class="post-meta"><strong>Notes:</strong> ${idea.notes}</div>` : ''}
+          <div class="post-meta"><strong>Files:</strong> ${idea.fileCount} uploaded</div>
+          
+          <a href="${idea.driveFolderLink}" class="drive-button" target="_blank">
+            📁 Open Drive Folder
+          </a>
+        </div>
+      `).join('')}
+
+      ${data.miscFilesFolderLink && data.miscFilesCount ? `
+        <div class="misc-section">
+          <h3>📎 Additional Files</h3>
+          <p>${data.miscFilesCount} miscellaneous files that don't belong to specific post ideas</p>
+          <a href="${data.miscFilesFolderLink}" class="drive-button" target="_blank">
+            📁 Open Misc Files Folder
+          </a>
+        </div>
+      ` : ''}
+
+      <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+        <p><strong>Ready for your creative magic! ✨</strong></p>
+        <p>All content is organized and ready for editing. Please let me know if you need any clarification on the post ideas or have questions about the content.</p>
+        <p>Best regards,<br><strong>${data.senderName}</strong></p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>This email was sent via BzzBoard Content Management System</p>
+      <p>Need help? Contact support or reply to this email</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim()
+  }
+
+  /**
+   * Generate plain text version of editor notification email
+   */
+  private generateEditorNotificationText(data: EditorNotificationData): string {
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    }
+
+    return `
+CONTENT READY FOR EDITING
+
+Shoot Details:
+- Client: ${data.clientName}
+- Shoot: ${data.shootTitle}
+- Date: ${formatDate(data.shootDate)}
+${data.location ? `- Location: ${data.location}` : ''}
+${data.shootNotes ? `- Notes: ${data.shootNotes}` : ''}
+
+POST IDEAS & CONTENT:
+
+${data.postIdeas.map(idea => `
+${idea.title}
+- Platforms: ${idea.platforms.join(', ')}
+- Content Type: ${idea.contentType}
+${idea.caption ? `- Caption: "${idea.caption}"` : ''}
+${idea.notes ? `- Notes: ${idea.notes}` : ''}
+- Files: ${idea.fileCount} uploaded
+- Drive Folder: ${idea.driveFolderLink}
+`).join('\n')}
+
+${data.miscFilesFolderLink && data.miscFilesCount ? `
+ADDITIONAL FILES:
+${data.miscFilesCount} miscellaneous files
+Drive Folder: ${data.miscFilesFolderLink}
+` : ''}
+
+All content is organized and ready for editing. Please let me know if you need any clarification on the post ideas or have questions about the content.
+
+Best regards,
+${data.senderName}
+
+---
+This email was sent via BzzBoard Content Management System
     `.trim()
   }
 }

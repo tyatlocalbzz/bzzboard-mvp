@@ -11,11 +11,9 @@ import { PostIdeaForm } from '@/components/posts/post-idea-form'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { StopCircle, ChevronDown, ChevronRight, Plus } from 'lucide-react'
 import { useActiveShoot } from '@/contexts/active-shoot-context'
-import { useClient } from '@/contexts/client-context'
 import { useShootData } from '@/lib/hooks/use-shoot-data'
 import { useShootActions } from '@/lib/hooks/use-shoot-actions'
 import { ShootsApi } from '@/lib/api/shoots-unified'
-import { ClientData } from '@/lib/types/client'
 import type { ShootClient } from '@/lib/types/shoots'
 import { toast } from 'sonner'
 
@@ -23,35 +21,34 @@ export default function ActiveShootPage() {
   const params = useParams()
   const router = useRouter()
   const shootId = params.id as string
-  const { elapsedTime, endShoot: endActiveShoot } = useActiveShoot()
-  const { clients } = useClient()
-  
   const [showCompleted, setShowCompleted] = useState(false)
-  const [showEndDialog, setShowEndDialog] = useState(false)
+  const [showEndShootDialog, setShowEndShootDialog] = useState(false)
 
-  // Memoize onError callback to prevent infinite loops
-  const handleError = useCallback((error: string) => {
-    console.error('Failed to load active shoot data:', error)
-    toast.error('Failed to load active shoot data')
-    router.push(`/shoots/${shootId}`)
-  }, [router, shootId])
+  // Memoize the onError callback to prevent infinite loops
+  const handleShootError = useCallback((error: string) => {
+    console.error('Failed to load shoot data:', error)
+    toast.error('Failed to load shoot data')
+  }, [])
 
-  // Use the custom hook for data management
+  // Data loading
   const { shoot, postIdeas, isLoading, refresh } = useShootData({
     shootId,
-    onError: handleError
+    loadPostIdeas: true,
+    onError: handleShootError
   })
 
-  // Memoize onSuccess callback to prevent infinite loops
+  // Actions and context
+  const { elapsedTime } = useActiveShoot()
+  
+  // Handle success for ending shoot
   const handleSuccess = useCallback(() => {
-    endActiveShoot()
-    toast.success('Shoot ended successfully!')
+    refresh()
     router.push(`/shoots/${shootId}`)
-  }, [endActiveShoot, router, shootId])
+  }, [refresh, router, shootId])
 
   // Use shoot actions hook for ending the shoot
   const { completeShoot, isLoading: endLoading, canPerformActions } = useShootActions({
-    shoot: shoot,
+    shoot: shoot, // ✅ Remove non-null assertion - hook now handles null safely
     onSuccess: handleSuccess
   })
 
@@ -83,22 +80,37 @@ export default function ActiveShootPage() {
     }
   }, [postIdeas])
 
-  // Handlers for shot management
+  // Handlers for shot management - memoized to prevent infinite loops
   const handleShotToggle = useCallback(async (shotId: number) => {
-    await ShootsApi.toggleShot(shotId)
-    refresh() // Refresh data after toggle
+    try {
+      await ShootsApi.toggleShot(shotId)
+      refresh() // Refresh data after toggle
+    } catch (error) {
+      console.error('Failed to toggle shot:', error)
+      toast.error('Failed to toggle shot')
+    }
   }, [refresh])
 
   const handleShotEdit = useCallback(async (shotId: number, text: string, notes?: string) => {
-    await ShootsApi.editShot(shotId, text, notes)
-    refresh() // Refresh data after edit
-    toast.success('Shot updated!')
+    try {
+      await ShootsApi.editShot(shotId, text, notes)
+      refresh() // Refresh data after edit
+      toast.success('Shot updated!')
+    } catch (error) {
+      console.error('Failed to edit shot:', error)
+      toast.error('Failed to update shot')
+    }
   }, [refresh])
 
   const handleAddShot = useCallback(async (postIdeaId: number, shotText: string, notes?: string) => {
-    await ShootsApi.addShot(postIdeaId, shotText, notes)
-    refresh() // Refresh data after adding
-    toast.success('Shot added!')
+    try {
+      await ShootsApi.addShot(postIdeaId, shotText, notes)
+      refresh() // Refresh data after adding
+      toast.success('Shot added!')
+    } catch (error) {
+      console.error('Failed to add shot:', error)
+      toast.error('Failed to add shot')
+    }
   }, [refresh])
 
   const handlePostIdeaClick = useCallback((postIdeaId: number) => {
@@ -110,7 +122,7 @@ export default function ActiveShootPage() {
       toast.error('Please wait for shoot data to load')
       return
     }
-    setShowEndDialog(true)
+    setShowEndShootDialog(true)
   }, [canPerformActions])
 
   const handleConfirmEndShoot = useCallback(async () => {
@@ -119,17 +131,12 @@ export default function ActiveShootPage() {
       return
     }
     await completeShoot()
-    setShowEndDialog(false)
+    setShowEndShootDialog(false)
   }, [completeShoot, canPerformActions])
 
   const handleCancelEndShoot = useCallback(() => {
-    setShowEndDialog(false)
+    setShowEndShootDialog(false)
   }, [])
-
-  // Helper function to find client override
-  const getClientOverride = useCallback((clientName: string): ClientData | null => {
-    return clients.find(client => client.name === clientName && client.type === 'client') || null
-  }, [clients])
 
   // Show loading state
   if (isLoading || !shoot) {
@@ -145,6 +152,27 @@ export default function ActiveShootPage() {
           <div className="text-center">
             <LoadingSpinner size="lg" className="mx-auto mb-4" />
             <p className="text-sm text-muted-foreground">Loading shoot data...</p>
+          </div>
+        </div>
+      </MobileLayout>
+    )
+  }
+
+  // Redirect if shoot is already completed
+  if (shoot.status === 'completed') {
+    router.replace(`/shoots/${shootId}`)
+    return (
+      <MobileLayout 
+        title="Redirecting..."
+        backHref={`/shoots/${shootId}`}
+        showBottomNav={false}
+        showClientSelector={false}
+        loading={true}
+      >
+        <div className="flex items-center justify-center min-h-[200px]">
+          <div className="text-center">
+            <LoadingSpinner size="lg" className="mx-auto mb-4" />
+            <p className="text-sm text-muted-foreground">Shoot completed. Redirecting...</p>
           </div>
         </div>
       </MobileLayout>
@@ -293,7 +321,6 @@ export default function ActiveShootPage() {
           mode="quick-add"
           context="shoot"
           shootId={shootId}
-          clientOverride={getClientOverride(getClientName(shoot.client))}
           onSuccess={refresh}
           displayMode="dialog"
           trigger={
@@ -308,7 +335,7 @@ export default function ActiveShootPage() {
       </div>
 
       {/* End Shoot Confirmation Dialog */}
-      <Dialog open={showEndDialog} onOpenChange={setShowEndDialog}>
+      <Dialog open={showEndShootDialog} onOpenChange={setShowEndShootDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>End Shoot</DialogTitle>

@@ -74,7 +74,31 @@ export class UnifiedGoogleDriveService {
   private readonly pathFields = 'id,name,parents,driveId'
 
   constructor(accessToken: string, refreshToken?: string, settings?: GoogleDriveSettings) {
-    this.oauth2Client = new google.auth.OAuth2()
+    console.log('🔧 [GoogleDriveService] Initializing service...')
+    console.log('🔍 [GoogleDriveService] OAuth2 configuration:', {
+      hasClientId: !!process.env.GOOGLE_CLIENT_ID,
+      hasClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+      redirectUri: process.env.NEXTAUTH_URL ? `${process.env.NEXTAUTH_URL}/api/auth/callback/google` : 'not set'
+    })
+    
+    // Validate required environment variables
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      const missing = []
+      if (!process.env.GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID')
+      if (!process.env.GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET')
+      throw new Error(`Google OAuth not configured. Missing environment variables: ${missing.join(', ')}`)
+    }
+    
+    // Create OAuth2 client with proper client ID and secret from environment
+    this.oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.NEXTAUTH_URL ? `${process.env.NEXTAUTH_URL}/api/auth/callback/google` : undefined
+    )
+    
+    // Set the credentials (tokens)
     this.oauth2Client.setCredentials({ 
       access_token: accessToken,
       refresh_token: refreshToken
@@ -87,6 +111,7 @@ export class UnifiedGoogleDriveService {
     })
     
     this.settings = settings
+    console.log('✅ [GoogleDriveService] Service initialized successfully')
   }
 
   // ===========================================
@@ -500,11 +525,14 @@ export class UnifiedGoogleDriveService {
           : '/Shared Drives/Unknown'
       }
     } else {
-      // For My Drive folders
+      // For My Drive folders - ensure no duplication
       fullPath = pathSegments.length > 0 
         ? `/My Drive/${pathSegments.join('/')}`
         : '/My Drive'
     }
+    
+    // Final cleanup to prevent any path duplication issues
+    fullPath = fullPath.replace(/\/My Drive\/My Drive\//g, '/My Drive/')
     
     console.log('📂 [GoogleDriveService] Built path:', fullPath)
     return fullPath
@@ -569,16 +597,25 @@ export class UnifiedGoogleDriveService {
     // Use cached parent path if available
     const parentPath = this.pathCache.get(parentId)
     if (parentPath && !parentPath.includes('Unknown')) {
-      return `${parentPath}/${folderName}`
+      // Ensure we don't duplicate "My Drive" in the path
+      const cleanParentPath = parentPath.startsWith('/My Drive/My Drive/') 
+        ? parentPath.replace('/My Drive/My Drive/', '/My Drive/')
+        : parentPath
+      return `${cleanParentPath}/${folderName}`
     }
 
     // Fallback to full path resolution
     const parentPathResolved = await this.getFolderPath(parentId)
-    return `${parentPathResolved}/${folderName}`
+    // Ensure we don't duplicate "My Drive" in the path
+    const cleanParentPath = parentPathResolved.startsWith('/My Drive/My Drive/') 
+      ? parentPathResolved.replace('/My Drive/My Drive/', '/My Drive/')
+      : parentPathResolved
+    return `${cleanParentPath}/${folderName}`
   }
 
   /**
    * Sanitize folder name for Google Drive
+   * Preserves original casing to maintain user intent
    */
   private sanitizeFolderName(name: string): string {
     return name
@@ -586,6 +623,7 @@ export class UnifiedGoogleDriveService {
       .replace(/[<>:"/\\|?*]/g, '-') // Replace invalid characters
       .replace(/\s+/g, ' ') // Normalize whitespace
       .substring(0, 255) // Limit length
+      // Note: Preserving original casing - do not convert to lowercase
   }
 
   /**
@@ -610,11 +648,17 @@ export class UnifiedGoogleDriveService {
    */
   async findOrCreateFolder(folderName: string, parentId?: string): Promise<DriveFolder> {
     console.log('🔍 [GoogleDriveService] Finding or creating folder...')
-    console.log('📋 Folder parameters:', { folderName, parentId })
+    console.log('📋 Folder parameters:', { 
+      folderName, 
+      parentId,
+      folderNameLength: folderName.length,
+      folderNameCasing: folderName
+    })
     
     try {
       // Search for existing folder with optimized query
       const query = this.buildFolderQuery(parentId, `name='${folderName.replace(/'/g, "\\'")}'`)
+      console.log('🔎 [GoogleDriveService] Search query:', query)
       
       const searchResponse = await this.drive.files.list({
         q: query,
@@ -625,7 +669,11 @@ export class UnifiedGoogleDriveService {
       // Return existing folder if found
       if (searchResponse.data.files && searchResponse.data.files.length > 0) {
         const existingFolder = searchResponse.data.files[0]
-        console.log('✅ Found existing folder:', existingFolder.name)
+        console.log('✅ Found existing folder:', {
+          name: existingFolder.name,
+          originalFolderName: folderName,
+          nameMatch: existingFolder.name === folderName
+        })
         
         return {
           id: existingFolder.id || '',
@@ -719,9 +767,20 @@ export class UnifiedGoogleDriveService {
    */
   async createPostIdeaFolder(postIdeaTitle: string, parentFolderId: string): Promise<DriveFolder> {
     console.log('📁 [GoogleDriveService] Creating post idea folder structure...')
+    console.log('📋 [GoogleDriveService] Post idea folder parameters:', {
+      postIdeaTitle,
+      parentFolderId,
+      titleLength: postIdeaTitle.length,
+      titleCasing: postIdeaTitle
+    })
     
     // Create post idea folder
     const postIdeaFolder = await this.findOrCreateFolder(postIdeaTitle, parentFolderId)
+    console.log('✅ [GoogleDriveService] Post idea folder created:', {
+      id: postIdeaFolder.id,
+      name: postIdeaFolder.name,
+      originalTitle: postIdeaTitle
+    })
     
     // Create raw-files subfolder
     await this.findOrCreateFolder('raw-files', postIdeaFolder.id)
@@ -809,27 +868,70 @@ export class UnifiedGoogleDriveService {
   // ===========================================
 
   /**
-   * Refresh token if needed
+   * Refresh token if needed with enhanced error handling
    */
   async refreshTokenIfNeeded(): Promise<boolean> {
     try {
+      console.log('🔄 [GoogleDriveService] Attempting token refresh...')
       const { credentials } = await this.oauth2Client.refreshAccessToken()
       this.oauth2Client.setCredentials(credentials)
+      console.log('✅ [GoogleDriveService] Token refreshed successfully')
       return true
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('❌ [GoogleDriveService] Token refresh failed:', error)
+      
+      // Enhanced error logging for debugging
+      const errorObj = error as { response?: { status?: number; statusText?: string; data?: unknown }; message?: string }
+      if (errorObj.response) {
+        console.error('🔍 [GoogleDriveService] Token refresh error details:', {
+          status: errorObj.response.status,
+          statusText: errorObj.response.statusText,
+          data: errorObj.response.data
+        })
+      }
+      
+      // Check for specific error types
+      if (errorObj.message?.includes('invalid_request') || 
+          errorObj.message?.includes('invalid_grant') ||
+          errorObj.response?.status === 400) {
+        console.error('🚨 [GoogleDriveService] Refresh token appears to be expired or invalid - reconnection required')
+      }
+      
       return false
     }
   }
 
   /**
-   * Perform health check
+   * Perform health check with enhanced error reporting
    */
   async healthCheck(): Promise<boolean> {
     try {
-      await this.drive.about.get({ fields: 'user' })
+      console.log('🏥 [GoogleDriveService] Performing health check...')
+      const response = await this.drive.about.get({ fields: 'user' })
+      console.log('✅ [GoogleDriveService] Health check passed:', {
+        user: response.data.user?.displayName || 'Unknown',
+        status: 'healthy'
+      })
       return true
-    } catch {
+    } catch (error: unknown) {
+      console.error('❌ [GoogleDriveService] Health check failed:', error)
+      
+      const errorObj = error as { response?: { status?: number; statusText?: string; data?: unknown }; message?: string }
+      if (errorObj.response) {
+        console.error('🔍 [GoogleDriveService] Health check error details:', {
+          status: errorObj.response.status,
+          statusText: errorObj.response.statusText,
+          data: errorObj.response.data
+        })
+      }
+      
+      // Check for authentication errors
+      if (errorObj.message?.includes('401') || 
+          errorObj.message?.includes('unauthorized') ||
+          errorObj.response?.status === 401) {
+        console.error('🚨 [GoogleDriveService] Authentication error detected - token may be expired')
+      }
+      
       return false
     }
   }

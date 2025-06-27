@@ -24,7 +24,7 @@ interface ApiDataReturn<T> {
  */
 export const useApiData = <T>({
   endpoint,
-  dependencies: _, // eslint-disable-line @typescript-eslint/no-unused-vars
+  dependencies: _ = [], // eslint-disable-line @typescript-eslint/no-unused-vars
   autoFetch = true,
   transform,
   onError,
@@ -88,7 +88,7 @@ export const useApiData = <T>({
       setIsLoading(false)
     }
   }, [fetchData, callOnError, callOnSuccess])
-  // Note: isLoading intentionally omitted to prevent stale closure issues
+  // Note: Dependencies stable due to useCallback memoization
 
   const refresh = useCallback(async () => {
     await loadData(true) // Force refresh to bypass cache
@@ -142,8 +142,10 @@ export const useApiData = <T>({
       
       executeLoad()
     }
-  }, [endpoint, autoFetch, transform, callOnError, callOnSuccess])
-  // ✅ Fixed: Use explicit dependencies instead of spread operator
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint, autoFetch, callOnError, callOnSuccess])
+  // ✅ Fixed: Removed dependencies and transform from dependencies to prevent infinite loops
+  // Dependencies are handled by the hooks that call this one
 
   return {
     data,
@@ -227,7 +229,7 @@ export const useApiMutation = <TData = unknown, TVariables = unknown>(
         headers: {
           'Content-Type': 'application/json',
         },
-        body: method !== 'DELETE' ? JSON.stringify(variables) : undefined
+        body: JSON.stringify(variables)
       })
 
       if (!response.ok) {

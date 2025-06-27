@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     // Validation
     if (!file) return ApiErrors.badRequest('No file provided')
     if (!shootId) return ApiErrors.badRequest('Shoot ID is required')
-    if (!postIdeaId) return ApiErrors.badRequest('Post idea ID is required for file uploads')
+    // Note: postIdeaId is optional for misc files
 
     console.log('📊 [Uploads API] Upload request:', {
       fileName: file.name,
@@ -41,23 +41,46 @@ export async function POST(request: NextRequest) {
     })
 
     // Get shoot and related data
-    const shootData = await db
-      .select({
-        shoot: shoots,
-        client: clients,
-        postIdea: postIdeas
-      })
-      .from(shoots)
-      .innerJoin(clients, eq(shoots.clientId, clients.id))
-      .innerJoin(postIdeas, eq(postIdeas.id, parseInt(postIdeaId)))
-      .where(eq(shoots.id, parseInt(shootId)))
-      .limit(1)
+    let shootData, postIdea = null
+    
+    if (postIdeaId) {
+      // For files with post idea assignment
+      const result = await db
+        .select({
+          shoot: shoots,
+          client: clients,
+          postIdea: postIdeas
+        })
+        .from(shoots)
+        .innerJoin(clients, eq(shoots.clientId, clients.id))
+        .innerJoin(postIdeas, eq(postIdeas.id, parseInt(postIdeaId)))
+        .where(eq(shoots.id, parseInt(shootId)))
+        .limit(1)
 
-    if (shootData.length === 0) {
-      return ApiErrors.notFound('Shoot or post idea')
+      if (result.length === 0) {
+        return ApiErrors.notFound('Shoot or post idea')
+      }
+      shootData = result[0]
+      postIdea = result[0].postIdea
+    } else {
+      // For misc files without post idea
+      const result = await db
+        .select({
+          shoot: shoots,
+          client: clients
+        })
+        .from(shoots)
+        .innerJoin(clients, eq(shoots.clientId, clients.id))
+        .where(eq(shoots.id, parseInt(shootId)))
+        .limit(1)
+
+      if (result.length === 0) {
+        return ApiErrors.notFound('Shoot')
+      }
+      shootData = { ...result[0], postIdea: null }
     }
 
-    const { shoot, client, postIdea } = shootData[0]
+    const { shoot, client } = shootData
 
     // Get client storage settings
     const settings = await db
@@ -92,14 +115,23 @@ export async function POST(request: NextRequest) {
     )
 
     // Health check
+    console.log('🏥 [Uploads API] Performing Google Drive health check...')
     const isHealthy = await driveService.healthCheck()
     if (!isHealthy) {
       console.log('❌ [Uploads API] Google Drive health check failed')
       return ApiErrors.internalError('Google Drive connection failed. Please reconnect in settings.')
     }
+    console.log('✅ [Uploads API] Google Drive health check passed')
 
     // Create folder structure
     console.log('🗂️ [Uploads API] Creating folder structure...')
+    console.log('📋 [Uploads API] Folder creation parameters:', {
+      clientName: client.name,
+      shootTitle: shoot.title,
+      postIdeaTitle: postIdea?.title || 'misc-files',
+      shootDate: new Date(shoot.scheduledAt).toISOString().split('T')[0]
+    })
+    
     const shootDate = new Date(shoot.scheduledAt).toISOString().split('T')[0]
     
     const shootFolder = await driveService.createShootFolder(
@@ -107,14 +139,24 @@ export async function POST(request: NextRequest) {
       shoot.title,
       shootDate
     )
+    console.log('✅ [Uploads API] Shoot folder created:', shootFolder)
 
-    const postIdeaFolder = await driveService.createPostIdeaFolder(
-      postIdea.title,
-      shootFolder.id
-    )
-    
-    const rawFilesFolder = await driveService.findOrCreateFolder('raw-files', postIdeaFolder.id)
-    const folderPath = await driveService.getFolderPath(rawFilesFolder.id)
+    let targetFolder
+    if (postIdea) {
+      // Create post idea specific folder
+      const postIdeaFolder = await driveService.createPostIdeaFolder(
+        postIdea.title,
+        shootFolder.id
+      )
+      console.log('✅ [Uploads API] Post idea folder created:', postIdeaFolder)
+      
+      targetFolder = await driveService.findOrCreateFolder('raw-files', postIdeaFolder.id)
+    } else {
+      // Create misc files folder directly in shoot folder
+      targetFolder = await driveService.findOrCreateFolder('misc-files', shootFolder.id)
+      console.log('✅ [Uploads API] Misc files folder created')
+    }
+    const folderPath = await driveService.getFolderPath(targetFolder.id)
 
     // Upload file
     console.log('🚀 [Uploads API] Uploading file to Google Drive...')
@@ -124,20 +166,47 @@ export async function POST(request: NextRequest) {
     const driveFile = await driveService.uploadFile(
       buffer,
       file.name,
-      rawFilesFolder.id,
+      targetFolder.id,
       file.type
     )
 
     // Save upload record to database
     const uploadRecord = await db.insert(uploadedFiles).values({
       shootId: parseInt(shootId),
-      postIdeaId: parseInt(postIdeaId),
+      postIdeaId: postIdeaId ? parseInt(postIdeaId) : null,
       fileName: file.name,
       fileSize: file.size,
       filePath: folderPath,
       mimeType: file.type,
-      googleDriveId: driveFile.id
+      googleDriveId: driveFile.id,
+      // Add the new drive link fields
+      driveFolderId: targetFolder.id,
+      driveFileWebViewLink: driveFile.webViewLink,
+      driveFileDownloadLink: driveFile.webContentLink
     }).returning()
+
+    // ✨ AUTOMATIC STATUS UPDATE: When file is uploaded for a post idea, update status to 'uploaded'
+    if (postIdeaId) {
+      try {
+        const { updatePostStatusOnFileUpload } = await import('@/lib/db/post-ideas')
+        const statusResult = await updatePostStatusOnFileUpload(parseInt(postIdeaId))
+        if (statusResult.updated) {
+          console.log('📤 [Uploads API] Auto-updated post status to uploaded:', {
+            postIdeaId: parseInt(postIdeaId),
+            previousStatus: statusResult.previousStatus
+          })
+        } else {
+          console.log('ℹ️ [Uploads API] Post status not updated:', {
+            postIdeaId: parseInt(postIdeaId),
+            currentStatus: statusResult.previousStatus,
+            reason: 'Post not in "shot" status or already uploaded'
+          })
+        }
+      } catch (error) {
+        console.error('❌ [Uploads API] Failed to auto-update post status:', error)
+        // Don't fail the upload if status update fails
+      }
+    }
 
     console.log('✅ [Uploads API] Upload completed successfully!')
 
@@ -152,10 +221,10 @@ export async function POST(request: NextRequest) {
         id: shoot.id,
         title: shoot.title
       },
-      postIdea: {
+      postIdea: postIdea ? {
         id: postIdea.id,
         title: postIdea.title
-      }
+      } : null
     }, 'File uploaded successfully')
 
   } catch (error) {

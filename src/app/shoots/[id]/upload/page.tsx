@@ -13,10 +13,14 @@ import { Button } from '@/components/ui/button'
 import { LoadingButton } from '@/components/ui/loading-button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useAsync } from '@/lib/hooks/use-async'
+import { useShootData } from '@/lib/hooks/use-shoot-data'
+import { useIntegrationStatus } from '@/lib/hooks/use-integration-status'
 import { ShootsApi } from '@/lib/api/shoots-unified'
 import { toast } from 'sonner'
-import { Upload, Folder, FileText, X, AlertCircle } from 'lucide-react'
-import type { Shoot, UploadProgress as UploadProgressType, UploadedFile, ShootClient } from '@/lib/types/shoots'
+import { Upload, Folder, FileText, X, AlertCircle, Settings, Mail } from 'lucide-react'
+import type { UploadProgress as UploadProgressType, UploadedFile, ShootClient } from '@/lib/types/shoots'
+import { SendToEditorDialog } from '@/components/shoots/send-to-editor-dialog'
+import { UploadedFilesList } from '@/components/ui/uploaded-files-list'
 
 interface PostIdeaUploadSection {
   id: number
@@ -28,22 +32,30 @@ interface PostIdeaUploadSection {
   uploadedFiles: UploadedFile[]
 }
 
-interface ExtendedPostIdea {
-  id: number
-  title: string
-  platforms: string[]
-}
-
 export default function UploadContentPage() {
   const router = useRouter()
   const params = useParams()
   const shootId = params.id as string
 
-  const [shoot, setShoot] = useState<Shoot | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  // Memoize the error handler to prevent infinite loops
+  const handleError = useCallback((error: string) => {
+    console.error('Failed to load shoot data:', error)
+    toast.error('Failed to load shoot data')
+    router.push(`/shoots/${shootId}`)
+  }, [router, shootId])
+
+  // Use standardized shoot data hook with uploaded files
+  const { shoot, postIdeas, miscFiles, isLoading } = useShootData({ 
+    shootId, 
+    loadPostIdeas: true,
+    onError: handleError
+  })
+
+  // Check Google Drive integration status
+  const { isGoogleDriveConnected, isLoading: integrationsLoading } = useIntegrationStatus()
 
   const [postIdeaSections, setPostIdeaSections] = useState<PostIdeaUploadSection[]>([])
-  const [miscFiles, setMiscFiles] = useState<File[]>([])
+  const [selectedMiscFiles, setSelectedMiscFiles] = useState<File[]>([])
   const [miscNotes, setMiscNotes] = useState('')
   const [miscUploadProgress, setMiscUploadProgress] = useState<{ [fileName: string]: UploadProgressType }>({})
   const [isUploading, setIsUploading] = useState(false)
@@ -55,51 +67,22 @@ export default function UploadContentPage() {
     return typeof client === 'string' ? client : client?.name || 'Unknown Client'
   }
 
-  // Load shoot and post ideas data
+  // Initialize post idea sections when data loads
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true)
-        const response = await fetch(`/api/shoots/${shootId}`)
-        
-        if (!response.ok) {
-          throw new Error('Failed to load shoot data')
-        }
-        
-        const data = await response.json()
-        
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to load shoot data')
-        }
-
-        setShoot(data.shoot)
-        
-        // Initialize post idea sections
-        setPostIdeaSections(
-          (data.postIdeas || []).map((idea: ExtendedPostIdea) => ({
-            id: idea.id,
-            title: idea.title,
-            platforms: idea.platforms,
-            files: [],
-            notes: '',
-            uploadProgress: {},
-            uploadedFiles: []
-          }))
-        )
-        
-      } catch (error) {
-        console.error('Failed to load data:', error)
-        toast.error('Failed to load shoot data')
-        router.push(`/shoots/${shootId}`)
-      } finally {
-        setIsLoading(false)
-      }
+    if (postIdeas && postIdeas.length > 0) {
+      setPostIdeaSections(
+        postIdeas.map((idea) => ({
+          id: idea.id,
+          title: idea.title,
+          platforms: idea.platforms,
+          files: [],
+          notes: '',
+          uploadProgress: {},
+          uploadedFiles: []
+        }))
+      )
     }
-
-    if (shootId) {
-      loadData()
-    }
-  }, [shootId, router])
+  }, [postIdeas])
 
   const handlePostIdeaFilesSelected = useCallback((postIdeaId: number, newFiles: File[]) => {
     setPostIdeaSections(prev => prev.map(section => 
@@ -126,11 +109,11 @@ export default function UploadContentPage() {
   }, [])
 
   const handleMiscFilesSelected = useCallback((newFiles: File[]) => {
-    setMiscFiles(prev => [...prev, ...newFiles])
+    setSelectedMiscFiles(prev => [...prev, ...newFiles])
   }, [])
 
   const handleMiscFileRemove = useCallback((fileIndex: number) => {
-    setMiscFiles(prev => prev.filter((_, index) => index !== fileIndex))
+    setSelectedMiscFiles(prev => prev.filter((_, index) => index !== fileIndex))
   }, [])
 
   const updateUploadProgress = useCallback((
@@ -168,6 +151,15 @@ export default function UploadContentPage() {
           : miscNotes
       })
 
+      console.log('📦 [UploadPage] Received uploadedFile:', uploadedFile)
+      console.log('🔍 [UploadPage] uploadedFile properties:', {
+        id: uploadedFile.id,
+        fileName: uploadedFile.fileName,
+        fileSize: uploadedFile.fileSize,
+        hasFileName: !!uploadedFile.fileName,
+        hasId: !!uploadedFile.id
+      })
+
       // Add to uploaded files list
       if (postIdeaId) {
         setPostIdeaSections(prev => prev.map(section => 
@@ -197,62 +189,165 @@ export default function UploadContentPage() {
   const handleSubmit = async () => {
     if (!shoot) return
 
+    console.log('🚀 [UploadPage] Starting upload process for shoot:', shootId)
+    console.log('📋 [UploadPage] Shoot data:', {
+      id: shoot.id,
+      title: shoot.title,
+      client: getClientName(shoot.client),
+      scheduledAt: shoot.scheduledAt
+    })
+
     setIsUploading(true)
     
     try {
       // First, create the Google Drive folder structure
+      console.log('📁 [UploadPage] Creating Google Drive folder...')
+      console.log('📤 [UploadPage] Folder creation parameters:', {
+        clientName: getClientName(shoot.client),
+        shootTitle: shoot.title,
+        shootDate: new Date(shoot.scheduledAt).toISOString()
+      })
+
       const driveFolder = await createFolder(getClientName(shoot.client), shoot.title, new Date(shoot.scheduledAt).toISOString())
       
+      console.log('📦 [UploadPage] Folder creation result:', driveFolder)
+      
       if (!driveFolder) {
+        console.error('❌ [UploadPage] No folder returned from createFolder')
         throw new Error('Failed to create Drive folder')
       }
 
+      console.log('✅ [UploadPage] Drive folder created successfully:', driveFolder.name)
       toast.success(`Created Drive folder: ${driveFolder.name}`)
 
       // Upload all files
       const uploadPromises: Promise<UploadedFile>[] = []
 
+      console.log('📤 [UploadPage] Preparing file uploads...')
+      console.log('📊 [UploadPage] Upload summary:', {
+        postIdeaSections: postIdeaSections.length,
+        totalPostIdeaFiles: postIdeaSections.reduce((total, section) => total + section.files.length, 0),
+        miscFiles: miscFiles.length,
+        totalFiles: getTotalFiles()
+      })
+
       // Upload post idea files
       for (const section of postIdeaSections) {
+        console.log(`📁 [UploadPage] Processing section: ${section.title} (${section.files.length} files)`)
         for (const file of section.files) {
+          console.log(`📄 [UploadPage] Queuing upload: ${file.name} (${file.size} bytes)`)
           uploadPromises.push(uploadFile(file, section.id))
         }
       }
 
       // Upload misc files
-      for (const file of miscFiles) {
+      console.log(`📁 [UploadPage] Processing misc files (${selectedMiscFiles.length} files)`)
+      for (const file of selectedMiscFiles) {
+        console.log(`📄 [UploadPage] Queuing misc upload: ${file.name} (${file.size} bytes)`)
         uploadPromises.push(uploadFile(file))
       }
+
+      console.log(`🚀 [UploadPage] Starting ${uploadPromises.length} file uploads...`)
 
       // Wait for all uploads to complete
       await Promise.all(uploadPromises)
 
+      console.log('✅ [UploadPage] All uploads completed successfully')
       toast.success('All files uploaded successfully!')
       router.push(`/shoots/${shootId}`)
 
     } catch (error) {
-      console.error('Upload process failed:', error)
-      toast.error('Upload failed. Please try again.')
+      console.error('❌ [UploadPage] Upload process failed:', error)
+      console.error('🔍 [UploadPage] Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        name: error instanceof Error ? error.name : undefined
+      })
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Google Drive connection expired') || 
+            error.message.includes('reconnect Google Drive') ||
+            error.message.includes('Please reconnect Google Drive in Settings') ||
+            error.message.includes('invalid_request') ||
+            error.message.includes('invalid_grant') ||
+            error.message.includes('refresh_token')) {
+          toast.error('Google Drive connection expired. Please reconnect Google Drive in Settings.', {
+            duration: 10000,
+            action: {
+              label: 'Go to Settings',
+              onClick: () => router.push('/settings?tab=integrations')
+            }
+          })
+        } else if (error.message.includes('Failed to create Drive folder')) {
+          toast.error('Failed to create Google Drive folder. Please check your Google Drive connection.')
+        } else if (error.message.includes('not valid JSON')) {
+          toast.error('Server response error. Please try again.')
+        } else if (error.message.includes('404')) {
+          toast.error('Upload service not found. Please contact support.')
+        } else if (error.message.includes('Unauthorized')) {
+          toast.error('Authentication error. Please check your Google Drive connection in Settings.')
+        } else {
+          toast.error(`Upload failed: ${error.message}`)
+        }
+      } else {
+        toast.error('Upload failed. Please try again.')
+      }
     } finally {
       setIsUploading(false)
     }
   }
 
   const getTotalFiles = () => {
-    const postIdeaFiles = postIdeaSections.reduce((total, section) => total + section.files.length, 0)
-    return postIdeaFiles + miscFiles.length
+    return postIdeaSections.reduce((sum, section) => sum + section.files.length, 0) + selectedMiscFiles.length
   }
 
   const getUploadingFiles = () => {
-    const postIdeaUploading = postIdeaSections.reduce((total, section) => 
-      total + Object.keys(section.uploadProgress).length, 0
-    )
-    const miscUploading = Object.keys(miscUploadProgress).length
-    return postIdeaUploading + miscUploading
+    return postIdeaSections.reduce((sum, section) => sum + Object.keys(section.uploadProgress).length, 0) + Object.keys(miscUploadProgress).length
   }
 
-  const hasFiles = getTotalFiles() > 0
-  const canUpload = hasFiles && !isUploading
+  // Check if all content has been uploaded
+  const getAllUploadedFiles = () => {
+    return postIdeaSections.reduce((sum, section) => sum + section.uploadedFiles.length, 0)
+  }
+
+  const hasUploadedContent = getAllUploadedFiles() > 0
+  const hasFilesToUpload = getTotalFiles() > 0
+  const isAllContentUploaded = hasUploadedContent && !hasFilesToUpload && !isUploading
+  const canShowSendToEditor = isAllContentUploaded && shoot?.status === 'completed'
+
+  // Prepare post ideas data for SendToEditorDialog
+  const postIdeasWithUploads = postIdeaSections
+    .filter(section => section.uploadedFiles.length > 0)
+    .map(section => ({
+      id: section.id,
+      title: section.title,
+      platforms: section.platforms,
+      contentType: 'photo' as const, // Default, could be enhanced based on file types
+      caption: section.notes || undefined,
+      notes: section.notes || undefined,
+      shotList: [],
+      status: 'uploaded' as const,
+      uploadedFiles: section.uploadedFiles.map(file => ({
+        ...file,
+        webViewLink: file.driveFileWebViewLink || '',
+        webContentLink: file.driveFileDownloadLink || '',
+        driveFileId: file.driveFileId || '',
+        uploadedAt: file.uploadedAt || new Date().toISOString(),
+        postIdeaId: file.postIdeaId,
+        shootId: file.shootId,
+        driveFolderId: file.driveFolderId || '',
+        driveFileWebViewLink: file.driveFileWebViewLink || '',
+        driveFileDownloadLink: file.driveFileDownloadLink || ''
+      })),
+      driveFolderLink: section.uploadedFiles[0]?.driveFileWebViewLink?.split('/file/')[0] + '/drive/folders/' + section.uploadedFiles[0]?.driveFolderId,
+      fileCount: section.uploadedFiles.length
+    }))
+
+  const handleSendToEditorSuccess = () => {
+    toast.success('Content sent to editor successfully!')
+    router.push(`/shoots/${shootId}`)
+  }
 
   if (isLoading) {
     return (
@@ -296,10 +391,11 @@ export default function UploadContentPage() {
         <LoadingButton
           size="sm"
           onClick={handleSubmit}
-          disabled={!canUpload}
+          disabled={!canShowSendToEditor}
           loading={isUploading || folderLoading}
           loadingText="Uploading..."
           className="h-8 px-3 text-xs"
+          title={!isGoogleDriveConnected ? "Connect Google Drive in Settings first" : "Upload all files"}
         >
           <Upload className="h-3 w-3 mr-1" />
           Upload All
@@ -319,8 +415,40 @@ export default function UploadContentPage() {
           </p>
         </div>
 
+        {/* Google Drive Connection Warning */}
+        {!integrationsLoading && !isGoogleDriveConnected && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <h3 className="font-medium text-red-900">Google Drive Not Connected</h3>
+            </div>
+            <p className="text-sm text-red-700 mb-3">
+              You need to connect Google Drive to upload files. This may happen if your Google Drive connection has expired or been revoked.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/settings?tab=integrations')}
+                className="text-red-700 border-red-300 hover:bg-red-100"
+              >
+                <Settings className="h-3 w-3 mr-1" />
+                Connect Google Drive
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => window.location.reload()}
+                className="text-red-600 hover:bg-red-100"
+              >
+                Refresh Status
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Upload Summary */}
-        {hasFiles && (
+        {hasFilesToUpload && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <FileText className="h-4 w-4 text-blue-500" />
@@ -409,15 +537,27 @@ export default function UploadContentPage() {
                 )}
 
                 {/* Uploaded Files */}
-                {section.uploadedFiles.length > 0 && (
+                {section.uploadedFiles.length > 0 && section.uploadedFiles[0].id && (
                   <div className="space-y-2 mb-4">
                     <h5 className="text-sm font-medium text-muted-foreground">Uploaded Files:</h5>
-                    {section.uploadedFiles.map((file) => (
-                      <div key={file.id} className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded">
-                        <Folder className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        <span className="text-sm text-foreground">{file.fileName}</span>
-                      </div>
-                    ))}
+                    <UploadedFilesList
+                      files={section.uploadedFiles.map(file => ({
+                        id: file.id,
+                        fileName: file.fileName,
+                        fileSize: file.fileSize,
+                        mimeType: file.mimeType,
+                        driveFileWebViewLink: file.webViewLink,
+                        driveFileDownloadLink: file.webContentLink,
+                        uploadedAt: file.uploadedAt
+                      }))}
+                      driveFolder={section.uploadedFiles[0]?.driveFolderId ? {
+                        id: section.uploadedFiles[0].driveFolderId,
+                        webViewLink: `https://drive.google.com/drive/folders/${section.uploadedFiles[0].driveFolderId}`,
+                        path: `/Client/${section.title}/raw-files`
+                      } : undefined}
+                      title="Uploaded Files"
+                      showFolderLink={true}
+                    />
                   </div>
                 )}
 
@@ -456,13 +596,13 @@ export default function UploadContentPage() {
           </div>
 
           {/* Selected Misc Files */}
-          {miscFiles.length > 0 && (
+          {selectedMiscFiles.length > 0 && (
             <div className="mb-4">
               <Label className="text-sm font-medium mb-2 block">
-                Selected Files ({miscFiles.length})
+                Selected Files ({selectedMiscFiles.length})
               </Label>
               <div className="space-y-2">
-                {miscFiles.map((file, fileIndex) => (
+                {selectedMiscFiles.map((file, fileIndex) => (
                   <div key={fileIndex} className="flex items-center justify-between p-2 bg-muted rounded">
                     <span className="text-sm text-foreground truncate flex-1">{file.name}</span>
                     <Button
@@ -495,6 +635,31 @@ export default function UploadContentPage() {
             </div>
           )}
 
+          {/* Uploaded Misc Files */}
+          {miscFiles && miscFiles.length > 0 && (
+            <div className="space-y-2 mb-4">
+              <h5 className="text-sm font-medium text-muted-foreground">Uploaded Misc Files:</h5>
+              <UploadedFilesList
+                files={miscFiles.map(file => ({
+                  id: file.id,
+                  fileName: file.fileName,
+                  fileSize: file.fileSize,
+                  mimeType: file.mimeType,
+                  driveFileWebViewLink: file.driveFileWebViewLink,
+                  driveFileDownloadLink: file.driveFileDownloadLink,
+                  uploadedAt: file.uploadedAt || new Date().toISOString()
+                }))}
+                driveFolder={miscFiles[0]?.driveFolderId ? {
+                  id: miscFiles[0].driveFolderId,
+                  webViewLink: `https://drive.google.com/drive/folders/${miscFiles[0].driveFolderId}`,
+                  path: `/Client/misc-files`
+                } : undefined}
+                title="Uploaded Misc Files"
+                showFolderLink={true}
+              />
+            </div>
+          )}
+
           {/* Misc Notes */}
           <div>
             <Label htmlFor="misc-notes" className="text-sm font-medium mb-2 block">
@@ -512,7 +677,7 @@ export default function UploadContentPage() {
         </div>
 
         {/* Empty State */}
-        {!hasFiles && !isUploading && (
+        {!hasFilesToUpload && !isUploading && (
           <EmptyState
             icon={Upload}
             title="No files selected"
@@ -522,16 +687,30 @@ export default function UploadContentPage() {
 
         {/* Upload Button (Mobile) */}
         <div className="sticky bottom-4 pt-4">
-          <LoadingButton
-            onClick={handleSubmit}
-            disabled={!canUpload}
-            loading={isUploading || folderLoading}
-            loadingText="Uploading..."
-            className="w-full h-12 tap-target"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Upload {getTotalFiles()} File{getTotalFiles() !== 1 ? 's' : ''} to Drive
-          </LoadingButton>
+          {canShowSendToEditor ? (
+            <SendToEditorDialog
+              shootId={parseInt(shootId)}
+              shootTitle={shoot?.title || 'Untitled Shoot'}
+              postIdeas={postIdeasWithUploads}
+              onSuccess={handleSendToEditorSuccess}
+            >
+              <Button className="w-full h-12 tap-target">
+                <Mail className="h-4 w-4 mr-2" />
+                Send to Editor
+              </Button>
+            </SendToEditorDialog>
+          ) : (
+            <LoadingButton
+              onClick={handleSubmit}
+              disabled={!hasFilesToUpload || !isGoogleDriveConnected}
+              loading={isUploading || folderLoading}
+              loadingText="Uploading..."
+              className="w-full h-12 tap-target"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Upload {getTotalFiles()} File{getTotalFiles() !== 1 ? 's' : ''} to Drive
+            </LoadingButton>
+          )}
         </div>
       </div>
     </MobileLayout>

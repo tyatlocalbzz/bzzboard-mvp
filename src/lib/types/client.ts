@@ -27,4 +27,18 @@ export interface ClientContextType {
 }
 
 // Default client for "All Clients" view
-export const DEFAULT_CLIENT: ClientData = { id: 'all', name: 'All Clients', type: 'all' } 
+export const DEFAULT_CLIENT: ClientData = { id: 'all', name: 'All Clients', type: 'all' }
+
+// Post dependencies for delete confirmation
+export interface PostDependencies {
+  shoots: {
+    id: number
+    title: string
+    scheduledAt: string
+    status: string
+    client: string
+  }[]
+  uploadedFiles: number
+  hasShootDependencies: boolean
+  hasFileDependencies: boolean
+} 
